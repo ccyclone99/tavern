@@ -1,0 +1,528 @@
+/**
+ * Prompt 组装器
+ * 将角色卡、世界书、规则层组装为 API 请求体
+ */
+const PromptBuilder = {
+    /**
+     * 组装单角色对话请求
+     */
+    build(character, scene, messages, opts = {}) {
+        const userName = scene.userName || '旅人';
+        const charName = character.name || '角色';
+        const systemParts = [];
+
+        systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
+        systemParts.push(`玩家名称是 ${userName}，在对话中用 "${userName}" 指代玩家。`);
+
+        if (character.description) {
+            systemParts.push(`【角色背景】\n${this.replacePlaceholders(character.description, charName, userName)}`);
+        }
+        if (character.personality) {
+            systemParts.push(`【性格】\n${this.replacePlaceholders(character.personality, charName, userName)}`);
+        }
+        if (character.scenario || scene.name) {
+            systemParts.push(`【当前场景】\n${this.replacePlaceholders(character.scenario || scene.name, charName, userName)}`);
+        }
+        if (character.mes_example) {
+            systemParts.push(`【示例对话风格】\n${this.replacePlaceholders(character.mes_example, charName, userName)}`);
+        }
+        if (character.system_prompt) {
+            systemParts.push(`【额外设定】\n${this.replacePlaceholders(character.system_prompt, charName, userName)}`);
+        }
+
+        const loreContent = this.buildLorebookPrompt(scene, messages);
+        if (loreContent) {
+            systemParts.push(`【世界书】\n${loreContent}`);
+        }
+
+        if (scene.summary) {
+            systemParts.push(`【先前剧情摘要】\n${scene.summary}`);
+        }
+
+        const relation = character._relations?.[userName];
+        if (relation) {
+            systemParts.push(`【关系状态】\n对 ${userName} 的好感度：${relation.affection}/100，当前情绪：${relation.mood || '平静'}。`);
+        }
+
+        // NPC 谋略素材
+        if (character.motives || character.fears || character.secrets || character.leverage) {
+            const npcIntelParts = [];
+            if (character.motives?.length) npcIntelParts.push(`动机：${character.motives.join('、')}`);
+            if (character.fears?.length) npcIntelParts.push(`恐惧：${character.fears.join('、')}`);
+            if (character.secrets?.length) npcIntelParts.push(`秘密：${character.secrets.join('、')}`);
+            if (character.leverage?.length) npcIntelParts.push(`筹码：${character.leverage.join('、')}`);
+            systemParts.push(`【角色谋略素材】\n${npcIntelParts.join('\n')}`);
+        }
+
+        // 角色信条/三观（人格锚点，决定角色会拒绝什么、坚持什么）
+        const creedBlock = this.buildCreedBlock(character);
+        if (creedBlock) systemParts.push(creedBlock);
+
+        if (character.post_history_instructions) {
+            systemParts.push(`【回复要求】\n${this.replacePlaceholders(character.post_history_instructions, charName, userName)}`);
+        }
+
+        // 规则层：属性 + 任务 + 地图 + 检定 + 动态事件 + 计策
+        const rules = this.buildRulesContext(scene);
+        if (rules) systemParts.push(rules);
+
+        // 剧情弧（叙事骨架）
+        const arcBlock = this.buildStoryArcContext(scene);
+        if (arcBlock) systemParts.push(arcBlock);
+
+        // 计策主持人协议
+        systemParts.push(this.buildStrategyProtocol(scene));
+
+        // 剧情推动 + 格式要求
+        systemParts.push(`【剧情推动】\n你是这个世界的主导者，不是被动等待玩家指令的道具。剧情主要由你推动：\n- 按剧情弧的节拍主动推进：满足条件就触发对应事件（揭示真相/制造转折/引入危机），不要等玩家"问"。\n- 每隔 2-3 轮对话，主动引入新事件、NPC 动作、环境变化或危机。\n- 如果对话陷入重复或玩家漫无目的，用突发事件打破僵局，把剧情拉回主线。\n- NPC 有自己的日程和计划——他们不会干等着玩家，他们会主动行动、制造麻烦、推动局势。\n- 场景变化时，用叙事性描写自然过渡。\n\n【格式要求】\n- 用 *斜体* 表示动作和神态描写\n- 用普通文本表示对话\n- 可以在回复末尾输出情绪标签，格式为 [emotion:情绪名]\n- 保持角色一致性，不要跳出角色`);
+
+        const systemPrompt = systemParts.join('\n\n');
+        const apiMessages = [{ role: 'system', content: systemPrompt }];
+
+        const historyLimit = opts.historyLimit || 50;
+        const recentMessages = messages.slice(-historyLimit);
+        recentMessages.forEach(msg => {
+            let content = msg.content;
+            if (msg.role === 'user' && msg.type === 'strategy') {
+                content = '[玩家计策意图] ' + content;
+            }
+            apiMessages.push({
+                role: msg.role,
+                content
+            });
+        });
+
+        return this.buildBody(apiMessages);
+    },
+
+    /**
+     * 组装群聊请求（指定当前发言角色）
+     */
+    buildGroup(currentChar, scene, messages, allCharacters, opts = {}) {
+        const userName = scene.userName || '旅人';
+        const charName = currentChar.name || '角色';
+        const systemParts = [];
+
+        systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
+        systemParts.push(`玩家名称是 ${userName}。`);
+
+        const otherChars = allCharacters.filter(c => c.id !== currentChar.id);
+        if (otherChars.length > 0) {
+            const names = otherChars.map(c => c.name).join('、');
+            systemParts.push(`当前场景中还有其他角色：${names}。你们在一起互动。`);
+        }
+
+        if (currentChar.description) {
+            systemParts.push(`【角色背景】\n${this.replacePlaceholders(currentChar.description, charName, userName)}`);
+        }
+        if (currentChar.personality) {
+            systemParts.push(`【性格】\n${this.replacePlaceholders(currentChar.personality, charName, userName)}`);
+        }
+        if (currentChar.scenario || scene.name) {
+            systemParts.push(`【场景】\n${this.replacePlaceholders(currentChar.scenario || scene.name, charName, userName)}`);
+        }
+        if (currentChar.mes_example) {
+            systemParts.push(`【示例对话】\n${this.replacePlaceholders(currentChar.mes_example, charName, userName)}`);
+        }
+
+        const loreContent = this.buildLorebookPrompt(scene, messages);
+        if (loreContent) {
+            systemParts.push(`【世界书】\n${loreContent}`);
+        }
+
+        if (scene.summary) {
+            systemParts.push(`【先前剧情摘要】\n${scene.summary}`);
+        }
+
+        const relation = currentChar._relations?.[userName];
+        if (relation) {
+            systemParts.push(`【关系】\n对 ${userName} 好感度：${relation.affection}/100，情绪：${relation.mood || '平静'}`);
+        }
+
+        // NPC 谋略素材
+        if (currentChar.motives || currentChar.fears || currentChar.secrets || currentChar.leverage) {
+            const npcIntelParts = [];
+            if (currentChar.motives?.length) npcIntelParts.push(`动机：${currentChar.motives.join('、')}`);
+            if (currentChar.fears?.length) npcIntelParts.push(`恐惧：${currentChar.fears.join('、')}`);
+            if (currentChar.secrets?.length) npcIntelParts.push(`秘密：${currentChar.secrets.join('、')}`);
+            if (currentChar.leverage?.length) npcIntelParts.push(`筹码：${currentChar.leverage.join('、')}`);
+            systemParts.push(`【角色谋略素材】\n${npcIntelParts.join('\n')}`);
+        }
+
+        // 角色信条/三观
+        const creedBlock = this.buildCreedBlock(currentChar);
+        if (creedBlock) systemParts.push(creedBlock);
+
+        const persona = scene.playerPersona;
+        if (persona) {
+            const creedTxt = persona.creed ? `。信条：${persona.creed}` : '';
+            systemParts.push(`【玩家信息】\n玩家名称是 ${persona.name || scene.userName}。外貌：${persona.appearance || '未知'}。背景：${persona.background || '未知'}。性格：${persona.personality || '未知'}。目标：${persona.goal || '未知'}${creedTxt}。请根据以上信息自然地与玩家互动。`);
+        }
+
+        // 规则层：属性 + 任务 + 地图 + 检定 + 动态事件 + 计策
+        const rules = this.buildRulesContext(scene);
+        if (rules) systemParts.push(rules);
+
+        // 剧情弧（叙事骨架）
+        const arcBlock = this.buildStoryArcContext(scene);
+        if (arcBlock) systemParts.push(arcBlock);
+
+        // 计策主持人协议
+        systemParts.push(this.buildStrategyProtocol(scene));
+
+        // 剧情推动 + 导演权限 + 动态事件标记
+        systemParts.push(`【导演权限与剧情推动】\n你同时是一个无形的叙述者，剧情主要由你推动而非被动等待玩家。\n- 按剧情弧节拍主动推进：满足条件就触发对应事件，不要等玩家"问"。\n- 每隔 2-3 轮主动引入新事件、NPC 动作或危机。NPC 有自己的计划，会主动行动。\n- 玩家漫无目的时，用突发事件把剧情拉回主线。\n\n你可以通过以下标记触发游戏事件（放在回复末尾，每条标记独占一行）：\n- 新角色登场：[new_char:角色名|emoji|外貌描写|性格特征|开场白]\n- 角色退场：[char_exit:角色名|原因]\n- 新增任务：[quest:任务名|main或side|描述|目标1,目标2,...|奖励]\n- 任务目标完成：[quest_update:任务名|目标序号(从1开始)]\n- 移动到新地点：[move:地点名]\n- 触发剧情事件：[event:事件描述]\n- 要求属性检定：[check:属性名|DC值]（系统自动投骰并告知结果，然后你会继续叙事）\n- 给予物品：[item_add:名称|描述|类型(weapon/armor/consumable/quest/misc)|数量]\n- 移除物品：[item_remove:名称]\n- 装备物品：[item_equip:名称]\n- 卸下物品：[item_unequip:名称]\n\n【格式要求】\n- 用 *斜体* 表示动作和神态\n- 普通文本表示对话\n- 末尾可输出 [emotion:情绪名]\n- 保持角色一致性`);
+
+        const systemPrompt = systemParts.join('\n\n');
+        const apiMessages = [{ role: 'system', content: systemPrompt }];
+
+        const historyLimit = opts.historyLimit || 50;
+        const recentMessages = messages.slice(-historyLimit);
+        recentMessages.forEach(msg => {
+            let prefix = '';
+            let content = msg.content;
+            if (msg.role === 'assistant' && msg.characterId) {
+                const char = allCharacters.find(c => c.id === msg.characterId);
+                if (char && char.id !== currentChar.id) {
+                    prefix = `[${char.name}] `;
+                }
+            }
+            if (msg.type === 'strategy') {
+                prefix = '[玩家计策意图] ';
+            }
+            apiMessages.push({
+                role: msg.role,
+                content: prefix + content
+            });
+        });
+
+        return this.buildBody(apiMessages);
+    },
+
+    /**
+     * 构建规则层上下文：属性 + 任务 + 地图 + 检定规则 + 动态事件 + 计策
+     */
+    buildRulesContext(scene) {
+        const parts = [];
+        const st = scene.playerStats;
+        const locs = scene.locations || [];
+        const quests = (scene.quests || []).filter(q => q.status === 'active');
+
+        // 玩家属性
+        if (st) {
+            const mod = v => v >= 10 ? `+${Math.floor((v - 10) / 2)}` : `${Math.floor((v - 10) / 2)}`;
+            parts.push(`【玩家属性】力量${st.strength}(${mod(st.strength)}) 敏捷${st.dexterity}(${mod(st.dexterity)}) 体质${st.constitution}(${mod(st.constitution)}) 智力${st.intelligence}(${mod(st.intelligence)}) 感知${st.wisdom}(${mod(st.wisdom)}) 魅力${st.charisma}(${mod(st.charisma)})`);
+        }
+        // 玩家生存状态
+        const hpTxt = (typeof scene.playerHp === 'number') ? `生命 ${scene.playerHp}/${scene.playerMaxHp}` : '';
+        const goldTxt = (typeof scene.gold === 'number') ? `金币 ${scene.gold}` : '';
+        const lvlTxt = (typeof scene.level === 'number') ? `等级 ${scene.level}（经验${scene.exp||0}/${(scene.level||1)*100}）` : '';
+        const vitaTxt = [hpTxt, goldTxt, lvlTxt].filter(Boolean).join('，');
+        if (vitaTxt) {
+            const lowHpWarn = (typeof scene.playerHp === 'number' && scene.playerHp > 0 && scene.playerHp / scene.playerMaxHp < 0.3) ? '（警告：玩家生命值危急！）' : '';
+            parts.push(`【玩家状态】${vitaTxt}${lowHpWarn}`);
+        }
+
+        // 当前位置 + 地图概览
+        if (locs.length > 0) {
+            const cur = locs.find(l => l.id === scene.currentLocation);
+            if (cur) {
+                const exits = cur.connections.map(cid => {
+                    const loc = locs.find(l => l.id === cid);
+                    return loc ? loc.name : cid;
+                }).join('、');
+                parts.push(`【当前位置】${cur.name} — ${cur.description}。可以前往：${exits}。`);
+            }
+            const locNames = locs.map(l => `${l.name}(${l.description})`).join('；');
+            parts.push(`【地图】${locNames}`);
+        }
+
+        // 当前任务
+        if (quests.length > 0) {
+            const questLines = quests.map(q => {
+                const typeLabel = q.type === 'main' ? '★主线' : '支线';
+                const objs = q.objectives.map((o, i) => `  ${o.completed ? '☑' : '☐'} ${i + 1}. ${o.text}`).join('\n');
+                return `${typeLabel}「${q.name}」(${q.giver}发布)\n${objs}\n奖励：${q.reward}`;
+            });
+            parts.push(`【当前任务】\n${questLines.join('\n\n')}`);
+        }
+
+        // 物品栏 + 装备
+        const inventory = scene.inventory || [];
+        if (inventory.length > 0) {
+            const invLines = inventory.map(item => {
+                const eqMark = item.equipped ? ' [已装备]' : '';
+                return `- ${item.name} x${item.quantity || 1}${eqMark}（${item.description || ''}）`;
+            });
+            parts.push(`【物品栏】\n${invLines.join('\n')}`);
+        }
+        const equipment = scene.equipment;
+        if (equipment) {
+            const eqParts = [];
+            if (equipment.weapon) eqParts.push(`武器：${equipment.weapon}`);
+            if (equipment.armor) eqParts.push(`防具：${equipment.armor}`);
+            if (equipment.accessory) eqParts.push(`饰品：${equipment.accessory}`);
+            if (eqParts.length > 0) parts.push(`【当前装备】\n${eqParts.join('\n')}`);
+        }
+
+        // 计策素材注入
+        const intel = scene.intel || [];
+        if (intel.length > 0) {
+            parts.push(`【已知情报】\n${intel.map(i => `- ${i.text}（来源：${i.source}，可信度：${i.reliability || 'rumor'}）`).join('\n')}`);
+        }
+        const factions = scene.factions || [];
+        if (factions.length > 0) {
+            parts.push(`【势力态势】\n${factions.map(f => `- ${f.name}：态度${f.attitude || 0}，实力${f.power || 0}。${f.description || ''}`).join('\n')}`);
+        }
+        if (typeof scene.worldTension === 'number' && scene.worldTension !== 0) {
+            parts.push(`【世界紧张度】${scene.worldTension}/100`);
+        }
+        if (Array.isArray(scene.conflictSeeds) && scene.conflictSeeds.length > 0) {
+            parts.push(`【世界矛盾种子】\n${scene.conflictSeeds.map((c, i) => `${i + 1}. ${c}`).join('\n')}`);
+        }
+
+        // 检定规则 + 动态事件 + 生存系统
+        parts.push(`【检定规则】当玩家尝试有风险或不确定结果的行为时，你可以要求属性检定。在回复末尾使用 [check:属性名|DC值] 标记，系统将自动投D20+属性修正并告知结果，然后你会收到结果并继续叙事。\nDC参考：10=简单，15=中等，20=困难，25=极难。自然20=大成功（无视DC），自然1=大失败（无视DC）。\n可用的属性名：力量、敏捷、体质、智力、感知、魅力。\n\n【生存系统】玩家有生命值(HP)、金币、等级。战斗、陷阱、跌落等会造成伤害；休息、治疗术、药水可恢复。当涉及这些时，在回复末尾使用：\n- [damage:N|原因] 对玩家造成 N 点伤害（如受击、陷阱、中毒）\n- [heal:N] 为玩家恢复 N 点生命（如休息、治疗、药水）\n- [gold:N] 金币变动，正数获得负数花费（如拾取、奖励、购买）\n- [exp:N] 给予玩家 N 点经验（如完成任务、击败强敌、解开谜题）\nHP 归零玩家会死亡，故事将走向结局，请慎重使用 [damage:]。危险要符合剧情逻辑，不要无故伤害玩家。\n\n【动态事件】你可以根据剧情发展主动触发以下事件（放在回复末尾）：\n- [quest:任务名|main或side|描述|目标1,目标2|奖励] 创建新任务（奖励格式如：金币x100,经验x50,物品名）\n- [quest_update:任务名|目标序号] 标记某任务目标完成\n- [event:事件描述] 触发一次剧情事件\n- [move:地点名] 建议移动到新地点\n- [check:属性名|DC] 要求玩家进行属性检定\n- [item_add:物品名|描述|类型|数量] 给予玩家物品`);
+
+        // 合理性协议（最高优先级，约束玩家随意发挥）
+        parts.push(`【合理性协议】（最高优先级，凌驾于讨好玩家之上）\n1. 玩家声称"成功/说服/打败/拿到/潜入成功"等结果时，若该行为有风险、需要他人配合、或超出当前能力，你绝不能直接承认成功——必须要求检定 [check:]，或让 NPC 提出质疑/条件/反对。\n2. 不合逻辑的行为必须被拒绝或产生负面后果：无工具撬锁、空手挡剑、凭空知道未获知的秘密、一人敌众、无资质识破伪装等。NPC 会合理地怀疑和抗拒。\n3. NPC 有自己的信条、利益和立场，不会因为玩家"说了几句好话"就违背原则。说服需要筹码、关系、把柄或检定支撑，不是靠嘴就能成事。\n4. 越是重大的成功，越需要更多铺垫（情报、准备、关系、检定）。跳跃式、想当然的成功必须伴随高 DC 或明确的失败风险。\n5. 当玩家试图跳过剧情关键环节（如：还没调查就声称知道真相、还没建立关系就要求 NPC 帮忙）时，用 NPC 拒绝、环境阻碍或新危机引导回正轨。\n6. 你的职责是做公正的 DM，不是玩家的许愿机。合理的挑战和偶尔的失败比一味顺从更能带来好故事。`);
+
+        return parts.join('\n\n');
+    },
+
+    /**
+     * 计策主持人协议：让 AI 像 DM 一样引导玩家制定并执行计策
+     */
+    buildStrategyProtocol(scene) {
+        const active = scene.strategies?.find(s => s.id === scene.activeStrategyId);
+        const activeDesc = active
+            ? `当前激活计策：「${active.title}」（目标：${active.goal}，阶段：${active.phase || '—'}，状态：${active.status || 'draft'}，风险：${active.risk || 0}%，进度：${active.progress || 0}%）`
+            : '当前没有激活的计策。';
+
+        const allStrategies = (scene.strategies || []).map(s =>
+            `- ${s.title}：${s.goal || '无目标'}（${s.status || 'draft'}，${s.phase || '—'}）`
+        ).join('\n') || '无';
+
+        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 后果必须具体影响关系、警觉、任务、资源、地点或世界局势。\n6. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n7. 当创建或更新计策、添加情报、调整势力、修改关系时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "intelAdd": [...], "factionsUpdate": [...], "characterUpdates": [...], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
+    },
+
+    /**
+     * 构建角色信条/三观注入块（人格锚点）
+     * creed: 核心信条, redLines: 底线数组, values: 价值排序
+     */
+    buildCreedBlock(character) {
+        if (!character) return '';
+        const parts = [];
+        if (character.creed) parts.push(`信条：${character.creed}`);
+        if (Array.isArray(character.redLines) && character.redLines.length > 0) {
+            parts.push(`底线（绝不做的事）：\n${character.redLines.map(r => `- ${r}`).join('\n')}`);
+        }
+        if (character.values) parts.push(`价值排序：${character.values}`);
+        if (parts.length === 0) return '';
+        return `【角色信条与三观】（这是你的人格锚点，最高优先级）\n${parts.join('\n')}\n\n遵守规则：\n- 你的每一句话、每个决定都必须符合上述信条和价值观。\n- 当玩家试图让你做违背底线的事时，你必须表现出抗拒、质问、愤怒甚至敌意，绝不轻易妥协。即使检定成功，你也会勉强配合而非心甘情愿。\n- 你的价值排序决定你在两难时的抉择——即使对玩家有利，违背更高价值时你也会拒绝。\n- 信条冲突是好故事的来源：用你的立场制造张力，而不是做一个人格模糊的应声虫。`;
+    },
+
+    /**
+     * 构建剧情弧上下文（叙事骨架，引导 AI 按节拍推进）
+     */
+    buildStoryArcContext(scene) {
+        const arcs = Array.isArray(scene.storyArcs) ? scene.storyArcs.filter(a => a && a.title) : [];
+        if (arcs.length === 0) return '';
+        const lines = arcs.map(arc => {
+            const beatIdx = typeof arc.currentBeat === 'number' ? arc.currentBeat : 0;
+            const beats = Array.isArray(arc.beats) ? arc.beats : [];
+            const currentBeat = beats[beatIdx];
+            const beatTxt = currentBeat
+                ? `当前节拍（第${beatIdx + 1}/${beats.length}）：当【${currentBeat.condition}】时，触发【${currentBeat.action}】`
+                : '所有节拍已推进完毕，进入收尾阶段';
+            return `◆ ${arc.title}（阶段：${arc.phase || 'intro'}）\n  梗概：${arc.synopsis || '—'}\n  ${beatTxt}`;
+        }).join('\n\n');
+        return `【剧情弧 · 叙事骨架】（你必须在推进剧情时遵循）\n${lines}\n\n推进规则：\n- 你的首要任务是推动剧情弧的当前节拍。当玩家的行为满足了当前节拍的 condition，你必须在回复中触发对应的 action（揭示真相/制造转折/引入危机）。\n- 玩家跑题时，用 NPC 的话、环境变化、突发事件自然地引导回主线，不要让剧情停滞。\n- 不要一次性揭示所有节拍——一个节拍消化完再推进下一个。\n- 节拍之间允许玩家自由探索和互动，但大方向必须朝剧情弧的结局推进。`;
+    },
+
+    /**
+     * 构建请求体
+     */
+    buildBody(apiMessages) {
+        const settings = State.settings;
+        const body = {
+            model: settings.model || 'deepseek-v4-flash',
+            messages: apiMessages,
+            stream: true
+        };
+        const isLegacy = body.model === 'deepseek-chat' || body.model === 'deepseek-reasoner';
+        if (!isLegacy && settings.thinkingEnabled) {
+            body.thinking = { type: 'enabled' };
+        }
+        return body;
+    },
+
+    /**
+     * 世界书关键词匹配
+     */
+    buildLorebookPrompt(scene, messages) {
+        const entries = scene.lorebookEntries || [];
+        if (entries.length === 0) return '';
+
+        const enabled = entries.filter(e => e.enabled !== false);
+        if (enabled.length === 0) return '';
+
+        const scanDepth = 50;
+        const scanText = messages.slice(-scanDepth).map(m => m.content).join('\n').toLowerCase();
+
+        const matched = [];
+        for (const entry of enabled) {
+            if (entry.constant) {
+                matched.push(entry);
+                continue;
+            }
+            const keys = entry.keys || [];
+            const secondary = entry.secondary_keys || [];
+            const hasPrimary = keys.some(k => scanText.includes(k.toLowerCase()));
+            if (!hasPrimary) continue;
+            if (entry.selective && secondary.length > 0) {
+                const hasSecondary = secondary.some(k => scanText.includes(k.toLowerCase()));
+                if (!hasSecondary) continue;
+            }
+            matched.push(entry);
+        }
+
+        if (matched.length === 0) return '';
+
+        matched.sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
+
+        const TOKEN_BUDGET = 1500;
+        let totalChars = 0;
+        const selected = [];
+        for (const entry of matched) {
+            const len = entry.content.length;
+            if (totalChars + len > TOKEN_BUDGET * 4) break;
+            totalChars += len;
+            selected.push(entry);
+        }
+
+        return selected.map(e => `【${e.keys?.[0] || '记忆'}】\n${e.content}`).join('\n\n');
+    },
+
+    /**
+     * DM叙事者专用 Prompt：第三人称叙述，不扮演任何具体角色
+     * @param {object} scene 当前场景
+     * @param {Array} messages 最近的消息历史
+     * @param {object} context 额外上下文，如 { trigger: 'check_outcome'|'location_arrival'|'event', focus: '具体描述焦点' }
+     */
+    buildDMNarration(scene, messages, context = {}) {
+        const dm = scene.dmPersona || { name: '叙述者', emoji: '📖', description: '一个中立的叙事者，用优美的文字描述场景和事件。' };
+        const userName = scene.userName || '旅人';
+        const systemParts = [];
+
+        systemParts.push(`你是「${dm.name}」——这个世界的故事叙述者（DM）。你不是场景中的角色，而是一个无形的叙事之声。`);
+        systemParts.push(`【叙事风格】\n${dm.description}`);
+        systemParts.push(`【叙事规则】\n- 以第三人称叙述，不要用"我"自称\n- 描写环境、氛围、人物的动作和神情\n- 不要替玩家角色（${userName}）做决定或发言\n- 不要替场景中的NPC角色发言——他们有自己的回合\n- 语言优美、沉浸感强，像小说中的旁白段落`);
+
+        // 当前位置信息
+        const locs = scene.locations || [];
+        if (locs.length > 0) {
+            const cur = locs.find(l => l.id === scene.currentLocation);
+            if (cur) {
+                systemParts.push(`【当前位置】${cur.name} — ${cur.description}`);
+            }
+            const locNames = locs.map(l => `${l.name}(${l.description})`).join('；');
+            systemParts.push(`【地图】${locNames}`);
+        }
+
+        // 上下文提示
+        if (context.trigger === 'check_outcome') {
+            systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据检定结果（成功或失败）以叙事方式描述发生的情况——成功时描写动作的完美执行，失败时描写意料之外的挫折。不要评判，只叙述。`);
+        } else if (context.trigger === 'location_arrival') {
+            systemParts.push(`【当前任务】玩家到达了一个新地点。请描写这个地点的景象、氛围和值得注意的细节。让场景活起来。`);
+        } else if (context.trigger === 'event') {
+            systemParts.push(`【当前任务】一个剧情事件刚刚发生。请以叙事方式描写事件的发生过程及其对场景的影响。`);
+        }
+
+        if (context.focus) {
+            systemParts.push(`【叙事焦点】${context.focus}`);
+        }
+
+        // 世界书
+        const loreContent = this.buildLorebookPrompt(scene, messages);
+        if (loreContent) {
+            systemParts.push(`【世界书】\n${loreContent}`);
+        }
+
+        // 计策上下文
+        systemParts.push(this.buildStrategyProtocol(scene));
+
+        // 格式要求
+        systemParts.push(`【格式要求】\n- 纯叙事，不需要对话\n- 用 *斜体* 表示强调或环境描写\n- 1-3段为宜，不要过长\n- 可以使用 [quest:]、[item_add:] 等标记，但不要在 DM 叙事中使用 [check:]\n- 如果有计策后果，也请在末尾追加 <state_update>{...}</state_update> 补丁`);
+
+        const systemPrompt = systemParts.join('\n\n');
+        const apiMessages = [{ role: 'system', content: systemPrompt }];
+
+        const recentMessages = messages.slice(-30);
+        recentMessages.forEach(msg => {
+            let role = msg.role;
+            if (role === 'assistant' && msg.type === 'narrate') {
+                role = 'assistant';
+            }
+            apiMessages.push({ role, content: msg.content });
+        });
+
+        return this.buildBody(apiMessages);
+    },
+
+    /**
+     * 教学专用 DM 叙事：强约束 AI 只围绕当前教学步骤引导，不推进严肃剧情。
+     * 由 Tutorial.narrateStep 经 GroupChat._dmNarrate({trigger:'tutorial', tutorialStep}) 调用。
+     */
+    buildTutorialNarration(scene, messages, step) {
+        const dm = scene.dmPersona || { name: '莫里斯', emoji: '🍺', description: '亲切幽默的老酒馆老板兼新手教学向导。' };
+        const userName = scene.userName || '新人';
+        const stepData = TutorialScript.getStep(step) || TutorialScript.getStep(0);
+
+        const systemParts = [];
+
+        // 教学模式强约束（核心区别于普通 DM 叙事）
+        systemParts.push(`你是「${dm.name}」——新手酒馆的教学向导。你现在不是在演戏，而是在教 ${userName} 玩这个游戏。`);
+        systemParts.push(`【教学模式 · 必须遵守】\n- 你的唯一目标是教会玩家第 ${step} 步：${stepData.title}（${stepData.goal}）。\n- 不要推进任何严肃剧情，不要制造紧张或危险，这是教学世界，氛围轻松友好。\n- 可以打破第四面墙，直接告诉玩家该点哪个按钮、做什么操作。\n- 语气亲切、幽默、鼓励，像一个耐心的老朋友。一次只教一个动作，不要一次性堆砌太多信息。\n- 玩家做对了就大力夸奖，做错了也绝不批评。\n- 不要替玩家角色做决定或发言。`);
+        systemParts.push(`【叙事风格】\n${dm.description}`);
+        systemParts.push(`【本步引导要点】\n${stepData.cue}`);
+
+        // 简化的世界书（教学世界书条目很少）
+        const loreContent = this.buildLorebookPrompt(scene, messages);
+        if (loreContent) {
+            systemParts.push(`【世界书】\n${loreContent}`);
+        }
+
+        // 当前位置
+        const locs = scene.locations || [];
+        if (locs.length > 0) {
+            const cur = locs.find(l => l.id === scene.currentLocation);
+            if (cur) {
+                systemParts.push(`【当前位置】${cur.name} — ${cur.description}`);
+            }
+        }
+
+        // 格式要求：教学叙事禁止使用检定/计策补丁等标记，保持纯净
+        systemParts.push(`【格式要求】\n- 纯叙事+引导，可以包含对玩家说话（用引号），但不要让其他 NPC 长篇发言。\n- 用 *斜体* 表示动作或环境描写。\n- 控制在 1-2 段，简洁有力，让玩家立刻知道下一步该做什么。\n- 严禁使用 [check:]、[quest:]、[item_add:]、<state_update> 等任何标记——这是教学旁白，不是游戏推进。\n- 严禁在叙事末尾追加任何 JSON 或方括号标记。`);
+
+        const systemPrompt = systemParts.join('\n\n');
+        const apiMessages = [{ role: 'system', content: systemPrompt }];
+
+        // 教学叙事只需要最近少量上下文
+        const recentMessages = messages.slice(-10);
+        recentMessages.forEach(msg => {
+            apiMessages.push({ role: msg.role, content: msg.content });
+        });
+
+        return this.buildBody(apiMessages);
+    },
+
+    replacePlaceholders(text, charName, userName) {
+        if (!text) return '';
+        return text
+            .replace(/\{\{char\}\}/g, charName)
+            .replace(/\{\{user\}\}/g, userName)
+            .replace(/<BOT>/g, charName)
+            .replace(/<USER>/g, userName);
+    }
+};

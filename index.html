@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>酒馆 — AI 角色扮演</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/themes.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <!-- 世界选择大厅 -->
+    <div class="world-picker" id="worldPicker">
+        <div class="world-picker-header">
+            <h1>🍷 酒馆</h1>
+            <p>选择一个世界，开始你的冒险</p>
+        </div>
+        <div class="world-picker-body">
+            <div class="world-section">
+                <h2>预设世界</h2>
+                <div class="world-grid" id="worldGrid">
+                    <!-- 动态插入预设卡片 -->
+                </div>
+            </div>
+            <div class="world-section">
+                <h2>已有世界</h2>
+                <div class="world-grid" id="savedWorldGrid">
+                    <p class="placeholder">暂无已有世界</p>
+                </div>
+            </div>
+            <div class="world-generate">
+                <input type="text" id="worldGenInput" placeholder="描述你想要的世界，例如：一个蒸汽朋克飞艇上的酒吧，乘客们都是通缉犯...">
+                <button class="btn btn-primary" id="worldGenBtn">✨ AI 生成新世界</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 移动端侧边栏遮罩 -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- 背景层 -->
+    <div class="bg-layer" id="bgLayer"></div>
+    <div class="bg-overlay"></div>
+
+    <!-- 顶部栏 -->
+    <header class="top-bar" id="topBar">
+        <div class="top-bar-left">
+            <button class="icon-btn" id="toggleLeftSidebar" title="角色列表">☰</button>
+            <h1 class="scene-name" id="sceneName">酒馆大厅</h1>
+        </div>
+        <div class="top-bar-center">
+            <span class="room-status" id="roomStatus"></span>
+        </div>
+        <div class="top-bar-right">
+            <button class="icon-btn" id="quickQuestBtn" title="任务面板">📋</button>
+            <button class="icon-btn" id="toggleRightSidebar" title="右侧面板">📖</button>
+            <button class="icon-btn" id="settingsBtn" title="设置">⚙️</button>
+            <a href="../deepseek-chat/index.html" class="icon-btn" title="返回对话模式">💬</a>
+        </div>
+    </header>
+
+    <!-- 主布局 -->
+    <div class="app-layout">
+        <!-- 左侧边栏：角色列表 -->
+        <aside class="sidebar sidebar-left" id="leftSidebar">
+            <div class="sidebar-header">
+                <h2>角色</h2>
+            </div>
+            <div class="character-list" id="characterList">
+                <!-- 角色卡片动态插入 -->
+            </div>
+            <div class="sidebar-footer" style="font-size:11px;color:var(--text-muted);text-align:center;">
+                右键角色可编辑
+            </div>
+        </aside>
+
+        <!-- 中间：聊天区 -->
+        <main class="chat-area" id="chatArea">
+            <div class="chat-messages" id="chatMessages">
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">🍷</div>
+                    <h2>欢迎来到酒馆</h2>
+                    <p>在左侧添加角色，开始你的故事</p>
+                </div>
+            </div>
+
+            <div class="chat-bottom">
+                <!-- 属性面板：只读展示玩家属性 -->
+                <div class="action-panel" id="actionBar">
+                    <div class="action-section-title">属性</div>
+                    <div class="stat-display" id="statDisplay">
+                        <span>💪10</span> <span>🤸10</span> <span>❤️10</span>
+                        <span>🧠10</span> <span>🦉10</span> <span>👑10</span>
+                    </div>
+                    <div class="vita-display" id="vitaDisplay"></div>
+                </div>
+
+                <div class="chat-input-wrap">
+                    <div class="player-info" id="playerInfo">
+                        <span>你：</span><input type="text" id="playerNameInput" value="旅人" placeholder="你的名字">
+                    </div>
+                    <div class="input-toolbar">
+                        <button class="toolbar-btn" id="snapshotBtn" title="存档">💾</button>
+                        <button class="toolbar-btn" id="loadSnapshotBtn" title="读档">📂</button>
+                        <button class="toolbar-btn" id="oocBtn" title="OOC模式">/ooc</button>
+                        <button class="toolbar-btn" id="strategyBtn" title="计策模式">/计策</button>
+                    </div>
+                    <div class="input-box">
+                        <textarea id="chatInput" rows="1" placeholder="输入消息..."></textarea>
+                        <button class="send-btn" id="sendBtn">发送</button>
+                        <button class="stop-btn" id="stopBtn">停止</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 右侧边栏：世界书 / 角色详情 -->
+        <aside class="sidebar sidebar-right" id="rightSidebar">
+            <div class="sidebar-tabs">
+                <button class="tab-btn" data-tab="strategies">计策</button>
+                <button class="tab-btn" data-tab="lorebook">世界书</button>
+                <button class="tab-btn" data-tab="map">地图</button>
+                <button class="tab-btn active" data-tab="quests">任务</button>
+                <button class="tab-btn" data-tab="inventory">背包</button>
+                <button class="tab-btn" data-tab="detail">详情</button>
+            </div>
+            <div class="tab-content hidden" id="tabStrategies">
+                <div class="lorebook-header">
+                    <h3>计策</h3>
+                </div>
+                <div class="strategies-list" id="strategiesList">
+                    <p class="placeholder">暂无计策</p>
+                </div>
+            </div>
+            <div class="tab-content hidden" id="tabLorebook">
+                <div class="lorebook-header">
+                    <h3>世界书</h3>
+                    <div style="display:flex;gap:4px;">
+                        <button class="icon-btn" id="aiBatchLoreBtn" title="AI批量生成">✨</button>
+                        <button class="icon-btn" id="addLoreEntryBtn">+</button>
+                    </div>
+                </div>
+                <div class="lorebook-list" id="lorebookList">
+                    <p class="placeholder">暂无世界书条目</p>
+                </div>
+            </div>
+            <div class="tab-content hidden" id="tabMap">
+                <!-- MapView 动态渲染 -->
+            </div>
+            <div class="tab-content" id="tabQuests">
+                <div class="quest-list" id="questList">
+                    <!-- QuestTracker 动态渲染 -->
+                </div>
+            </div>
+            <div class="tab-content hidden" id="tabInventory">
+                <div class="lorebook-header" style="border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px;">
+                    <h3>背包</h3>
+                </div>
+                <div class="equipment-display" id="equipmentDisplay"></div>
+                <div class="inventory-list" id="inventoryList">
+                    <p class="placeholder">暂无物品</p>
+                </div>
+            </div>
+            <div class="tab-content hidden" id="tabDetail">
+                <div class="detail-placeholder">
+                    <p>选择一个角色查看详情</p>
+                </div>
+                <div class="character-detail" id="characterDetail" style="display:none">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 角色卡编辑器弹窗 -->
+    <div class="modal-overlay" id="editorModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 id="editorTitle">编辑角色</h3>
+                <button class="icon-btn close-btn" id="closeEditor">✕</button>
+            </div>
+            <div class="modal-body" id="editorBody">
+                <!-- 动态插入表单 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelEditor">取消</button>
+                <button class="btn btn-primary" id="saveCharacter">保存</button>
+                <button class="btn btn-secondary" id="exportCharacter">导出PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>设置</h3>
+                <button class="icon-btn close-btn" id="closeSettings">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="settingsApiKey" placeholder="sk-...">
+                </div>
+                <div class="form-group">
+                    <label>模型</label>
+                    <select id="settingsModel">
+                        <option value="deepseek-v4-flash" selected>deepseek-v4-flash</option>
+                        <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                        <option value="deepseek-chat">deepseek-chat</option>
+                        <option value="deepseek-reasoner">deepseek-reasoner</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>背景图 URL</label>
+                    <input type="text" id="settingsBgUrl" placeholder="留空使用默认">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="clearAllData">🗑️ 清空所有数据</button>
+                <button class="btn btn-primary" id="saveSettings">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- JS 加载 -->
+    <script src="js/core/storage.js"></script>
+    <script src="js/core/api.js"></script>
+    <script src="js/core/state.js"></script>
+    <script src="js/core/ai-generator.js"></script>
+    <script src="js/core/prompt-builder.js"></script>
+    <script src="js/ui/renderer.js"></script>
+    <script src="js/ui/icons.js"></script>
+    <script src="js/ui/chat.js"></script>
+    <script src="js/ui/sidebar-left.js"></script>
+    <script src="js/ui/sidebar-right.js"></script>
+    <script src="js/ui/action-bar.js"></script>
+    <script src="js/ui/quest-tracker.js"></script>
+    <script src="js/ui/map-view.js"></script>
+    <script src="js/ui/character-editor.js"></script>
+    <script src="js/ui/player-creator.js"></script>
+    <script src="js/ui/new-character-handler.js"></script>
+    <script src="js/features/png-metadata.js"></script>
+    <script src="js/features/character-card.js"></script>
+    <script src="js/features/lorebook.js"></script>
+    <script src="js/features/relationship.js"></script>
+    <script src="js/features/strategy-manager.js"></script>
+    <script src="js/features/group-chat.js"></script>
+    <script src="js/features/scene-manager.js"></script>
+    <script src="js/features/world-generator.js"></script>
+    <script src="js/features/tutorial.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

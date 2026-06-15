@@ -1,0 +1,315 @@
+/* ===== 酒馆暗黑主题 ===== */
+
+/* 背景层 */
+.bg-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background: var(--bg-deep);
+    background-size: cover;
+    background-position: center;
+    transition: background-image 0.5s ease;
+}
+
+.bg-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    background: radial-gradient(ellipse at center, rgba(26,22,20,0.4) 0%, rgba(12,10,9,0.92) 100%);
+    pointer-events: none;
+}
+
+/* 顶部栏 */
+.top-bar {
+    position: relative;
+    z-index: 10;
+    height: var(--topbar-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.top-bar-left, .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scene-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-gold);
+    letter-spacing: 1px;
+}
+
+.room-status {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ===== 标签页 ===== */
+.sidebar-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: transparent;
+    transition: color var(--transition-fast), background var(--transition-fast);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+.tab-btn .icon { opacity: 0.7; transition: opacity var(--transition-fast); }
+.tab-btn.active .icon { opacity: 1; }
+
+/* tab 未读角标 */
+.tab-badge {
+    position: absolute;
+    top: -2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    color: #1a1614;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px var(--bg-glass), 0 1px 4px rgba(251,191,36,0.5);
+    animation: badgePulse 1.8s infinite;
+    z-index: 2;
+}
+@keyframes badgePulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 2px var(--bg-glass), 0 0 4px rgba(251,191,36,0.4); }
+    50% { transform: scale(1.12); box-shadow: 0 0 0 2px var(--bg-glass), 0 0 10px rgba(251,191,36,0.7); }
+}
+.tab-btn:hover { color: var(--text-dim); }
+.tab-btn.active {
+    color: var(--text-gold);
+    background: rgba(251,191,36,0.14);
+}
+/* active tab 底部金色滑块 */
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    left: 20%; right: 20%; bottom: -1px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    border-radius: 1px;
+}
+
+/* ===== 世界选择大厅 ===== */
+.world-picker {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: var(--bg-deep);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    animation: fadeIn 0.4s ease;
+}
+.world-picker.hidden { display: none; }
+
+.world-picker-header {
+    text-align: center;
+    padding: 40px 20px 20px;
+}
+.world-picker-header h1 {
+    font-size: 36px;
+    color: var(--text-gold);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+}
+.world-picker-header p {
+    font-size: 16px;
+    color: var(--text-muted);
+}
+
+.world-picker-body {
+    flex: 1;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.world-section {
+    margin-bottom: 32px;
+}
+.world-section h2 {
+    font-size: 14px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.world-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.world-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+.world-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-gold);
+    box-shadow: 0 8px 32px rgba(251,191,36,0.08);
+}
+.world-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--amber), var(--gold));
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.world-card:hover::before { opacity: 1; }
+
+.world-card-cover {
+    font-size: 48px;
+    margin-bottom: 12px;
+    line-height: 1;
+}
+.world-card-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 6px;
+}
+.world-card-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.world-card-chars {
+    margin-top: 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.world-card-char {
+    font-size: 12px;
+    padding: 3px 8px;
+    background: var(--bg-input);
+    border-radius: 4px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+
+.world-generate {
+    display: flex;
+    gap: 12px;
+    padding: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 40px;
+}
+.world-generate input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-main);
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.world-generate input:focus { border-color: var(--gold-dim); }
+.world-generate input::placeholder { color: var(--text-muted); }
+.world-generate button { white-space: nowrap; }
+
+.saved-world-card .world-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.saved-world-card:hover .world-card-actions { opacity: 1; }
+
+/* ===== 空状态 ===== */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    text-align: center;
+    animation: fadeIn 0.5s ease;
+    padding: 20px;
+}
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.7;
+    filter: drop-shadow(0 2px 8px rgba(251,191,36,0.15));
+}
+.empty-state h2 {
+    font-size: 18px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+.empty-state p { font-size: 13px; margin-bottom: 12px; }
+/* 空状态装饰性分隔线 */
+.empty-state::after {
+    content: '';
+    display: block;
+    width: 60px;
+    height: 1px;
+    margin-top: 20px;
+    background: linear-gradient(90deg, transparent, var(--border-gold), transparent);
+}
+
+.placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 32px 12px;
+    position: relative;
+}
+.placeholder::before {
+    content: '✦';
+    display: block;
+    font-size: 16px;
+    color: var(--border-gold);
+    margin-bottom: 10px;
+    opacity: 0.6;
+}

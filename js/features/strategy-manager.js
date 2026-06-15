@@ -1,0 +1,296 @@
+/**
+ * 计策管理器
+ * 负责创建、更新、应用 AI 状态补丁，驱动右侧计策面板
+ */
+const StrategyManager = {
+    /**
+     * 创建新计策
+     */
+    createStrategy(data = {}) {
+        const scene = State.scene;
+        if (!scene) return null;
+
+        const now = Date.now();
+        const strategy = this.normalizeStrategy({
+            id: 'st_' + now + '_' + Math.random().toString(36).slice(2, 6),
+            title: data.title || '未命名计策',
+            goal: data.goal || '',
+            status: data.status || 'draft',
+            phase: data.phase || 'intel',
+            risk: typeof data.risk === 'number' ? data.risk : 0,
+            progress: typeof data.progress === 'number' ? data.progress : 0,
+            participants: Array.isArray(data.participants) ? data.participants : [],
+            steps: Array.isArray(data.steps) ? data.steps : [],
+            resources: Array.isArray(data.resources) ? data.resources : [],
+            clues: Array.isArray(data.clues) ? data.clues : [],
+            stakes: data.stakes || '',
+            latestOutcome: data.latestOutcome || '',
+            createdAt: now,
+            updatedAt: now
+        });
+
+        scene.strategies.push(strategy);
+        if (!scene.activeStrategyId) scene.activeStrategyId = strategy.id;
+        State.saveCurrentSceneDebounced();
+        SidebarRight.renderStrategies();
+        SidebarRight.markTabNew('strategies');
+        return strategy;
+    },
+
+    /**
+     * 更新指定计策（浅合并白名单字段）
+     */
+    updateStrategy(id, patch) {
+        const scene = State.scene;
+        if (!scene || !scene.strategies) return null;
+        const idx = scene.strategies.findIndex(s => s.id === id);
+        if (idx === -1) return null;
+
+        const allowed = ['title', 'goal', 'status', 'phase', 'risk', 'progress', 'participants', 'steps', 'resources', 'clues', 'stakes', 'latestOutcome'];
+        const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
+        const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
+        const strategy = scene.strategies[idx];
+        for (const key of allowed) {
+            if (patch[key] !== undefined) {
+                strategy[key] = patch[key];
+            }
+        }
+        if (strategy.status && !validStatuses.includes(strategy.status)) strategy.status = 'draft';
+        if (strategy.phase && !validPhases.includes(strategy.phase)) strategy.phase = 'intel';
+        if (typeof strategy.risk === 'number') strategy.risk = Math.min(100, Math.max(0, strategy.risk));
+        if (typeof strategy.progress === 'number') strategy.progress = Math.min(100, Math.max(0, strategy.progress));
+        strategy.updatedAt = Date.now();
+        scene.strategies[idx] = this.normalizeStrategy(strategy);
+        State.saveCurrentSceneDebounced();
+        SidebarRight.renderStrategies();
+        return strategy;
+    },
+
+    /**
+     * 设置当前激活计策
+     */
+    setActiveStrategy(id) {
+        const scene = State.scene;
+        if (!scene || !scene.strategies) return;
+        const found = scene.strategies.find(s => s.id === id);
+        if (found) {
+            scene.activeStrategyId = id;
+            State.saveCurrentSceneDebounced();
+            SidebarRight.renderStrategies();
+        }
+    },
+
+    /**
+     * 放弃计策
+     */
+    abandonStrategy(id) {
+        const scene = State.scene;
+        if (!scene || !scene.strategies) return;
+        const strategy = scene.strategies.find(s => s.id === id);
+        if (!strategy) return;
+        if (!confirm(`确定要放弃计策「${String(strategy.title).replace(/</g, ' ').replace(/>/g, ' ')}」吗？`)) return;
+        strategy.status = 'failed';
+        strategy.latestOutcome = strategy.latestOutcome || '玩家主动放弃了这条计策。';
+        strategy.updatedAt = Date.now();
+        if (scene.activeStrategyId === id) {
+            const remaining = scene.strategies.filter(s => s.id !== id && s.status !== 'failed' && s.status !== 'resolved');
+            scene.activeStrategyId = remaining.length > 0 ? remaining[0].id : null;
+        }
+        State.saveCurrentSceneDebounced();
+        SidebarRight.renderStrategies();
+    },
+
+    /**
+     * 归一化单个计策对象，补全默认值
+     */
+    normalizeStrategy(strategy) {
+        if (!strategy) return strategy;
+        const defaults = {
+            status: 'draft',
+            phase: 'intel',
+            risk: 0,
+            progress: 0,
+            participants: [],
+            steps: [],
+            resources: [],
+            clues: []
+        };
+        const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
+        const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
+        for (const [key, val] of Object.entries(defaults)) {
+            if (strategy[key] === undefined || strategy[key] === null) strategy[key] = val;
+        }
+        if (!validStatuses.includes(strategy.status)) strategy.status = 'draft';
+        if (!validPhases.includes(strategy.phase)) strategy.phase = 'intel';
+        if (!Array.isArray(strategy.participants)) strategy.participants = [];
+        if (!Array.isArray(strategy.steps)) strategy.steps = [];
+        if (!Array.isArray(strategy.resources)) strategy.resources = [];
+        if (!Array.isArray(strategy.clues)) strategy.clues = [];
+        return strategy;
+    },
+
+    /**
+     * 解析并白名单应用 AI 的状态补丁
+     * 不支持 AI 任意覆盖 State，禁止修改 settings、apiKey、DOM 字段等
+     */
+    applyStateUpdate(update) {
+        const scene = State.scene;
+        if (!scene) return;
+        if (!update || typeof update !== 'object') return;
+
+        // 1. strategies.create / update
+        if (update.strategies && typeof update.strategies === 'object') {
+            if (Array.isArray(update.strategies.create)) {
+                for (const st of update.strategies.create) {
+                    if (st && typeof st === 'object') this.createStrategy(st);
+                }
+            }
+            if (Array.isArray(update.strategies.update)) {
+                for (const patch of update.strategies.update) {
+                    if (patch && typeof patch === 'object' && patch.id) {
+                        this.updateStrategy(patch.id, patch);
+                    }
+                }
+            }
+        }
+
+        // 2. intelAdd
+        if (Array.isArray(update.intelAdd)) {
+            for (const intel of update.intelAdd) {
+                if (intel && typeof intel === 'object') {
+                    scene.intel.push({
+                        id: 'intel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                        text: String(intel.text || ''),
+                        source: String(intel.source || '未知来源'),
+                        reliability: ['rumor', 'confirmed', 'false'].includes(intel.reliability) ? intel.reliability : 'rumor',
+                        tags: Array.isArray(intel.tags) ? intel.tags.map(String) : [],
+                        discoveredAt: Date.now()
+                    });
+                }
+            }
+        }
+
+        // 3. factionsUpdate
+        if (Array.isArray(update.factionsUpdate)) {
+            for (const f of update.factionsUpdate) {
+                if (!f || typeof f !== 'object' || !f.name) continue;
+                const existing = scene.factions.find(x => x.name === f.name);
+                if (existing) {
+                    if (f.attitude !== undefined) existing.attitude = Number(f.attitude) || 0;
+                    if (f.power !== undefined) existing.power = Number(f.power) || 0;
+                    if (f.description !== undefined) existing.description = String(f.description);
+                    if (Array.isArray(f.leverage)) existing.leverage = f.leverage.map(String);
+                } else {
+                    scene.factions.push({
+                        name: String(f.name),
+                        attitude: Number(f.attitude) || 0,
+                        power: Number(f.power) || 0,
+                        description: String(f.description || ''),
+                        leverage: Array.isArray(f.leverage) ? f.leverage.map(String) : []
+                    });
+                }
+            }
+        }
+
+        // 4. characterUpdates（仅允许修改关系/警觉/秘密等安全字段）
+        if (Array.isArray(update.characterUpdates)) {
+            for (const cu of update.characterUpdates) {
+                if (!cu || typeof cu !== 'object' || !cu.characterId) continue;
+                const char = State.characters.find(c => c.id === cu.characterId);
+                if (!char) continue;
+                const userName = scene.userName || State.settings.userName || '旅人';
+                if (!char._relations) char._relations = {};
+                if (!char._relations[userName]) char._relations[userName] = { affection: 0, mood: '平静' };
+                const rel = char._relations[userName];
+                if (cu.affectionDelta !== undefined) rel.affection = (Number(rel.affection) || 0) + Number(cu.affectionDelta);
+                if (cu.suspicionDelta !== undefined) {
+                    rel.suspicion = (Number(rel.suspicion) || 0) + Number(cu.suspicionDelta);
+                }
+                if (cu.mood !== undefined) rel.mood = String(cu.mood);
+                if (cu.secret !== undefined) {
+                    if (!char._secrets) char._secrets = [];
+                    char._secrets.push(String(cu.secret));
+                }
+                Storage.saveCharacter(char).catch(e => console.warn('保存角色关系失败:', e));
+            }
+            State.emit('charactersChanged', State.characters);
+        }
+
+        // 5. scene 字段（仅白名单）
+        if (update.scene && typeof update.scene === 'object') {
+            if (typeof update.scene.worldTensionDelta === 'number') {
+                scene.worldTension = (Number(scene.worldTension) || 0) + update.scene.worldTensionDelta;
+            }
+            if (typeof update.scene.activeStrategyId === 'string') {
+                const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
+                if (target) scene.activeStrategyId = update.scene.activeStrategyId;
+            }
+        }
+
+        // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
+        const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
+        if (Array.isArray(update.questsUpdate)) {
+            for (const qu of update.questsUpdate) {
+                if (!qu || typeof qu !== 'object' || !qu.questId) continue;
+                const quest = scene.quests.find(q => q.id === qu.questId);
+                if (!quest) continue;
+                if (qu.objectiveIdx !== undefined && quest.objectives[qu.objectiveIdx]) {
+                    quest.objectives[qu.objectiveIdx].completed = true;
+                }
+                if (qu.status && validQuestStatuses.includes(qu.status)) quest.status = qu.status;
+            }
+        }
+
+        let itemAdded = false, locAdded = false;
+        if (Array.isArray(update.itemAdd)) {
+            for (const it of update.itemAdd) {
+                if (!it || typeof it !== 'object' || !it.name) continue;
+                const existing = scene.inventory.find(i => i.name === it.name);
+                if (existing) {
+                    existing.quantity += Number(it.quantity) || 1;
+                } else {
+                    scene.inventory.push({
+                        id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                        name: String(it.name),
+                        description: String(it.description || ''),
+                        type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
+                        quantity: Number(it.quantity) || 1,
+                        equipped: false
+                    });
+                }
+                itemAdded = true;
+            }
+        }
+
+        if (Array.isArray(update.locationUpdate)) {
+            for (const loc of update.locationUpdate) {
+                if (!loc || typeof loc !== 'object' || !loc.id) continue;
+                const existing = scene.locations.find(l => l.id === loc.id);
+                if (existing) {
+                    if (loc.name) existing.name = String(loc.name);
+                    if (loc.description !== undefined) existing.description = String(loc.description);
+                    if (loc.alertLevel !== undefined) existing.alertLevel = Number(loc.alertLevel) || 0;
+                } else {
+                    scene.locations.push({
+                        id: String(loc.id),
+                        name: String(loc.name || loc.id),
+                        description: String(loc.description || ''),
+                        connections: Array.isArray(loc.connections) ? loc.connections.map(String) : [],
+                        alertLevel: Number(loc.alertLevel) || 0
+                    });
+                }
+                locAdded = true;
+            }
+        }
+
+        State.saveCurrentSceneDebounced();
+        SidebarRight.renderStrategies();
+        SidebarRight.renderInventory();
+        SidebarRight.renderQuests();
+        SidebarRight.renderMap();
+        SidebarLeft.render();
+        // 被动获得：标记角标
+        if (itemAdded) SidebarRight.markTabNew('inventory');
+        if (locAdded) SidebarRight.markTabNew('map');
+    }
+};

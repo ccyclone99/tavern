@@ -1,0 +1,30 @@
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code 本地配置
+.claude/
+
+# 系统/缓存
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node（即使当前无依赖，预防性排除）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 环境变量/密钥（本项目 API Key 存 IndexedDB，但预防性排除）
+.env
+.env.*
+*.key
+*.pem
+
+# 构建产物（当前无构建系统，预防性排除）
+dist/
+build/
