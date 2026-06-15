@@ -1,0 +1,205 @@
+# API 协议与 AI 标记格式
+
+> agent 驱动游戏必读。本文档定义：LLM API 如何调用、AI 回复里能用哪些标记、状态补丁怎么写。
+
+## 一、LLM API 协议
+
+### 端点
+```
+POST https://api.deepseek.com/chat/completions
+```
+SSE 流式响应。请求头需 `Authorization: Bearer <API_KEY>`。
+
+### 请求体（由 `PromptBuilder.build` 组装）
+
+```js
+{
+  model: "deepseek-v4-flash",       // 或 deepseek-chat / deepseek-reasoner
+  stream: true,
+  messages: [
+    { role: "system", content: "<system prompt，见下方结构>" },
+    { role: "user",      content: "玩家消息" },
+    { role: "assistant", content: "DM/角色回复" },
+    // ... 最近 50 条历史
+  ],
+  thinking: { type: "enabled" }     // 非 legacy 模型且开启思考时
+}
+```
+
+### System Prompt 结构（注入顺序）
+
+`PromptBuilder.build(character, scene, messages)` 按以下顺序拼接 `systemParts`：
+
+1. **身份声明**：`你是 ${charName}。请严格扮演这个角色`
+2. **玩家名**：`玩家名称是 ${userName}`
+3. **角色背景** `【角色背景】`（来自 `character.description`）
+4. **性格** `【性格】`（来自 `character.personality`）
+5. **场景** `【当前场景】`
+6. **示例对话** `【示例对话风格】`
+7. **额外设定** `【额外设定】`（来自 `system_prompt`）
+8. **世界书** `【世界书】`（关键词匹配触发，见 `buildLorebookPrompt`）
+9. **剧情摘要** `【先前剧情摘要】`（自动摘要，上限 1200 字）
+10. **关系状态** `【关系状态】`（好感度/情绪）
+11. **角色谋略素材** `【角色谋略素材】`（动机/恐惧/秘密/筹码）
+12. **角色信条** `【角色信条与三观】`（creed/redLines/values，**人格锚点**）
+13. **回复要求** `【回复要求】`（来自 `post_history_instructions`）
+14. **规则层** `buildRulesContext(scene)`：属性/位置/地图/任务/物品/势力/紧张度/检定规则/生存系统/动态事件/合理性协议
+15. **剧情弧** `【剧情弧 · 叙事骨架】`（storyArcs 节拍，**AI 必须按此推进**）
+16. **计策协议** `【计策主持人协议】`
+17. **剧情推动 + 格式要求**
+
+群聊（`buildGroup`）结构类似，额外注入其他角色名和**玩家信息**（含玩家信条）。
+
+### 流式响应解析
+
+SSE 格式，每行 `data: {json}`。提取 `choices[0].delta.content`。遇到 `[DONE]` 结束。
+
+⚠️ **中断处理**：流被中断（abort）时，已接收的 `<state_update>` 补丁可能不完整。`api.js` 的 `flushThink()` 在循环结束后才执行，若中途 abort，末尾补丁会丢失。agent 实现时建议：流结束后再做一次补丁匹配，不依赖流式过程中的部分匹配。
+
+---
+
+## 二、AI 回复标记协议
+
+AI 在回复**末尾**可以追加标记（每个独占一行），系统会解析并执行。agent 驱动时也应在 DM 回复里使用这些标记。
+
+### 检定标记
+```
+[check:属性名|DC值]
+```
+触发自动投骰：D20 + 属性调整值 vs DC。属性名可用中文（力量/敏捷/体质/智力/感知/魅力）或英文。
+
+结果以 `type:'check'` 消息插入，AI 收到的文本格式：
+```
+【力量检定：D20=18 +3 = 21 vs DC15 → 成功！】
+【力量检定：D20=1 +3 = 4 vs DC15 → 失败 — 大失败！】
+```
+- 自然 20 = 大成功（无视 DC）
+- 自然 1 = 大失败（无视 DC）
+
+### 生存系统标记
+```
+[damage:N|原因]    # 玩家受 N 点伤害，HP 归零触发死亡结局
+[heal:N]           # 玩家恢复 N 点生命
+[gold:N]           # 金钱变动（正获得/负花费）
+[exp:N]            # 经验获得（满 level×100 升级，+2 属性点）
+```
+
+### 剧情/任务标记
+```
+[quest:任务名|main或side|描述|目标1,目标2|奖励]   # 创建任务
+[quest_update:任务名|目标序号]                     # 标记目标完成（序号从1开始）
+[event:事件描述]                                   # 触发剧情事件
+[move:地点名]                                      # 建议移动到新地点
+```
+- **奖励格式**：`金币x100, 经验x50, 短剑x1`（逗号分隔，`物品名x数量` 或 `金币xN` 或 `经验xN`）
+- 主线任务全完成 → 触发胜利结局
+
+### 物品标记
+```
+[item_add:名称|描述|类型|数量]     # 给予物品（类型：weapon/armor/consumable/quest/misc）
+[item_remove:名称]                # 移除物品
+[item_equip:名称]                 # 装备物品
+[item_unequip:名称]               # 卸下物品
+```
+
+### 角色/世界标记
+```
+[new_char:角色名|emoji|外貌|性格|开场白]   # 新角色登场
+[char_exit:角色名|原因]                    # 角色退场
+```
+
+### 情绪标记（可放回复末尾）
+```
+[emotion:情绪名]    # 如 happy/angry/sad/shy/surprised
+```
+
+---
+
+## 三、`<state_update>` 状态补丁协议
+
+AI 在回复末尾可追加**隐藏的 JSON 补丁**来更新游戏状态。玩家看不到补丁内容（系统会剥离）。格式：
+
+```json
+<state_update>
+{
+  "strategies": {
+    "create": [{ "title": "...", "goal": "...", "phase": "intel" }],
+    "update": [{ "id": "st_xxx", "phase": "setup", "risk": 35 }]
+  },
+  "intelAdd": [{ "text": "...", "source": "...", "reliability": "rumor" }],
+  "factionsUpdate": [{ "name": "商会", "attitude": -10, "power": 60 }],
+  "characterUpdates": [{ "characterId": "char_xxx", "suspicionDelta": 10 }],
+  "scene": { "worldTensionDelta": 5 }
+}
+</state_update>
+```
+
+### 白名单字段（安全约束）
+
+补丁经过**严格白名单**，AI 不能修改任意字段：
+
+| 顶层字段 | 允许的子操作 |
+|---------|-------------|
+| `strategies.create` | 创建计策（title/goal/phase/risk/progress 等） |
+| `strategies.update` | 更新计策（必须带 id） |
+| `intelAdd` | 添加情报（text/source/reliability: rumor\|confirmed\|false） |
+| `factionsUpdate` | 更新势力（name/attitude/power/description/leverage） |
+| `characterUpdates` | 更新角色关系（characterId/affectionDelta/suspicionDelta/mood/secret） |
+| `scene` | 仅 worldTensionDelta 和 activeStrategyId |
+| `questsUpdate` | 更新任务（questId/objectiveIdx/status） |
+| `itemAdd` | 添加物品 |
+| `locationUpdate` | 更新地点 |
+
+**禁止修改**：`settings`、`apiKey`、玩家属性、玩家 HP 等核心字段。补丁是"建议性"的，系统会用白名单过滤后应用。
+
+实现见 `js/features/strategy-manager.js` 的 `applyStateUpdate()`。
+
+### state_update 与方括号标记的分工
+
+| 目标 | 推荐协议 | 原因 |
+|------|----------|------|
+| 创建任务 | `[quest:...]` | 现有 state_update 只支持 `questsUpdate` 更新已有任务 |
+| 完成任务目标 | `[quest_update:...]` 或 `questsUpdate` | 标记按任务名，补丁按 `questId` |
+| 玩家受伤/回血/金币/经验 | `[damage:]` / `[heal:]` / `[gold:]` / `[exp:]` | 这些会触发系统消息、升级、死亡等副作用 |
+| 计策/情报/势力/关系 | `<state_update>` | 这些是补丁白名单的核心用途 |
+| 新增地点/物品 | `<state_update>` 或 `[item_add:]` | 物品两者均可；地点更新仅 state_update 支持 |
+| 新角色登场/退场 | `[new_char:]` / `[char_exit:]` | 需要 UI 确认或场景角色列表变更 |
+
+---
+
+## 四、合理性协议（最高优先级 prompt 指令）
+
+System prompt 里有这段约束，**所有 agent 扮演的 DM 必须遵守**：
+
+1. 玩家声称"成功/说服/打败"时，必须要求检定或让 NPC 质问，绝不直接承认
+2. 不合逻辑的行为必须被拒绝或产生负面后果
+3. NPC 不会因"好话"违背立场——说服需要筹码/关系/检定
+4. 重大成功需要铺垫——跳跃式成功伴随高 DC 或失败风险
+5. 玩家跳过剧情关键环节时，用 NPC 拒绝/环境阻碍引导回正轨
+6. "你是公正的 DM，不是许愿机"
+
+---
+
+## 五、剧情弧推进协议
+
+System prompt 注入 `storyArcs`，AI 必须按节拍推进：
+
+```json
+{
+  "title": "混沌渗透之谜",
+  "phase": "intro",
+  "beats": [
+    { "condition": "玩家获得初步信任", "action": "reveal:货舱遗物异常" },
+    { "condition": "玩家调查货舱", "action": "reveal:助手死亡真相" },
+    { "condition": "玩家接触灵能者", "action": "twist:第三道影子" }
+  ],
+  "currentBeat": 0
+}
+```
+
+规则：
+- 玩家行为满足当前 beat 的 `condition` 时，AI 必须在回复触发对应 `action`
+- 玩家跑题时，用 NPC/事件引导回主线
+- 一个 beat 消化完再推进下一个
+
+agent 驱动时，应在每轮回复后检查 `currentBeat` 是否该推进（这需要 agent 自己实现，目前系统不自动追踪 beat 推进——见 MULTI_AGENT.md 的"已知限制"）。

@@ -2,6 +2,16 @@
 
 一个纯静态 HTML + 原生 JS 的多角色 AI 聊天器，定位是“AI 主持人引导玩家制定并执行计策的酒馆”。
 
+## Agent 入口
+
+如果你要让外部 agent 驱动游戏、做多 agent 模拟，或让 agent 辅助开发，请先读：
+
+- [docs/AGENT.md](docs/AGENT.md)：agent 游玩协议总纲
+- [docs/API_PROTOCOL.md](docs/API_PROTOCOL.md)：LLM API、AI 标记和 `<state_update>` 协议
+- [docs/GAME_STATE.md](docs/GAME_STATE.md)：`scene` 全字段、角色结构、消息类型
+- [docs/MULTI_AGENT.md](docs/MULTI_AGENT.md)：多 agent 模拟场景和游玩报告格式
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：架构、文件职责、数据流、安全约束
+
 ## 核心体验
 
 玩家提出目标或计策意图后，AI 不直接替玩家成功执行，而是像主持人一样：
@@ -110,6 +120,12 @@ AI 不会替玩家自动成功；最终选择和执行始终由玩家推动。
 ```
 E:\kimi\tavern
 ├── index.html
+├── docs/
+│   ├── AGENT.md             # agent 游玩协议总纲
+│   ├── API_PROTOCOL.md      # LLM API + 标记协议 + state_update
+│   ├── GAME_STATE.md        # scene/角色/消息结构
+│   ├── MULTI_AGENT.md       # 多 agent 模拟与报告格式
+│   └── ARCHITECTURE.md      # 架构、数据流、安全约束
 ├── css/
 │   ├── base.css
 │   ├── components.css    # 含计策面板样式

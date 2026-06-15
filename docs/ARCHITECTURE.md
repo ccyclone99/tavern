@@ -1,0 +1,298 @@
+# 架构与文件职责
+
+> 酒馆是纯静态 HTML + 原生 JavaScript 应用。没有 React/Vue、没有构建系统、没有 npm 运行时依赖。所有功能在浏览器中通过 `index.html` 直接加载。
+
+## 一、总体架构
+
+```mermaid
+flowchart TD
+    A["index.html"] --> B["js/main.js"]
+    B --> C["State"]
+    B --> D["Storage / IndexedDB"]
+    B --> E["UI modules"]
+    B --> F["Feature modules"]
+
+    E --> C
+    F --> C
+    C --> D
+
+    F --> G["PromptBuilder"]
+    G --> H["API.stream"]
+    H --> I["DeepSeek Chat Completions SSE"]
+    I --> F
+
+    F --> J["Renderer"]
+    E --> J
+```
+
+运行时没有模块打包，脚本通过全局对象协作。新增文件时要在 `index.html` 中按依赖顺序引入。
+
+## 二、数据流
+
+### 初始化
+
+```text
+index.html
+  -> js/main.js init()
+  -> Storage.init()
+  -> State.loadSettings()
+  -> State.loadCharacters()
+  -> State.loadScenes()
+  -> State.normalizeScene()
+  -> 初始化 ChatUI / sidebars / QuestTracker / MapView / editors
+  -> 显示世界大厅或最近场景
+```
+
+### 玩家发言到 AI 回复
+
+```text
+ChatUI 收集输入
+  -> scene.messages push user message
+  -> GroupChat.handleUserMessage()
+  -> 选择回复角色
+  -> PromptBuilder.build() 或 buildGroup()
+  -> API.stream()
+  -> ChatUI 流式渲染
+  -> GroupChat._extractStateUpdate()
+  -> StrategyManager.applyStateUpdate()
+  -> GroupChat._parseMarkers()
+  -> GroupChat._processMarkers()
+  -> 保存 assistant message
+  -> Relationship 更新
+  -> State.saveCurrentSceneDebounced()
+```
+
+### 地图移动
+
+```text
+MapView.moveTo(locId)
+  -> 校验目标是否在当前地点 connections
+  -> scene.currentLocation = locId
+  -> 插入【移动到 ...】 user/action 消息
+  -> GroupChat.handleLocationMove()
+  -> PromptBuilder.buildDMNarration()
+  -> API.stream()
+  -> 保存 narrate 消息
+```
+
+### 计策状态补丁
+
+```text
+AI 回复文本
+  -> <state_update>{...}</state_update>
+  -> GroupChat._extractStateUpdate()
+  -> JSON.parse()
+  -> StrategyManager.applyStateUpdate()
+  -> 白名单更新 strategies/intel/factions/relationships/scene/items/locations
+  -> 右侧面板重渲染
+```
+
+## 三、文件职责
+
+### 根目录
+
+| 文件 | 职责 |
+|------|------|
+| `index.html` | 应用入口，DOM 结构，脚本加载顺序 |
+| `README.md` | 项目说明、手动测试清单、开发约束 |
+
+### `css/`
+
+| 文件 | 职责 |
+|------|------|
+| `base.css` | 全局变量、基础排版、通用元素 |
+| `layout.css` | 主布局、侧边栏、响应式结构 |
+| `components.css` | 聊天、任务、背包、计策等组件样式 |
+| `themes.css` | 主题/视觉风格补充 |
+
+### `js/core/`
+
+| 文件 | 职责 |
+|------|------|
+| `state.js` | 全局状态、当前场景/角色访问器、旧存档字段补齐、场景创建保存 |
+| `storage.js` | IndexedDB 封装，characters/scenes/settings/snapshots store |
+| `api.js` | DeepSeek Chat Completions SSE 调用、重试、错误归类、停止流 |
+| `prompt-builder.js` | 单聊/群聊/DM/教学 prompt 组装，规则层、剧情弧、计策协议注入 |
+| `ai-generator.js` | 辅助 AI 生成能力，例如自定义世界 JSON |
+
+### `js/features/`
+
+| 文件 | 职责 |
+|------|------|
+| `world-generator.js` | 预设世界、自定义世界生成提示词、模板应用到 scene/characters |
+| `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |
+| `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用 |
+| `relationship.js` | 好感/情绪规则更新和 LLM 分析更新 |
+| `lorebook.js` | 世界书编辑与管理 |
+| `character-card.js` | 角色卡导入、嵌入世界书合并、角色删除 |
+| `png-metadata.js` | PNG 角色卡元数据解析/写入 |
+| `scene-manager.js` | 场景管理相关功能 |
+| `tutorial.js` | 新手教学世界、教学步骤和钩子 |
+
+### `js/ui/`
+
+| 文件 | 职责 |
+|------|------|
+| `renderer.js` | HTML/属性/URL 安全转义，RP 文本渲染，消息类型解析，剥离 state_update |
+| `chat.js` | 输入栏、消息渲染、流式消息 DOM、发送/停止按钮 |
+| `sidebar-left.js` | 左侧角色列表和角色选择 |
+| `sidebar-right.js` | 右侧世界书、地图、任务、背包、计策、详情面板 |
+| `quest-tracker.js` | 任务渲染、目标勾选、奖励解析、升级 |
+| `map-view.js` | 地图节点渲染和移动校验 |
+| `action-bar.js` | 底部/快捷状态与操作栏 |
+| `character-editor.js` | 角色编辑 UI |
+| `player-creator.js` | 玩家角色创建流程 |
+| `new-character-handler.js` | `[new_char:]` / `[char_exit:]` 处理 |
+| `icons.js` | SVG 图标 sprite 与图标渲染 |
+
+## 四、核心协议边界
+
+### PromptBuilder 负责“告诉 AI 能做什么”
+
+`PromptBuilder` 注入：
+
+- 角色身份、背景、性格、示例对话、额外设定。
+- 世界书、剧情摘要、关系状态。
+- NPC 谋略素材和信条。
+- 玩家属性、HP、金币、等级、任务、地图、物品。
+- 检定规则、生存系统、动态事件标记。
+- 合理性协议。
+- 剧情弧。
+- 计策主持人协议。
+
+### GroupChat 负责“解析 AI 说了什么”
+
+`GroupChat` 解析：
+
+- `<state_update>` 隐藏补丁。
+- `[check:]` 检定。
+- `[quest:]` / `[quest_update:]` 任务。
+- `[event:]` / `[move:]` 剧情事件和移动。
+- `[item_add:]` / `[item_remove:]` / `[item_equip:]` / `[item_unequip:]` 背包。
+- `[damage:]` / `[heal:]` / `[gold:]` / `[exp:]` 生存系统。
+- `[new_char:]` / `[char_exit:]` 角色登退场。
+
+### StrategyManager 负责“允许 AI 改哪些状态”
+
+`StrategyManager.applyStateUpdate()` 是状态补丁边界。允许：
+
+- 创建/更新计策。
+- 添加情报。
+- 更新势力。
+- 更新角色关系、警觉、心情、秘密。
+- 更新 `worldTensionDelta` 和 `activeStrategyId`。
+- 更新已有任务目标/状态。
+- 添加物品。
+- 新增/更新地点。
+
+不允许：
+
+- 修改 settings/apiKey。
+- 任意覆盖玩家属性、HP、等级、金币。
+- 任意覆盖 scene 或 character。
+- 直接插入 DOM。
+
+## 五、安全约束
+
+### XSS
+
+所有进入 DOM 的用户、AI、导入角色卡、世界书文本必须走：
+
+- `Renderer.escapeHtml(text)`：HTML 正文。
+- `Renderer.escapeAttr(text)`：属性值。
+- `Renderer.safeUrl(url)`：URL，仅允许 `http:`、`https:`、`mailto:`、`data:image/png`、`data:image/jpeg`、`data:image/webp`、`blob:`。
+
+不得用未转义字符串写：
+
+```js
+el.innerHTML = userOrAiText;
+```
+
+可接受模式：
+
+```js
+el.innerHTML = `<div>${Renderer.escapeHtml(userOrAiText)}</div>`;
+```
+
+### API Key
+
+- API key 只应存在于 `State.settings.apiKey` / IndexedDB settings。
+- 不写入聊天消息、DOM、URL、console。
+- 导出 `Storage.exportAll()` 时会包含 settings；分享导出数据前应清理 key。
+
+### AI 输出
+
+- `<state_update>` 必须隐藏，不进入最终聊天正文。
+- JSON 解析失败只 warn，不中断聊天。
+- 补丁必须白名单应用，不允许 `Object.assign(scene, update)`。
+- 方括号标记删除后再保存正文，避免玩家看到协议噪声。
+
+### 持久化
+
+- 不重写 IndexedDB 架构，除非同步升级 `DB_VERSION` 和迁移逻辑。
+- 新增 scene 字段必须同步 `State.createScene()` 和 `State.normalizeScene()`。
+- 高频保存使用 `saveCurrentSceneDebounced()`，避免每 token 写库。
+
+## 六、扩展新功能的步骤
+
+### 新增 scene 字段
+
+1. 在 `State.createScene()` 加默认值。
+2. 在 `State.normalizeScene()` 为旧存档补默认值。
+3. 如需 UI，更新对应 sidebar/action bar 渲染。
+4. 如需 AI 知道，更新 `PromptBuilder.buildRulesContext()` 或专用 prompt 块。
+5. 如需 AI 修改，谨慎扩展 `StrategyManager.applyStateUpdate()` 白名单。
+6. 更新 `docs/GAME_STATE.md` 和 `docs/API_PROTOCOL.md`。
+
+### 新增 AI 标记
+
+1. 在 `PromptBuilder` 的规则层或格式要求中说明标记。
+2. 在 `GroupChat._parseMarkers()` 添加正则。
+3. 在 `_processMarkers()` 分派。
+4. 实现 `_handleXMarker()`，只做必要状态变更。
+5. 渲染前使用 `Renderer`。
+6. 更新 `docs/API_PROTOCOL.md`。
+
+### 新增右侧面板
+
+1. 在 `index.html` 增加 tab 和容器。
+2. 在 `sidebar-right.js` 增加渲染和 tab 切换。
+3. 在 CSS 增加组件样式。
+4. 若与 scene 状态相关，监听 `sceneChanged` 或在状态变更处手动重渲染。
+5. 移动端检查侧边栏打开/关闭行为。
+
+## 七、测试与验收
+
+当前项目没有自动化测试框架，最小验收：
+
+```powershell
+node --check js/core/*.js
+node --check js/features/*.js
+node --check js/ui/*.js
+node --check js/main.js
+```
+
+手动回归重点：
+
+- 打开 `index.html` 或本地静态服务。
+- 新建世界、创建玩家、发送消息。
+- AI 流式回复和停止按钮状态恢复。
+- 检定、伤害、回血、金币、经验、升级。
+- 任务新增/完成/胜利。
+- 地图移动和地点旁白。
+- 背包添加/装备/卸下。
+- 计策创建/更新、刷新后仍保留。
+- XSS 输入不执行脚本。
+- 非法 `<state_update>` 不破坏聊天。
+
+## 八、agent 开发约束
+
+任何 agent 修改代码时必须遵守：
+
+- 保持纯静态架构，不引入构建系统。
+- 不添加 npm 依赖，除非项目明确改变技术路线。
+- 优先复用现有全局对象和 UI 风格。
+- 不绕过 `Renderer` 做 DOM 拼接。
+- 不把 AI 状态补丁扩展成任意状态写入。
+- 不破坏人类玩家流程；agent 自动化是附加能力。
+- 变更协议时同步更新 `docs/`。
