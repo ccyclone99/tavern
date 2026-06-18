@@ -122,6 +122,8 @@ const StrategyManager = {
         }
         if (!validStatuses.includes(strategy.status)) strategy.status = 'draft';
         if (!validPhases.includes(strategy.phase)) strategy.phase = 'intel';
+        if (typeof strategy.risk === 'number') strategy.risk = Math.min(100, Math.max(0, strategy.risk));
+        if (typeof strategy.progress === 'number') strategy.progress = Math.min(100, Math.max(0, strategy.progress));
         if (!Array.isArray(strategy.participants)) strategy.participants = [];
         if (!Array.isArray(strategy.steps)) strategy.steps = [];
         if (!Array.isArray(strategy.resources)) strategy.resources = [];
@@ -137,6 +139,13 @@ const StrategyManager = {
         const scene = State.scene;
         if (!scene) return;
         if (!update || typeof update !== 'object') return;
+
+        // 单条补丁上限，防止 AI 回复胀大存储
+        const MAX_INTEL_PER_UPDATE = 10;
+        const MAX_FACTIONS_PER_UPDATE = 20;
+        const MAX_ITEMS_PER_UPDATE = 50;
+        const MAX_LOCATIONS_PER_UPDATE = 20;
+        const MAX_TOTAL_INVENTORY = 200;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -156,7 +165,10 @@ const StrategyManager = {
 
         // 2. intelAdd
         if (Array.isArray(update.intelAdd)) {
-            for (const intel of update.intelAdd) {
+            if (update.intelAdd.length > MAX_INTEL_PER_UPDATE) {
+                console.warn(`[StrategyManager] intelAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
+            }
+            for (const intel of update.intelAdd.slice(0, MAX_INTEL_PER_UPDATE)) {
                 if (intel && typeof intel === 'object') {
                     scene.intel.push({
                         id: 'intel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -172,19 +184,22 @@ const StrategyManager = {
 
         // 3. factionsUpdate
         if (Array.isArray(update.factionsUpdate)) {
-            for (const f of update.factionsUpdate) {
+            if (update.factionsUpdate.length > MAX_FACTIONS_PER_UPDATE) {
+                console.warn(`[StrategyManager] factionsUpdate 超过单条上限 ${MAX_FACTIONS_PER_UPDATE}，已截断`);
+            }
+            for (const f of update.factionsUpdate.slice(0, MAX_FACTIONS_PER_UPDATE)) {
                 if (!f || typeof f !== 'object' || !f.name) continue;
                 const existing = scene.factions.find(x => x.name === f.name);
                 if (existing) {
-                    if (f.attitude !== undefined) existing.attitude = Number(f.attitude) || 0;
-                    if (f.power !== undefined) existing.power = Number(f.power) || 0;
-                    if (f.description !== undefined) existing.description = String(f.description);
+                    if (f.attitude !== undefined) existing.attitude = Number.isFinite(Number(f.attitude)) ? Number(f.attitude) : 0;
+                    if (f.power !== undefined) existing.power = Number.isFinite(Number(f.power)) ? Number(f.power) : 0;
+                    if (f.description !== undefined) existing.description = String(f.description || '');
                     if (Array.isArray(f.leverage)) existing.leverage = f.leverage.map(String);
                 } else {
                     scene.factions.push({
                         name: String(f.name),
-                        attitude: Number(f.attitude) || 0,
-                        power: Number(f.power) || 0,
+                        attitude: Number.isFinite(Number(f.attitude)) ? Number(f.attitude) : 0,
+                        power: Number.isFinite(Number(f.power)) ? Number(f.power) : 0,
                         description: String(f.description || ''),
                         leverage: Array.isArray(f.leverage) ? f.leverage.map(String) : []
                     });
@@ -200,16 +215,30 @@ const StrategyManager = {
                 if (!char) continue;
                 const userName = scene.userName || State.settings.userName || '旅人';
                 if (!char._relations) char._relations = {};
-                if (!char._relations[userName]) char._relations[userName] = { affection: 0, mood: '平静' };
+                if (!char._relations[userName]) {
+                    char._relations[userName] = { affection: 0, trust: 0, suspicion: 0, mood: '平静', history: [] };
+                }
                 const rel = char._relations[userName];
-                if (cu.affectionDelta !== undefined) rel.affection = (Number(rel.affection) || 0) + Number(cu.affectionDelta);
+                if (cu.affectionDelta !== undefined) {
+                    const base = Number.isFinite(Number(rel.affection)) ? Number(rel.affection) : 0;
+                    const delta = Number.isFinite(Number(cu.affectionDelta)) ? Number(cu.affectionDelta) : 0;
+                    rel.affection = Math.max(-100, Math.min(100, base + delta));
+                }
                 if (cu.suspicionDelta !== undefined) {
-                    rel.suspicion = (Number(rel.suspicion) || 0) + Number(cu.suspicionDelta);
+                    const base = Number.isFinite(Number(rel.suspicion)) ? Number(rel.suspicion) : 0;
+                    const delta = Number.isFinite(Number(cu.suspicionDelta)) ? Number(cu.suspicionDelta) : 0;
+                    rel.suspicion = Math.max(-100, Math.min(100, base + delta));
                 }
                 if (cu.mood !== undefined) rel.mood = String(cu.mood);
                 if (cu.secret !== undefined) {
-                    if (!char._secrets) char._secrets = [];
-                    char._secrets.push(String(cu.secret));
+                    const secretStr = String(cu.secret).trim();
+                    if (secretStr) {
+                        if (!char.secrets) char.secrets = [];
+                        if (!char.secrets.includes(secretStr)) {
+                            char.secrets.push(secretStr);
+                            if (char.secrets.length > 20) char.secrets.shift();
+                        }
+                    }
                 }
                 Storage.saveCharacter(char).catch(e => console.warn('保存角色关系失败:', e));
             }
@@ -219,7 +248,9 @@ const StrategyManager = {
         // 5. scene 字段（仅白名单）
         if (update.scene && typeof update.scene === 'object') {
             if (typeof update.scene.worldTensionDelta === 'number') {
-                scene.worldTension = (Number(scene.worldTension) || 0) + update.scene.worldTensionDelta;
+                const base = Number.isFinite(Number(scene.worldTension)) ? Number(scene.worldTension) : 0;
+                const delta = Number.isFinite(Number(update.scene.worldTensionDelta)) ? Number(update.scene.worldTensionDelta) : 0;
+                scene.worldTension = base + delta;
             }
             if (typeof update.scene.activeStrategyId === 'string') {
                 const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
@@ -243,40 +274,53 @@ const StrategyManager = {
 
         let itemAdded = false, locAdded = false;
         if (Array.isArray(update.itemAdd)) {
-            for (const it of update.itemAdd) {
+            if (update.itemAdd.length > MAX_ITEMS_PER_UPDATE) {
+                console.warn(`[StrategyManager] itemAdd 超过单条上限 ${MAX_ITEMS_PER_UPDATE}，已截断`);
+            }
+            for (const it of update.itemAdd.slice(0, MAX_ITEMS_PER_UPDATE)) {
                 if (!it || typeof it !== 'object' || !it.name) continue;
                 const existing = scene.inventory.find(i => i.name === it.name);
+                const qtyRaw = Number(it.quantity);
+                const qty = Number.isFinite(qtyRaw) && qtyRaw >= 0 ? qtyRaw : 1;
                 if (existing) {
-                    existing.quantity += Number(it.quantity) || 1;
-                } else {
+                    existing.quantity += qty;
+                } else if (qty <= 0) {
+                    continue;
+                } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
                     scene.inventory.push({
                         id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                         name: String(it.name),
                         description: String(it.description || ''),
                         type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
-                        quantity: Number(it.quantity) || 1,
+                        quantity: qty,
                         equipped: false
                     });
+                } else {
+                    console.warn(`[StrategyManager] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
+                    break;
                 }
                 itemAdded = true;
             }
         }
 
         if (Array.isArray(update.locationUpdate)) {
-            for (const loc of update.locationUpdate) {
+            if (update.locationUpdate.length > MAX_LOCATIONS_PER_UPDATE) {
+                console.warn(`[StrategyManager] locationUpdate 超过单条上限 ${MAX_LOCATIONS_PER_UPDATE}，已截断`);
+            }
+            for (const loc of update.locationUpdate.slice(0, MAX_LOCATIONS_PER_UPDATE)) {
                 if (!loc || typeof loc !== 'object' || !loc.id) continue;
                 const existing = scene.locations.find(l => l.id === loc.id);
                 if (existing) {
                     if (loc.name) existing.name = String(loc.name);
-                    if (loc.description !== undefined) existing.description = String(loc.description);
-                    if (loc.alertLevel !== undefined) existing.alertLevel = Number(loc.alertLevel) || 0;
+                    if (loc.description !== undefined) existing.description = String(loc.description || '');
+                    if (loc.alertLevel !== undefined) existing.alertLevel = Number.isFinite(Number(loc.alertLevel)) ? Number(loc.alertLevel) : 0;
                 } else {
                     scene.locations.push({
                         id: String(loc.id),
                         name: String(loc.name || loc.id),
                         description: String(loc.description || ''),
                         connections: Array.isArray(loc.connections) ? loc.connections.map(String) : [],
-                        alertLevel: Number(loc.alertLevel) || 0
+                        alertLevel: Number.isFinite(Number(loc.alertLevel)) ? Number(loc.alertLevel) : 0
                     });
                 }
                 locAdded = true;

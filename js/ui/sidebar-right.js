@@ -194,7 +194,7 @@ const SidebarRight = {
         const slotMap = { weapon: 'weapon', armor: 'armor' };
         const slot = slotMap[item.type] || 'accessory';
         const currentEquipped = scene.inventory.find(i => i.equipped && i !== item &&
-            ((slot === 'accessory') || (slotMap[i.type] || 'accessory') === slot));
+            ((slotMap[i.type] || 'accessory') === slot));
         if (currentEquipped) {
             currentEquipped.equipped = false;
             if (scene.equipment[slot] === currentEquipped.name) scene.equipment[slot] = null;
@@ -277,8 +277,10 @@ const SidebarRight = {
 
     /** 分配 1 点属性 */
     _allocStat(key) {
+        if (this._allocating) return;
         const scene = State.scene;
         if (!scene || !scene.playerStats || (scene.attrPoints || 0) <= 0) return;
+        this._allocating = true;
         scene.playerStats[key] = (scene.playerStats[key] || 10) + 1;
         scene.attrPoints -= 1;
         // 体质影响最大 HP
@@ -294,6 +296,7 @@ const SidebarRight = {
         this.renderDetail();
         if (typeof ActionBar !== 'undefined' && ActionBar.renderVitaDisplay) ActionBar.renderVitaDisplay();
         showToast(`${({strength:'力量',dexterity:'敏捷',constitution:'体质',intelligence:'智力',wisdom:'感知',charisma:'魅力'})[key]} +1`);
+        this._allocating = false;
     },
 
     renderDetail() {

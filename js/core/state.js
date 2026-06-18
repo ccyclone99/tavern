@@ -62,14 +62,16 @@ const State = {
     async loadSettings() {
         const s = await Storage.getSettings();
         this.settings = { ...this.settings, ...s };
-        // 尝试从对话模式复用API Key
+        // 尝试从对话模式复用 API Key，迁移后立即清理 localStorage 并持久化到 IndexedDB
         try {
             const chatData = localStorage.getItem('deepseek_chat_data_v2');
             if (chatData) {
                 const parsed = JSON.parse(chatData);
                 if (parsed.apiKey && !this.settings.apiKey) {
                     this.settings.apiKey = parsed.apiKey;
+                    await Storage.saveSettings(this.settings);
                 }
+                localStorage.removeItem('deepseek_chat_data_v2');
             }
         } catch (e) {}
     },
@@ -184,23 +186,35 @@ const State = {
         }
     },
 
-    // 防抖版本：高频调用时合并为一次写入。旧承诺立即 resolve，仅最后一次执行保存。
+    // 防抖版本：高频调用时合并为一次写入。所有在最终保存前发起的调用都共享同一个 Promise。
     _saveDebounceTimer: null,
+    _saveDebouncePromise: null,
     _saveDebounceResolve: null,
     async saveCurrentSceneDebounced(ms = 400) {
         clearTimeout(this._saveDebounceTimer);
-        if (this._saveDebounceResolve) {
-            this._saveDebounceResolve();
-            this._saveDebounceResolve = null;
+        // 如果已有待执行的保存 Promise，直接复用，保证调用方等待的是最终一次保存
+        if (this._saveDebouncePromise) {
+            this._saveDebounceTimer = setTimeout(() => this._runDebouncedSave(), ms);
+            return this._saveDebouncePromise;
         }
-        return new Promise(resolve => {
+        this._saveDebouncePromise = new Promise(resolve => {
             this._saveDebounceResolve = resolve;
-            this._saveDebounceTimer = setTimeout(async () => {
-                this._saveDebounceResolve = null;
-                await this.saveCurrentScene();
-                resolve();
-            }, ms);
         });
+        this._saveDebounceTimer = setTimeout(() => this._runDebouncedSave(), ms);
+        return this._saveDebouncePromise;
+    },
+
+    async _runDebouncedSave() {
+        const resolve = this._saveDebounceResolve;
+        this._saveDebounceTimer = null;
+        this._saveDebounceResolve = null;
+        this._saveDebouncePromise = null;
+        try {
+            await this.saveCurrentScene();
+        } catch (e) {
+            console.warn('Debounced scene save failed:', e);
+        }
+        if (resolve) resolve();
     },
 
     setCurrentScene(id) {
@@ -221,7 +235,7 @@ const State = {
         if (!scene) return;
         if (!scene.characters.includes(charId)) {
             scene.characters.push(charId);
-            this.saveCurrentScene();
+            this.saveCurrentScene().catch(e => console.warn('添加角色保存失败:', e));
             this.emit('sceneChanged', scene);
         }
     },
@@ -230,7 +244,7 @@ const State = {
         const scene = this.scene;
         if (!scene) return;
         scene.characters = scene.characters.filter(id => id !== charId);
-        this.saveCurrentScene();
+        this.saveCurrentScene().catch(e => console.warn('移除角色保存失败:', e));
         this.emit('sceneChanged', scene);
     }
 };

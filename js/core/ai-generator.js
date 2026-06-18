@@ -34,22 +34,63 @@ const AIGenerator = {
             body: JSON.stringify(body)
         });
 
-        const result = await response.json();
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error('API 返回非 JSON: ' + e.message);
+        }
         const text = result.choices?.[0]?.message?.content || '';
 
         return this.parseJSON(text, opts.arrayMode);
     },
 
     /**
+     * 从 AI 返回文本中提取第一个平衡的 JSON 对象或数组
+     */
+    _extractBalanced(text, openChar) {
+        const closeChar = openChar === '{' ? '}' : ']';
+        const start = text.indexOf(openChar);
+        if (start === -1) return null;
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = start; i < text.length; i++) {
+            const ch = text[i];
+            if (inString) {
+                if (escape) {
+                    escape = false;
+                } else if (ch === '\\') {
+                    escape = true;
+                } else if (ch === '"') {
+                    inString = false;
+                }
+            } else {
+                if (ch === '"') {
+                    inString = true;
+                } else if (ch === openChar) {
+                    depth++;
+                } else if (ch === closeChar) {
+                    depth--;
+                    if (depth === 0) {
+                        return text.slice(start, i + 1);
+                    }
+                }
+            }
+        }
+        return null;
+    },
+
+    /**
      * 从 AI 返回文本中提取 JSON
      */
     parseJSON(text, arrayMode = false) {
-        const pattern = arrayMode ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
-        const match = text.match(pattern);
-        if (!match) {
+        const openChar = arrayMode ? '[' : '{';
+        const jsonStr = this._extractBalanced(text, openChar);
+        if (!jsonStr) {
             throw new Error('AI 没有返回有效的 JSON');
         }
-        return JSON.parse(match[0]);
+        return JSON.parse(jsonStr);
     },
 
     /**

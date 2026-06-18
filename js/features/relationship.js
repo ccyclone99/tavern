@@ -13,6 +13,7 @@ const Relationship = {
             char._relations[userName] = {
                 affection: 0,
                 trust: 0,
+                suspicion: 0,
                 mood: '平静',
                 history: []
             };
@@ -30,13 +31,20 @@ const Relationship = {
         this.initRelation(characterId, userName);
         const relation = char._relations[userName];
 
+        const safeCharName = typeof PromptBuilder !== 'undefined' && PromptBuilder._sanitizeName
+            ? PromptBuilder._sanitizeName(char.name)
+            : String(char.name || '角色').replace(/["\\\n\r]/g, '').slice(0, 32);
+        const safeUserName = typeof PromptBuilder !== 'undefined' && PromptBuilder._sanitizeName
+            ? PromptBuilder._sanitizeName(userName)
+            : String(userName).replace(/["\\\n\r]/g, '').slice(0, 32);
+
         // 获取最近几条消息作为上下文
         const recent = messages.slice(-6).map(m => {
-            const name = m.role === 'user' ? userName : (State.characters.find(c => c.id === m.characterId)?.name || 'AI');
+            const name = m.role === 'user' ? safeUserName : (State.characters.find(c => c.id === m.characterId)?.name || 'AI');
             return `${name}: ${m.content}`;
         }).join('\n');
 
-        const prompt = `基于以下对话，分析 ${char.name} 对 ${userName} 的关系变化。只输出一个JSON对象，不要有任何其他文字：
+        const prompt = `基于以下对话，分析 ${safeCharName} 对 ${safeUserName} 的关系变化。只输出一个JSON对象，不要有任何其他文字：
 
 ${recent}
 
@@ -61,10 +69,12 @@ ${recent}
             const result = await response.json();
             const text = result.choices?.[0]?.message?.content || '';
 
-            // 提取JSON
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const data = JSON.parse(jsonMatch[0]);
+            // 提取JSON（支持嵌套对象）
+            const jsonStr = typeof AIGenerator !== 'undefined' && AIGenerator._extractBalanced
+                ? AIGenerator._extractBalanced(text, '{')
+                : (text.match(/\{[\s\S]*?\}/) || [null])[0];
+            if (jsonStr) {
+                const data = JSON.parse(jsonStr);
                 if (data.affection_delta !== undefined) {
                     relation.affection = Math.max(-100, Math.min(100, relation.affection + data.affection_delta));
                 }
@@ -95,7 +105,7 @@ ${recent}
                         };
                         scene.messages.push(msg);
                         if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
-                        State.saveCurrentSceneDebounced();
+                        State.saveCurrentSceneDebounced().catch(e => console.warn('关系消息保存失败:', e));
                     }
                     showToast(`${char.name} 好感${arrow}${delta > 0 ? '+' : ''}${delta}`);
                 }

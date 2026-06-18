@@ -266,6 +266,7 @@ const Tutorial = {
         if (scene) {
             scene._isTutorial = true;
             scene.tutorialWorldId = TutorialWorld.id;
+            State.saveCurrentScene().catch(e => console.warn('[Tutorial] 保存教学标记失败:', e));
         }
     },
 
@@ -359,13 +360,14 @@ const Tutorial = {
     },
 
     _playerTalkedToNonDefaultChar() {
-        // 兜底判定：最近有 user 消息，且 currentCharacterId 不是第一个角色
+        // 兜底判定：存在指向非默认角色的 user 消息
         const scene = State.scene;
         const chars = State.activeCharacters;
         if (chars.length < 2) return false;
-        const msgs = scene.messages.filter(m => m.role === 'user');
-        if (msgs.length < 2) return false;
-        return State.currentCharacterId !== chars[0].id;
+        const defaultCharId = chars[0].id;
+        return scene.messages.some(m =>
+            m.role === 'user' && m.characterId && m.characterId !== defaultCharId
+        );
     },
 
     /** 教学是否正在推进/叙事输出中（防并发重入） */
@@ -383,9 +385,9 @@ const Tutorial = {
             const nextStep = TutorialState.getStep();
             this._markQuestObjective(doneStep);
 
-            if (TutorialState.load().completed || nextStep >= TutorialScript.STEPS.length) {
-                // 全部完成
-                this._markQuestObjective(TutorialScript.STEPS.length - 1);
+            if (TutorialState.load().completed || nextStep >= TutorialScript.STEPS.length - 1) {
+                // 全部完成（nextStep 到达毕业步骤索引）
+                this._markQuestObjective(TutorialScript.STEPS.length - 2);  // 最后一条有效目标索引
                 await this.narrateStep(TutorialScript.STEPS.length - 1);  // 毕业叙事
                 TutorialState.markCompleted();
                 this._showSkipButton(false);
@@ -450,16 +452,20 @@ const Tutorial = {
         btn.className = 'tutorial-skip-btn';
         btn.innerHTML = '🚪 跳过教学';
         btn.title = '完成教学并返回大厅';
-        btn.onclick = () => this.confirmSkip();
+        btn.onclick = async () => {
+            btn.disabled = true;
+            try { await this.confirmSkip(); }
+            finally { btn.disabled = false; }
+        };
         topRight.insertBefore(btn, topRight.firstChild);
     },
 
-    confirmSkip() {
+    async confirmSkip() {
         if (!confirm('确定跳过教学吗？你可以随时从大厅重新进入新手酒馆复习。')) return;
         TutorialState.markCompleted();
         this._showSkipButton(false);
         if (typeof WorldPicker !== 'undefined' && WorldPicker.returnToHall) {
-            WorldPicker.returnToHall();
+            await WorldPicker.returnToHall();
         }
         showToast('教学已跳过，欢迎随时回来复习');
     },

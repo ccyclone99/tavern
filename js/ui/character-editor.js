@@ -2,13 +2,21 @@
  * 角色卡编辑器弹窗
  */
 const CharacterEditor = {
+    _setInput(id, value) {
+        if (value == null) return;
+        const el = document.getElementById(id);
+        if (el) el.value = String(value);
+    },
     init() {
         this.modal = document.getElementById('editorModal');
         this.titleEl = document.getElementById('editorTitle');
         this.bodyEl = document.getElementById('editorBody');
         document.getElementById('closeEditor').onclick = () => this.close();
         document.getElementById('cancelEditor').onclick = () => this.close();
-        document.getElementById('saveCharacter').onclick = () => this.save();
+        document.getElementById('saveCharacter').onclick = async () => {
+            try { await this.save(); }
+            catch (e) { console.error('保存角色失败:', e); showToast('保存失败，请重试'); }
+        };
         document.getElementById('exportCharacter').onclick = () => this.exportPNG();
         this.modal.addEventListener('click', e => { if (e.target === this.modal) this.close(); });
     },
@@ -130,18 +138,18 @@ const CharacterEditor = {
             });
 
             // 填充表单
-            if (data.name) document.getElementById('editName').value = data.name;
-            if (data.first_mes) document.getElementById('editFirstMes').value = data.first_mes;
-            if (data.tags) document.getElementById('editTags').value = Array.isArray(data.tags) ? data.tags.join(',') : data.tags;
-            if (data.description) document.getElementById('editDescription').value = data.description;
-            if (data.personality) document.getElementById('editPersonality').value = data.personality;
-            if (data.scenario) document.getElementById('editScenario').value = data.scenario;
-            if (data.mes_example) document.getElementById('editMesExample').value = data.mes_example;
-            if (data.creed) document.getElementById('editCreed').value = data.creed;
-            if (data.values) document.getElementById('editValues').value = data.values;
-            if (data.redLines) document.getElementById('editRedLines').value = Array.isArray(data.redLines) ? data.redLines.join('\n') : data.redLines;
-            if (data.system_prompt) document.getElementById('editSystemPrompt').value = data.system_prompt;
-            if (data.post_history_instructions) document.getElementById('editPostHistory').value = data.post_history_instructions;
+            this._setInput('editName', data.name);
+            this._setInput('editFirstMes', data.first_mes);
+            this._setInput('editTags', Array.isArray(data.tags) ? data.tags.join(',') : data.tags);
+            this._setInput('editDescription', data.description);
+            this._setInput('editPersonality', data.personality);
+            this._setInput('editScenario', data.scenario);
+            this._setInput('editMesExample', data.mes_example);
+            this._setInput('editCreed', data.creed);
+            this._setInput('editValues', data.values);
+            this._setInput('editRedLines', Array.isArray(data.redLines) ? data.redLines.join('\n') : data.redLines);
+            this._setInput('editSystemPrompt', data.system_prompt);
+            this._setInput('editPostHistory', data.post_history_instructions);
 
             showToast('角色卡已生成，请检查并保存');
         } catch (err) {

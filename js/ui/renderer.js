@@ -46,6 +46,17 @@ const Renderer = {
     },
 
     /**
+     * 应用行内格式（粗体 / 动作 / 删除线）
+     * 必须先处理 **粗体**，再处理 *动作*，否则双星会被单星正则破坏
+     */
+    _applyInlineFormats(formatted) {
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        formatted = formatted.replace(/\*([^*]+)\*/g, '<span class="rp-action">$1</span>');
+        formatted = formatted.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+        return formatted;
+    },
+
+    /**
      * 渲染完整消息内容，将动作/对话分隔为独立区块
      */
     renderRP(text) {
@@ -81,9 +92,7 @@ const Renderer = {
             const isActionHeavy = actionLen > formatted.length * this.ACTION_THRESHOLD;
 
             // 应用行内格式（在已转义的文本上）
-            formatted = formatted.replace(/\*([^*]+)\*/g, '<span class="rp-action">$1</span>');
-            formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-            formatted = formatted.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+            formatted = this._applyInlineFormats(formatted);
 
             // 安全链接渲染：只允许 http/https/mailto 协议
             formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
@@ -104,10 +113,10 @@ const Renderer = {
 
         processed = rendered.join('');
 
-        // 空消息兜底
+        // 空消息兜底：仍应用行内格式
         if (!processed) {
             processed = text.split('\n').filter(p => p.trim()).map(p =>
-                `<div class="rp-dialogue-block">${this.escapeHtml(p.trim())}</div>`
+                `<div class="rp-dialogue-block">${this._applyInlineFormats(this.escapeHtml(p.trim()))}</div>`
             ).join('');
         }
 
@@ -119,10 +128,11 @@ const Renderer = {
         // 恢复代码块
         processed = processed.replace(/\0CB_(\d+)\0/g, (_, idx) => {
             const block = codeBlocks[+idx];
-            const cls = block.lang ? ` class="language-${block.lang}"` : '';
+            const safeLang = String(block.lang || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 32);
+            const cls = safeLang ? ` class="language-${Renderer.escapeAttr(safeLang)}"` : '';
             let hl = block.code;
-            if (block.lang && window.hljs && window.hljs.getLanguage(block.lang)) {
-                try { hl = window.hljs.highlight(block.code, { language: block.lang }).value; } catch(e) {}
+            if (safeLang && window.hljs && window.hljs.getLanguage(safeLang)) {
+                try { hl = window.hljs.highlight(block.code, { language: safeLang }).value; } catch(e) {}
             }
             return `<div class="code-block-wrap"><pre><code${cls}>${hl}</code></pre></div>`;
         });
@@ -140,7 +150,8 @@ const Renderer = {
         let emotion = null;
         const emoMatch = text.match(/\[emotion:([^\]]+)\]/);
         if (emoMatch) {
-            emotion = emoMatch[1].trim();
+            emotion = emoMatch[1].trim().replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '').slice(0, 32);
+            if (!emotion) emotion = null;
             text = text.replace(/\[emotion:[^\]]+\]/g, '').trim();
         }
 
@@ -154,9 +165,10 @@ const Renderer = {
             return { type: 'strategy', content: text.replace(/^\/strategy\s*/, '').replace(/^（计策）\s*/, ''), emotion };
         }
 
-        // 旁白检测：以 ** 开头且以 ** 结尾
-        if (text.startsWith('**') && text.endsWith('**')) {
-            return { type: 'narrate', content: text.slice(2, -2).trim(), emotion };
+        // 旁白检测：以 ** 开头且以 ** 结尾（允许首尾空白）
+        const trimmedText = text.trim();
+        if (trimmedText.startsWith('**') && trimmedText.endsWith('**')) {
+            return { type: 'narrate', content: trimmedText.slice(2, -2).trim(), emotion };
         }
 
         // 判断是否主要是动作（使用统一阈值）

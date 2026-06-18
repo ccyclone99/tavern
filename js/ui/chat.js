@@ -58,7 +58,10 @@ const ChatUI = {
         this.oocBtn = document.getElementById('oocBtn');
         this.strategyBtn = document.getElementById('strategyBtn');
 
-        this.sendBtn.onclick = () => this.onSend();
+        this.sendBtn.onclick = async () => {
+            try { await this.onSend(); }
+            catch (e) { console.error('onSend failed:', e); showToast('发送失败，请重试'); }
+        };
         this.stopBtn.onclick = () => this.onStop();
         this.inputEl.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -74,11 +77,11 @@ const ChatUI = {
         this.inputEl.addEventListener('input', () => this.autoResize());
         this.oocBtn.onclick = () => this.toggleOOC();
         if (this.strategyBtn) this.strategyBtn.onclick = () => this.toggleStrategy();
-        this.playerNameInput.addEventListener('change', () => {
+        this.playerNameInput.addEventListener('change', async () => {
             const scene = State.scene;
             if (scene) {
                 scene.userName = this.playerNameInput.value.trim() || '旅人';
-                State.saveCurrentScene();
+                await State.saveCurrentScene();
             }
         });
 
@@ -97,6 +100,20 @@ const ChatUI = {
     autoResize() {
         this.inputEl.style.height = 'auto';
         this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 160) + 'px';
+    },
+
+    /** 进入流式状态：禁用发送、显示停止 */
+    setStreaming() {
+        State.isStreaming = true;
+        if (this.sendBtn) this.sendBtn.style.display = 'none';
+        if (this.stopBtn) this.stopBtn.style.display = 'block';
+    },
+
+    /** 结束流式状态：恢复发送、隐藏停止 */
+    clearStreaming() {
+        State.isStreaming = false;
+        if (this.sendBtn) this.sendBtn.style.display = 'block';
+        if (this.stopBtn) this.stopBtn.style.display = 'none';
     },
 
     _syncInputMode() {
@@ -131,7 +148,7 @@ const ChatUI = {
         this._syncInputMode();
         // 教学钩子：进入计策模式（step2）
         if (TutorialWorld.isCurrentScene() && State.inputMode === 'strategy') {
-            Tutorial.afterStrategyMode();
+            Tutorial.afterStrategyMode().catch(e => console.warn('[Tutorial] afterStrategyMode 失败:', e));
         }
     },
 
@@ -177,7 +194,11 @@ const ChatUI = {
         const safeAvatar = isUser ? Renderer.safeUrl(State.scene?.playerPersona?.avatar || '') : Renderer.safeUrl(char?.avatar || '');
         const name = isUser ? (State.scene?.userName || '旅人') : (char ? char.name : 'AI');
 
-        const parsed = msg.type ? { ...Renderer.parseMessageType(msg.content), type: msg.type } : Renderer.parseMessageType(msg.content);
+        // 仅当 msg.type 是明确特殊类型时才覆盖解析结果，避免默认 'talk' 破坏 narrate/ooc/strategy 检测
+        const explicitType = msg.type && msg.type !== 'talk' ? msg.type : null;
+        const parsed = explicitType
+            ? { ...Renderer.parseMessageType(msg.content), type: explicitType }
+            : Renderer.parseMessageType(msg.content);
         const emotionClass = parsed.emotion ? ` emotion-${parsed.emotion}` : '';
 
         const div = document.createElement('div');
@@ -241,8 +262,18 @@ const ChatUI = {
                     </div>
                 </div>`;
             div.querySelector('.msg-copy-btn').onclick = () => ChatUI.copyMessage(idx);
-            div.querySelector('.msg-regen-btn').onclick = () => ChatUI.regenerate(idx);
-            div.querySelector('.msg-delete-btn').onclick = () => ChatUI.deleteMessage(idx);
+            const regenBtn = div.querySelector('.msg-regen-btn');
+            const deleteBtn = div.querySelector('.msg-delete-btn');
+            regenBtn.onclick = async () => {
+                regenBtn.disabled = true;
+                try { await ChatUI.regenerate(idx); }
+                finally { regenBtn.disabled = false; }
+            };
+            deleteBtn.onclick = async () => {
+                deleteBtn.disabled = true;
+                try { await ChatUI.deleteMessage(idx); }
+                finally { deleteBtn.disabled = false; }
+            };
         }
 
         this.messagesEl.appendChild(div);
@@ -357,9 +388,7 @@ const ChatUI = {
     onStop() {
         API.stop();
         this.removeStreamingMessage();
-        State.isStreaming = false;
-        this.sendBtn.style.display = 'block';
-        this.stopBtn.style.display = 'none';
+        this.clearStreaming();
     },
 
     copyMessage(idx) {
@@ -369,13 +398,13 @@ const ChatUI = {
         navigator.clipboard.writeText(text).then(() => showToast('已复制'));
     },
 
-    deleteMessage(idx) {
+    async deleteMessage(idx) {
         const scene = State.scene;
         if (!scene) return;
         if (!confirm('确定删除这条消息吗？')) return;
         scene.messages.splice(idx, 1);
         this._renderedCount = 0;
-        State.saveCurrentScene();
+        await State.saveCurrentScene();
         this.render();
     },
 
@@ -394,7 +423,7 @@ const ChatUI = {
         if (userIdx === -1) return;
         scene.messages = scene.messages.slice(0, userIdx + 1);
         this._renderedCount = 0;
-        State.saveCurrentScene();
+        await State.saveCurrentScene();
         this.render();
         try {
             await GroupChat.handleUserMessage();

@@ -20,6 +20,18 @@ const MapView = {
         const curId = scene.currentLocation;
         const curLoc = locs.find(l => l.id === curId);
 
+        // 没有当前地点时显示空地图
+        if (!curLoc) {
+            this.el.innerHTML = `
+                <div class="map-header">
+                    <span class="map-title">地图</span>
+                    <span class="map-subtitle">尚未设置当前地点</span>
+                </div>
+                <div class="map-grid"></div>
+            `;
+            return;
+        }
+
         // 构建邻接表用于简单拓扑排序
         const visited = new Set();
         const rows = [];
@@ -64,7 +76,10 @@ const MapView = {
         });
     },
 
+    _moving: false,
+
     async moveTo(locId) {
+        if (this._moving || State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
         const loc = scene.locations.find(l => l.id === locId);
@@ -81,32 +96,41 @@ const MapView = {
             return;
         }
 
-        // 更新当前地点
-        scene.currentLocation = locId;
-        await State.saveCurrentScene();
+        this._moving = true;
+        try {
+            // 更新当前地点
+            scene.currentLocation = locId;
+            await State.saveCurrentScene();
 
-        // 插入移动消息
-        const msg = {
-            id: 'msg_' + Date.now(),
-            role: 'user',
-            content: `【移动到 ${loc.name} — ${loc.description}】`,
-            type: 'action',
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        ChatUI.onMessageAdded(msg);
+            // 插入移动消息
+            const msg = {
+                id: 'msg_' + Date.now(),
+                role: 'user',
+                content: `【移动到 ${loc.name} — ${loc.description}】`,
+                type: 'action',
+                timestamp: Date.now()
+            };
+            scene.messages.push(msg);
+            ChatUI.onMessageAdded(msg);
 
-        this.render();
-        QuestTracker.render();
-        SidebarRight.renderMap();
-        showToast(`已到达 ${loc.name}`);
+            this.render();
+            QuestTracker.render();
+            SidebarRight.renderMap();
+            showToast(`已到达 ${loc.name}`);
 
-        // 触发 AI 描述新地点
-        GroupChat.handleLocationMove(loc);
+            // 触发 AI 描述新地点
+            try {
+                await GroupChat.handleLocationMove(loc);
+            } catch (e) {
+                console.warn('地点叙事失败:', e);
+            }
 
-        // 教学钩子：地图移动完成（step4）
-        if (TutorialWorld.isCurrentScene()) {
-            Tutorial.afterLocationMove();
+            // 教学钩子：地图移动完成（step4）
+            if (TutorialWorld.isCurrentScene()) {
+                Tutorial.afterLocationMove().catch(e => console.warn('[Tutorial] afterLocationMove 失败:', e));
+            }
+        } finally {
+            this._moving = false;
         }
     }
 };

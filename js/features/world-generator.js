@@ -414,17 +414,18 @@ const WorldGenerator = {
         scene.background = data.background || '';
         scene.userName = data.userName || '旅人';
         scene.playerStats = data.playerStats || { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 };
-        scene.quests = data.quests || [];
-        scene.locations = data.locations || [];
+        scene.quests = Array.isArray(data.quests) ? data.quests : [];
+        scene.locations = Array.isArray(data.locations) ? data.locations : [];
         scene.currentLocation = data.currentLocation || '';
         scene.dmPersona = data.dmPersona || null;
-        scene.conflictSeeds = data.conflictSeeds || [];
-        scene.factions = data.factions || [];
-        scene.intel = data.intel || [];
-        scene.storyArcs = data.storyArcs || [];
+        scene.conflictSeeds = Array.isArray(data.conflictSeeds) ? data.conflictSeeds : [];
+        scene.factions = Array.isArray(data.factions) ? data.factions : [];
+        scene.intel = Array.isArray(data.intel) ? data.intel : [];
+        scene.storyArcs = Array.isArray(data.storyArcs) ? data.storyArcs : [];
 
         // 2. 创建角色
-        const characters = data.characters || [];
+        const characters = Array.isArray(data.characters) ? data.characters : [];
+        let firstCharId = null;
         for (const charData of characters) {
             const char = {
                 id: 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -455,10 +456,11 @@ const WorldGenerator = {
             await Storage.saveCharacter(char);
             State.characters.push(char);
             scene.characters.push(char.id);
+            if (!firstCharId) firstCharId = char.id;
         }
 
         // 3. 创建世界书
-        const lorebook = data.lorebook || [];
+        const lorebook = Array.isArray(data.lorebook) ? data.lorebook : [];
         for (const entry of lorebook) {
             scene.lorebookEntries.push({
                 keys: entry.keys || [],
@@ -500,8 +502,8 @@ const WorldGenerator = {
         }
 
         // 6. 将第一个角色的开场白附加到旁白后（可选，避免开场无人互动）
-        if (characters.length > 0) {
-            const firstChar = State.characters.find(c => c.name === characters[0].name);
+        if (firstCharId) {
+            const firstChar = State.characters.find(c => c.id === firstCharId);
             if (firstChar && firstChar.first_mes) {
                 scene.messages.push({
                     id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 4),

@@ -186,9 +186,9 @@ const WorldPicker = {
         showToast('已删除');
     },
 
-    returnToHall() {
+    async returnToHall() {
         // 保存当前进度
-        State.saveCurrentScene();
+        await State.saveCurrentScene();
         this.show();
         this.renderSaved();
     },
@@ -353,7 +353,7 @@ const WorldPicker = {
     const returnBtn = document.createElement('button');
     returnBtn.className = 'icon-btn';
     returnBtn.title = '返回世界大厅';
-    returnBtn.onclick = () => WorldPicker.returnToHall();
+    returnBtn.onclick = async () => { await WorldPicker.returnToHall(); };
     document.querySelector('.top-bar-right').insertBefore(returnBtn, document.getElementById('settingsBtn'));
 
     // 8. SVG 图标集：替换顶栏 emoji 为 SVG（sprite 已在第 3.5 步挂载）
@@ -419,23 +419,33 @@ function initSettingsModal() {
     const clearBtn = document.getElementById('clearAllData');
     clearBtn.onclick = async () => {
         if (!confirm('⚠️ 确定要清空所有数据吗？\n\n这将删除所有场景、角色、世界书和设置，且无法恢复。')) return;
-        await Storage.clearAll();
-        // 同步清除教程进度（localStorage）
-        try { localStorage.removeItem('tavern_tutorial_progress'); } catch (e) {}
-        showToast('所有数据已清空，页面即将刷新...');
-        setTimeout(() => location.reload(), 1000);
+        try {
+            await Storage.clearAll();
+            // 同步清除教程进度（localStorage）
+            try { localStorage.removeItem('tavern_tutorial_progress'); } catch (e) {}
+            showToast('所有数据已清空，页面即将刷新...');
+            setTimeout(() => location.reload(), 1000);
+        } catch (e) {
+            console.error('清空数据失败:', e);
+            showToast('清空失败，请重试');
+        }
     };
 
     save.onclick = async () => {
-        State.settings.apiKey = document.getElementById('settingsApiKey').value.trim();
-        State.settings.model = document.getElementById('settingsModel').value;
-        State.settings.backgroundUrl = Renderer.safeUrl(document.getElementById('settingsBgUrl').value.trim());
-        await State.saveSettings();
-        applyBackground();
-        modal.classList.remove('show');
-        showToast('设置已保存');
-        // 刷新大厅清单卡状态（API Key 是否已填）
-        WorldPicker.refreshQuickstart();
+        try {
+            State.settings.apiKey = document.getElementById('settingsApiKey').value.trim();
+            State.settings.model = document.getElementById('settingsModel').value;
+            State.settings.backgroundUrl = Renderer.safeUrl(document.getElementById('settingsBgUrl').value.trim());
+            await State.saveSettings();
+            applyBackground();
+            modal.classList.remove('show');
+            showToast('设置已保存');
+            // 刷新大厅清单卡状态（API Key 是否已填）
+            WorldPicker.refreshQuickstart();
+        } catch (e) {
+            console.error('保存设置失败:', e);
+            showToast('保存失败，请重试');
+        }
     };
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
 }

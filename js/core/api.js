@@ -71,87 +71,99 @@ const API = {
      * @returns {Promise<{content, reasoningContent, usage}>}
      */
     async stream(body, onToken, onUsage) {
+        if (this.abortController) {
+            throw new Error('已有进行中的流式请求');
+        }
         this.abortController = new AbortController();
-        const settings = await Storage.getSettings();
-        const apiKey = settings.apiKey || '';
-        if (!apiKey) throw new Error('未设置 API Key');
+        try {
+            const settings = await Storage.getSettings();
+            const apiKey = settings.apiKey || '';
+            if (!apiKey) throw new Error('未设置 API Key');
 
-        const response = await this.fetchWithRetry(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-            body: JSON.stringify(body),
-            signal: this.abortController.signal
-        });
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let content = '';
-        let reasoningContent = '';
-        let usage = null;
-        const thinkParser = { buffer: '', inThink: false, thinkContent: '', outsideContent: '' };
-
-        function flushThink() {
-            if (thinkParser.buffer) {
-                if (thinkParser.inThink) thinkParser.thinkContent += thinkParser.buffer;
-                else thinkParser.outsideContent += thinkParser.buffer;
-                thinkParser.buffer = '';
-            }
-        }
-
-        function processLegacyThink(token) {
-            thinkParser.buffer += token;
-            if (!thinkParser.inThink) {
-                const idx = thinkParser.buffer.indexOf('<think>');
-                if (idx !== -1) {
-                    thinkParser.outsideContent += thinkParser.buffer.slice(0, idx);
-                    thinkParser.buffer = thinkParser.buffer.slice(idx + 7);
-                    thinkParser.inThink = true;
-                } else {
-                    const keep = Math.min(7, thinkParser.buffer.length);
-                    thinkParser.outsideContent += thinkParser.buffer.slice(0, -keep);
-                    thinkParser.buffer = thinkParser.buffer.slice(-keep);
-                }
-            }
-            if (thinkParser.inThink) {
-                const idx = thinkParser.buffer.indexOf('</think>');
-                if (idx !== -1) {
-                    thinkParser.thinkContent += thinkParser.buffer.slice(0, idx);
-                    thinkParser.buffer = thinkParser.buffer.slice(idx + 9);
-                    thinkParser.inThink = false;
-                } else {
-                    const keep = Math.min(9, thinkParser.buffer.length);
-                    thinkParser.thinkContent += thinkParser.buffer.slice(0, -keep);
-                    thinkParser.buffer = thinkParser.buffer.slice(-keep);
-                }
-            }
-        }
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            chunk.split('\n').forEach(line => {
-                if (!line.startsWith('data: ')) return;
-                const ds = line.slice(6).trim();
-                if (ds === '[DONE]') return;
-                try {
-                    const p = JSON.parse(ds);
-                    const delta = p.choices?.[0]?.delta;
-                    if (delta?.reasoning_content) {
-                        reasoningContent += delta.reasoning_content;
-                    }
-                    if (delta?.content) {
-                        processLegacyThink(delta.content);
-                        content = thinkParser.outsideContent;
-                    }
-                    if (p.usage) usage = p.usage;
-                    if (onToken) onToken(content, reasoningContent);
-                    if (usage && onUsage) onUsage(usage);
-                } catch (e) {}
+            const response = await this.fetchWithRetry(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                body: JSON.stringify(body),
+                signal: this.abortController.signal
             });
-        }
 
-        flushThink();
-        return { content: thinkParser.outsideContent, reasoningContent, usage };
+            if (!response.body) throw new Error('响应体为空');
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let content = '';
+            let reasoningContent = '';
+            let usage = null;
+            const thinkParser = { buffer: '', inThink: false, thinkContent: '', outsideContent: '' };
+
+            function flushThink() {
+                if (thinkParser.buffer) {
+                    if (thinkParser.inThink) thinkParser.thinkContent += thinkParser.buffer;
+                    else thinkParser.outsideContent += thinkParser.buffer;
+                    thinkParser.buffer = '';
+                }
+            }
+
+            function processLegacyThink(token) {
+                thinkParser.buffer += token;
+                if (!thinkParser.inThink) {
+                    const idx = thinkParser.buffer.indexOf('<think>');
+                    if (idx !== -1) {
+                        thinkParser.outsideContent += thinkParser.buffer.slice(0, idx);
+                        thinkParser.buffer = thinkParser.buffer.slice(idx + 7);
+                        thinkParser.inThink = true;
+                    } else {
+                        const keep = Math.min(7, thinkParser.buffer.length);
+                        thinkParser.outsideContent += thinkParser.buffer.slice(0, -keep);
+                        thinkParser.buffer = thinkParser.buffer.slice(-keep);
+                    }
+                }
+                if (thinkParser.inThink) {
+                    const idx = thinkParser.buffer.indexOf('</think>');
+                    if (idx !== -1) {
+                        thinkParser.thinkContent += thinkParser.buffer.slice(0, idx);
+                        thinkParser.buffer = thinkParser.buffer.slice(idx + 8);
+                        thinkParser.inThink = false;
+                    } else {
+                        const keep = Math.min(8, thinkParser.buffer.length);
+                        thinkParser.thinkContent += thinkParser.buffer.slice(0, -keep);
+                        thinkParser.buffer = thinkParser.buffer.slice(-keep);
+                    }
+                }
+            }
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                chunk.split('\n').forEach(line => {
+                    if (!line.startsWith('data: ')) return;
+                    const ds = line.slice(6).trim();
+                    if (ds === '[DONE]') return;
+                    try {
+                        const p = JSON.parse(ds);
+                        const delta = p.choices?.[0]?.delta;
+                        if (delta?.reasoning_content) {
+                            reasoningContent += delta.reasoning_content;
+                        }
+                        if (delta?.content) {
+                            processLegacyThink(delta.content);
+                            content = thinkParser.outsideContent;
+                        }
+                        if (p.usage) usage = p.usage;
+                        if (onToken) onToken(content, reasoningContent);
+                        if (usage && onUsage) onUsage(usage);
+                    } catch (e) { console.warn('SSE 行解析失败:', line, e); }
+                });
+            }
+
+            flushThink();
+            // 把 legacy <think> 内容合并到 reasoningContent，供 UI 展示
+            if (thinkParser.thinkContent) {
+                reasoningContent = (reasoningContent ? reasoningContent + '\n' : '') + thinkParser.thinkContent;
+            }
+            return { content: thinkParser.outsideContent, reasoningContent, usage };
+        } finally {
+            this.abortController = null;
+        }
     }
 };

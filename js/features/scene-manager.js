@@ -3,8 +3,14 @@
  */
 const SceneManager = {
     init() {
-        document.getElementById('snapshotBtn').onclick = () => this.saveSnapshot();
-        document.getElementById('loadSnapshotBtn').onclick = () => this.showSnapshots();
+        document.getElementById('snapshotBtn').onclick = async () => {
+            try { await this.saveSnapshot(); }
+            catch (e) { console.error('保存存档失败:', e); showToast('存档失败，请重试'); }
+        };
+        document.getElementById('loadSnapshotBtn').onclick = async () => {
+            try { await this.showSnapshots(); }
+            catch (e) { console.error('读取存档列表失败:', e); showToast('读档失败，请重试'); }
+        };
     },
 
     async saveSnapshot() {
@@ -174,8 +180,8 @@ const SceneManager = {
             if (s[f] !== undefined) scene[f] = s[f];
         });
 
-        await State.saveCurrentScene();
         State.normalizeScene(scene);
+        await State.saveCurrentScene();
         ChatUI.render();
         SidebarLeft.render();
         SidebarRight.renderDetail();

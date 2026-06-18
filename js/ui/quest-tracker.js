@@ -91,7 +91,7 @@ const QuestTracker = {
             ChatUI.onMessageAdded(msg);
         }
 
-        State.saveCurrentScene();
+        State.saveCurrentScene().catch(e => console.warn('任务状态保存失败:', e));
         this.render();
         // 检查胜利条件（主线全完成）
         if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
@@ -155,8 +155,9 @@ const QuestTracker = {
         const scene = State.scene;
         if (!scene) return;
         scene.exp = (scene.exp || 0) + amount;
-        const need = (scene.level || 1) * 100;
-        if (scene.exp >= need) {
+        while (true) {
+            const need = (scene.level || 1) * 100;
+            if (scene.exp < need) break;
             scene.exp -= need;
             scene.level = (scene.level || 1) + 1;
             scene.attrPoints = (scene.attrPoints || 0) + 2;
@@ -181,14 +182,17 @@ const QuestTracker = {
     _addItem(name, qty) {
         const scene = State.scene;
         if (!scene.inventory) scene.inventory = [];
+        const MAX_TOTAL_INVENTORY = 200;
         const existing = scene.inventory.find(i => i.name === name);
         if (existing) {
             existing.quantity = (existing.quantity || 1) + qty;
-        } else {
+        } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
             scene.inventory.push({
                 id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 name, description: '', type: 'misc', quantity: qty
             });
+        } else {
+            console.warn(`[QuestTracker] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
         }
     },
 
@@ -207,7 +211,7 @@ const QuestTracker = {
             reward: questData.reward || ''
         };
         scene.quests.push(quest);
-        State.saveCurrentScene();
+        State.saveCurrentScene().catch(e => console.warn('新增任务保存失败:', e));
         this.render();
         showToast(`新任务：${quest.name}`);
         SidebarRight.markTabNew('quests');
@@ -227,7 +231,7 @@ const QuestTracker = {
                 this._grantReward(quest);
                 showToast(`任务完成：${quest.name}`);
             }
-            State.saveCurrentScene();
+            State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
             this.render();
             // 检查胜利条件
             if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();

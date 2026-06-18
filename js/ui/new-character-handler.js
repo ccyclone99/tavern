@@ -92,7 +92,7 @@ const NewCharacterHandler = {
         showToast(`${name} 加入了场景`);
     },
 
-    handleExit(markup) {
+    async handleExit(markup) {
         // markup格式: 角色名|原因
         const parts = markup.split('|');
         const name = parts[0];
@@ -106,7 +106,7 @@ const NewCharacterHandler = {
 
         // 从场景中移除
         scene.characters = scene.characters.filter(id => id !== char.id);
-        State.saveCurrentScene();
+        await State.saveCurrentScene();
 
         // 发送退场消息（增量追加）
         const msg = {
@@ -118,7 +118,7 @@ const NewCharacterHandler = {
         };
         scene.messages.push(msg);
         ChatUI.onMessageAdded(msg);
-        State.saveCurrentSceneDebounced();
+        await State.saveCurrentSceneDebounced();
 
         State.emit('charactersChanged', State.characters);
         State.emit('sceneChanged', scene);

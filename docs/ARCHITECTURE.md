@@ -172,6 +172,8 @@ AI 回复文本
 - `[damage:]` / `[heal:]` / `[gold:]` / `[exp:]` 生存系统。
 - `[new_char:]` / `[char_exit:]` 角色登退场。
 
+`Renderer.parseMessageType` 额外解析消息中的 `[emotion:]` 情绪标记，供 UI 渲染头像表情。
+
 ### StrategyManager 负责“允许 AI 改哪些状态”
 
 `StrategyManager.applyStateUpdate()` 是状态补丁边界。允许：

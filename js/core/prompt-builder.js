@@ -3,12 +3,17 @@
  * 将角色卡、世界书、规则层组装为 API 请求体
  */
 const PromptBuilder = {
+    /** 清洗名称，防止提示词注入 */
+    _sanitizeName(name) {
+        return String(name || '').replace(/["\\\n\r]/g, '').slice(0, 64);
+    },
+
     /**
      * 组装单角色对话请求
      */
     build(character, scene, messages, opts = {}) {
-        const userName = scene.userName || '旅人';
-        const charName = character.name || '角色';
+        const userName = this._sanitizeName(scene.userName || '旅人');
+        const charName = this._sanitizeName(character.name || '角色');
         const systemParts = [];
 
         systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
@@ -99,8 +104,8 @@ const PromptBuilder = {
      * 组装群聊请求（指定当前发言角色）
      */
     buildGroup(currentChar, scene, messages, allCharacters, opts = {}) {
-        const userName = scene.userName || '旅人';
-        const charName = currentChar.name || '角色';
+        const userName = this._sanitizeName(scene.userName || '旅人');
+        const charName = this._sanitizeName(currentChar.name || '角色');
         const systemParts = [];
 
         systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
@@ -108,7 +113,7 @@ const PromptBuilder = {
 
         const otherChars = allCharacters.filter(c => c.id !== currentChar.id);
         if (otherChars.length > 0) {
-            const names = otherChars.map(c => c.name).join('、');
+            const names = otherChars.map(c => this._sanitizeName(c.name)).join('、');
             systemParts.push(`当前场景中还有其他角色：${names}。你们在一起互动。`);
         }
 
@@ -156,7 +161,8 @@ const PromptBuilder = {
         const persona = scene.playerPersona;
         if (persona) {
             const creedTxt = persona.creed ? `。信条：${persona.creed}` : '';
-            systemParts.push(`【玩家信息】\n玩家名称是 ${persona.name || scene.userName}。外貌：${persona.appearance || '未知'}。背景：${persona.background || '未知'}。性格：${persona.personality || '未知'}。目标：${persona.goal || '未知'}${creedTxt}。请根据以上信息自然地与玩家互动。`);
+            const personaName = this._sanitizeName(persona.name || scene.userName);
+            systemParts.push(`【玩家信息】\n玩家名称是 ${personaName}。外貌：${persona.appearance || '未知'}。背景：${persona.background || '未知'}。性格：${persona.personality || '未知'}。目标：${persona.goal || '未知'}${creedTxt}。请根据以上信息自然地与玩家互动。`);
         }
 
         // 规则层：属性 + 任务 + 地图 + 检定 + 动态事件 + 计策
@@ -184,7 +190,7 @@ const PromptBuilder = {
             if (msg.role === 'assistant' && msg.characterId) {
                 const char = allCharacters.find(c => c.id === msg.characterId);
                 if (char && char.id !== currentChar.id) {
-                    prefix = `[${char.name}] `;
+                    prefix = `[${this._sanitizeName(char.name)}] `;
                 }
             }
             if (msg.type === 'strategy') {
@@ -378,7 +384,7 @@ const PromptBuilder = {
             }
             const keys = entry.keys || [];
             const secondary = entry.secondary_keys || [];
-            const hasPrimary = keys.some(k => scanText.includes(k.toLowerCase()));
+            const hasPrimary = keys.some(k => k && scanText.includes(k.toLowerCase()));
             if (!hasPrimary) continue;
             if (entry.selective && secondary.length > 0) {
                 const hasSecondary = secondary.some(k => scanText.includes(k.toLowerCase()));
@@ -412,10 +418,11 @@ const PromptBuilder = {
      */
     buildDMNarration(scene, messages, context = {}) {
         const dm = scene.dmPersona || { name: '叙述者', emoji: '📖', description: '一个中立的叙事者，用优美的文字描述场景和事件。' };
-        const userName = scene.userName || '旅人';
+        const userName = this._sanitizeName(scene.userName || '旅人');
+        const dmName = this._sanitizeName(dm.name);
         const systemParts = [];
 
-        systemParts.push(`你是「${dm.name}」——这个世界的故事叙述者（DM）。你不是场景中的角色，而是一个无形的叙事之声。`);
+        systemParts.push(`你是「${dmName}」——这个世界的故事叙述者（DM）。你不是场景中的角色，而是一个无形的叙事之声。`);
         systemParts.push(`【叙事风格】\n${dm.description}`);
         systemParts.push(`【叙事规则】\n- 以第三人称叙述，不要用"我"自称\n- 描写环境、氛围、人物的动作和神情\n- 不要替玩家角色（${userName}）做决定或发言\n- 不要替场景中的NPC角色发言——他们有自己的回合\n- 语言优美、沉浸感强，像小说中的旁白段落`);
 
@@ -476,13 +483,14 @@ const PromptBuilder = {
      */
     buildTutorialNarration(scene, messages, step) {
         const dm = scene.dmPersona || { name: '莫里斯', emoji: '🍺', description: '亲切幽默的老酒馆老板兼新手教学向导。' };
-        const userName = scene.userName || '新人';
+        const userName = this._sanitizeName(scene.userName || '新人');
+        const dmName = this._sanitizeName(dm.name);
         const stepData = TutorialScript.getStep(step) || TutorialScript.getStep(0);
 
         const systemParts = [];
 
         // 教学模式强约束（核心区别于普通 DM 叙事）
-        systemParts.push(`你是「${dm.name}」——新手酒馆的教学向导。你现在不是在演戏，而是在教 ${userName} 玩这个游戏。`);
+        systemParts.push(`你是「${dmName}」——新手酒馆的教学向导。你现在不是在演戏，而是在教 ${userName} 玩这个游戏。`);
         systemParts.push(`【教学模式 · 必须遵守】\n- 你的唯一目标是教会玩家第 ${step} 步：${stepData.title}（${stepData.goal}）。\n- 不要推进任何严肃剧情，不要制造紧张或危险，这是教学世界，氛围轻松友好。\n- 可以打破第四面墙，直接告诉玩家该点哪个按钮、做什么操作。\n- 语气亲切、幽默、鼓励，像一个耐心的老朋友。一次只教一个动作，不要一次性堆砌太多信息。\n- 玩家做对了就大力夸奖，做错了也绝不批评。\n- 不要替玩家角色做决定或发言。`);
         systemParts.push(`【叙事风格】\n${dm.description}`);
         systemParts.push(`【本步引导要点】\n${stepData.cue}`);

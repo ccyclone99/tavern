@@ -69,7 +69,7 @@ const SidebarLeft = {
                     if (window.innerWidth <= 900) this.el.classList.remove('open');
                     // 教学钩子：玩家主动切换角色（step1）
                     if (TutorialWorld.isCurrentScene()) {
-                        Tutorial.afterCharacterSwitch();
+                        Tutorial.afterCharacterSwitch().catch(e => console.warn('[Tutorial] afterCharacterSwitch 失败:', e));
                     }
                 };
             }

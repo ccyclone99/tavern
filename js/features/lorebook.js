@@ -2,6 +2,11 @@
  * 世界书管理
  */
 const Lorebook = {
+    _setInput(id, value) {
+        if (value == null) return;
+        const el = document.getElementById(id);
+        if (el) el.value = String(value);
+    },
     openEditor(entryIndex = null) {
         const scene = State.scene;
         if (!scene) { showToast('请先创建一个场景'); return; }
@@ -54,7 +59,10 @@ const Lorebook = {
 
         document.getElementById('loreEditorClose').onclick = () => Lorebook.closeEditor();
         document.getElementById('loreEditorCancel').onclick = () => Lorebook.closeEditor();
-        document.getElementById('loreEditorSave').onclick = () => Lorebook.saveEntry(entryIndex);
+        document.getElementById('loreEditorSave').onclick = async () => {
+            try { await Lorebook.saveEntry(entryIndex); }
+            catch (e) { console.error('保存世界书失败:', e); showToast('保存失败，请重试'); }
+        };
         document.getElementById('aiLoreBtn').onclick = () => Lorebook.generateByAI();
     },
 
@@ -89,10 +97,10 @@ const Lorebook = {
                 loadingText: '生成中...'
             });
 
-            if (data.keys) document.getElementById('loreKeys').value = Array.isArray(data.keys) ? data.keys.join(',') : data.keys;
-            if (data.secondary_keys) document.getElementById('loreSecondaryKeys').value = Array.isArray(data.secondary_keys) ? data.secondary_keys.join(',') : data.secondary_keys;
-            if (data.content) document.getElementById('loreContent').value = data.content;
-            if (data.comment) document.getElementById('loreComment').value = data.comment;
+            this._setInput('loreKeys', Array.isArray(data.keys) ? data.keys.join(',') : data.keys);
+            this._setInput('loreSecondaryKeys', Array.isArray(data.secondary_keys) ? data.secondary_keys.join(',') : data.secondary_keys);
+            this._setInput('loreContent', data.content);
+            this._setInput('loreComment', data.comment);
 
             showToast('世界书条目已生成，请检查并保存');
         } catch (err) {

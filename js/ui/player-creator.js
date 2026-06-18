@@ -2,6 +2,11 @@
  * 玩家人物卡创建器
  */
 const PlayerCreator = {
+    _setInput(id, value) {
+        if (value == null) return;
+        const el = document.getElementById(id);
+        if (el) el.value = String(value);
+    },
     modal: null,
 
     init() {
@@ -61,7 +66,10 @@ const PlayerCreator = {
 
         document.getElementById('playerCreatorClose').onclick = () => PlayerCreator.close();
         document.getElementById('playerCreatorCancel').onclick = () => PlayerCreator.close();
-        document.getElementById('playerCreatorSave').onclick = () => PlayerCreator.save();
+        document.getElementById('playerCreatorSave').onclick = async () => {
+            try { await PlayerCreator.save(); }
+            catch (e) { console.error('保存玩家角色失败:', e); showToast('保存失败，请重试'); }
+        };
         document.getElementById('aiPersonaBtn').onclick = () => PlayerCreator.generateByAI();
         document.getElementById('personaAvatarUploadBtn').onclick = () => document.getElementById('personaAvatarInput').click();
         document.getElementById('personaAvatarInput').onchange = (e) => PlayerCreator.onAvatarChange(e);
@@ -114,11 +122,11 @@ const PlayerCreator = {
                 loadingText: '生成中...'
             });
 
-            if (data.name) document.getElementById('personaName').value = data.name;
-            if (data.appearance) document.getElementById('personaAppearance').value = data.appearance;
-            if (data.background) document.getElementById('personaBackground').value = data.background;
-            if (data.personality) document.getElementById('personaPersonality').value = data.personality;
-            if (data.goal) document.getElementById('personaGoal').value = data.goal;
+            this._setInput('personaName', data.name);
+            this._setInput('personaAppearance', data.appearance);
+            this._setInput('personaBackground', data.background);
+            this._setInput('personaPersonality', data.personality);
+            this._setInput('personaGoal', data.goal);
 
             showToast('人物卡已生成，请检查并保存');
         } catch (err) {

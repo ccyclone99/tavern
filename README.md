@@ -111,14 +111,14 @@ AI 不会替玩家自动成功；最终选择和执行始终由玩家推动。
 
 ### 代码检查
 
-- [ ] 运行 `node --check js/**/*.js js/main.js`，全部通过
+- [ ] 运行 `node --check js/core/*.js js/features/*.js js/ui/*.js js/main.js`，全部通过
 - [ ] 确认没有新增 npm 依赖或构建系统
 - [ ] 确认 API Key 没有写入可见 DOM 或 console.log
 
 ## 项目结构
 
 ```
-E:\kimi\tavern
+<project-root>
 ├── index.html
 ├── docs/
 │   ├── AGENT.md             # agent 游玩协议总纲

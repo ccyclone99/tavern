@@ -17,9 +17,7 @@ const GroupChat = {
             return;
         }
 
-        State.isStreaming = true;
-        ChatUI.sendBtn.style.display = 'none';
-        ChatUI.stopBtn.style.display = 'block';
+        ChatUI.setStreaming();
 
         // 选择回复角色：优先当前选中角色，否则第一个
         let replyChar = chars.find(c => c.id === State.currentCharacterId);
@@ -37,9 +35,7 @@ const GroupChat = {
             State.setCurrentCharacter(nextChar.id);
         }
 
-        State.isStreaming = false;
-        ChatUI.sendBtn.style.display = 'block';
-        ChatUI.stopBtn.style.display = 'none';
+        ChatUI.clearStreaming();
 
         // 教学钩子：玩家发消息后检测是否完成当前教学步骤（仅教学世界生效）
         if (TutorialWorld.isCurrentScene()) {
@@ -120,7 +116,7 @@ const GroupChat = {
             // 处理非检定标记（检定标记在检查后统一处理）
             const nonCheckMarkers = markers.filter(m => m.type !== 'check');
             const checkMarkers = markers.filter(m => m.type === 'check');
-            this._processMarkers(nonCheckMarkers);
+            await this._processMarkers(nonCheckMarkers);
 
             // 处理检定标记：自动投骰 + 结果插入
             for (const cm of checkMarkers) {
@@ -143,7 +139,7 @@ const GroupChat = {
                 }
                 // 教学钩子：检定已叙述完成（step3）
                 if (TutorialWorld.isCurrentScene()) {
-                    Tutorial.afterCheckResolved();
+                    Tutorial.afterCheckResolved().catch(e => console.warn('[Tutorial] afterCheckResolved 失败:', e));
                 }
             }
 
@@ -242,14 +238,17 @@ const GroupChat = {
     /**
      * 处理所有解析出的标记事件
      */
-    _processMarkers(markers) {
+    async _processMarkers(markers) {
         for (const marker of markers) {
             switch (marker.type) {
                 case 'new_char':
-                    setTimeout(() => NewCharacterHandler.show(marker.raw), 500);
+                    setTimeout(() => {
+                        try { NewCharacterHandler.show(marker.raw); }
+                        catch (e) { console.warn('新角色登场处理失败:', e); }
+                    }, 500);
                     break;
                 case 'char_exit':
-                    NewCharacterHandler.handleExit(marker.raw);
+                    await NewCharacterHandler.handleExit(marker.raw);
                     break;
                 case 'quest':
                     this._handleQuestMarker(marker.raw);
@@ -261,7 +260,7 @@ const GroupChat = {
                     this._handleEventMarker(marker.raw);
                     break;
                 case 'move':
-                    this._handleMoveMarker(marker.raw);
+                    await this._handleMoveMarker(marker.raw);
                     break;
                 case 'item_add':
                     this._handleItemAdd(marker.raw);
@@ -393,13 +392,13 @@ const GroupChat = {
     /**
      * 处理 [move:地点名]
      */
-    _handleMoveMarker(raw) {
+    async _handleMoveMarker(raw) {
         const scene = State.scene;
         if (!scene) return;
         const locName = raw.trim();
         const loc = scene.locations.find(l => l.name === locName || l.name.includes(locName));
         if (loc && loc.id !== scene.currentLocation) {
-            MapView.moveTo(loc.id);
+            await MapView.moveTo(loc.id);
             SidebarRight.markTabNew('map');
         }
     },
@@ -409,6 +408,7 @@ const GroupChat = {
         if (!scene) return;
         if (!scene.inventory) scene.inventory = [];
         if (!scene.equipment) scene.equipment = { weapon: null, armor: null, accessory: null };
+        const MAX_TOTAL_INVENTORY = 200;
         const parts = raw.split('|');
         const name = (parts[0] || '未知物品').trim();
         const description = (parts[1] || '').trim();
@@ -418,11 +418,14 @@ const GroupChat = {
         const existing = scene.inventory.find(item => item.name === name);
         if (existing) {
             existing.quantity += quantity;
-        } else {
+        } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
             scene.inventory.push({
                 id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 name, description, type, quantity, equipped: false
             });
+        } else {
+            console.warn(`[GroupChat] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
+            return;
         }
         showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
         State.saveCurrentSceneDebounced();
@@ -623,15 +626,18 @@ const GroupChat = {
      * 玩家通过地图移动后，DM 描述新地点
      */
     async handleLocationMove(loc) {
+        if (State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
 
+        ChatUI.setStreaming();
         const dm = scene.dmPersona;
         ChatUI.appendStreamingMessage(dm ? '__dm__' : null);
         let description = '';
+        let tempMsg = null;
 
         try {
-            const tempMsg = {
+            tempMsg = {
                 id: 'msg_' + Date.now(),
                 role: 'user',
                 content: `【玩家到达了 ${loc.name}】`,
@@ -674,15 +680,19 @@ const GroupChat = {
             };
             scene.messages.push(msg);
             ChatUI._renderedCount = scene.messages.length;
-            ChatUI.finalizeStreamingMessage(description, null);
+            ChatUI.finalizeStreamingMessage(cleanedDescription, null);
             await State.saveCurrentSceneDebounced();
 
         } catch (err) {
             ChatUI.removeStreamingMessage();
-            scene.messages.pop();
+            if (tempMsg && scene.messages.length > 0 && scene.messages[scene.messages.length - 1].id === tempMsg.id) {
+                scene.messages.pop();
+            }
             if (err.name !== 'AbortError') {
                 console.error('地点描述生成失败:', err);
             }
+        } finally {
+            ChatUI.clearStreaming();
         }
     },
 
@@ -690,9 +700,11 @@ const GroupChat = {
      * DM 叙事：用于检定结果描述、事件旁白等
      */
     async _dmNarrate(context = {}) {
+        if (State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
 
+        ChatUI.setStreaming();
         const dm = scene.dmPersona;
         ChatUI.appendStreamingMessage(dm ? '__dm__' : null);
 
@@ -735,7 +747,7 @@ const GroupChat = {
             };
             scene.messages.push(msg);
             ChatUI._renderedCount = scene.messages.length;
-            ChatUI.finalizeStreamingMessage(content, null);
+            ChatUI.finalizeStreamingMessage(cleanedContent, null);
             await State.saveCurrentSceneDebounced();
 
         } catch (err) {
@@ -743,6 +755,8 @@ const GroupChat = {
             if (err.name !== 'AbortError') {
                 console.error('DM叙事失败:', err);
             }
+        } finally {
+            ChatUI.clearStreaming();
         }
     },
 
@@ -750,6 +764,7 @@ const GroupChat = {
      * 自动摘要：将最早的消息压缩为叙事摘要，存入 scene.summary
      */
     async _triggerSummarization() {
+        if (State.isStreaming || this._summarizing) return;
         const scene = State.scene;
         if (!scene || scene.messages.length <= 80) return;
 

@@ -160,7 +160,7 @@ Observer 不参与剧情裁决，除非模拟明确把它设为仲裁器。
 - `storyArcs.currentBeat` 不会自动推进。
 - `<state_update>` 不能直接创建任务，只能轻量更新已有任务；创建任务应使用 `[quest:]`。
 - `characterUpdates` 使用 `characterId`，DM 必须知道目标 id；只写角色名不会生效。
-- `[move:]` 按地点名匹配，外部模拟最好使用精确名称。
+- `[move:]` 按地点名匹配（支持部分匹配），外部模拟最好使用精确名称。
 - 动态 `[new_char:]` 创建的角色没有自动补全 `creed`、`redLines`、`motives` 等深层字段。
 - 自动摘要依赖 LLM API，外部模拟若不调用浏览器实现，需要自己维护 `summary`。
 - 流式中断可能导致末尾 `<state_update>` 不完整，应在完整文本结束后再解析补丁。

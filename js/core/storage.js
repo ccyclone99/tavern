@@ -123,7 +123,9 @@ const Storage = {
         const chars = await this.getAll('characters');
         const scenes = await this.getAll('scenes');
         const settings = await this.getSettings();
-        return { characters: chars, scenes, settings, exportedAt: Date.now() };
+        // 导出备份时剔除 API Key，避免明文泄露
+        const exportSettings = { ...settings, apiKey: '' };
+        return { characters: chars, scenes, settings: exportSettings, exportedAt: Date.now() };
     },
 
     async importAll(data) {
@@ -134,7 +136,11 @@ const Storage = {
             for (const s of data.scenes) await this.put('scenes', s);
         }
         if (data.settings) {
-            await this.put('settings', { key: 'main', value: data.settings });
+            const current = await this.getSettings();
+            const merged = { ...current, ...data.settings };
+            // 若导入的备份 key 为空（如 exportAll 导出的），保留本地已有 key
+            if (!merged.apiKey) merged.apiKey = current.apiKey || '';
+            await this.put('settings', { key: 'main', value: merged });
         }
     }
 };
