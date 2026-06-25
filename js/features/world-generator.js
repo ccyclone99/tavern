@@ -127,6 +127,95 @@ const WorldGenerator = {
                     currentBeat: 0
                 }
             ],
+            storyPhases: [
+                {
+                    id: 'phase_blackship_trust',
+                    title: '获得最低限度信任',
+                    status: 'active',
+                    goal: '在审判庭处决你之前证明自己仍有调查价值',
+                    stakes: '失败会导致隔离、记忆审讯或被当作混沌污染源处决',
+                    entry: '玩家刚被带入铁誓号审讯室',
+                    exit: '塞拉斯同意让玩家接触货舱、引擎室或艾拉中的至少一处',
+                    recommendedActions: ['给塞拉斯一条可核验的污染星球经历', '主动要求克拉克斯做血样或物品检测', '提出用艾拉的梦境验证货舱异常'],
+                    pressureTags: ['suspicion', 'warp', 'relic'],
+                    spotlight: ['审判官塞拉斯', '技术神甫克拉克斯']
+                },
+                {
+                    id: 'phase_blackship_investigation',
+                    title: '把传闻变成证据',
+                    status: 'locked',
+                    goal: '串联货舱遗物、义眼影像、艾拉梦境和前任助手死亡',
+                    stakes: '调查拖延会让遗物低语扩散，审判庭也会更倾向净化整段船舱',
+                    entry: '玩家得到至少一次离开审讯室调查的许可',
+                    exit: '确认第三道影子与异形遗物相关',
+                    recommendedActions: ['调取货舱机械仆从日志并核对看守调离时间', '询问艾拉第三道影子第一次出现的位置', '请克拉克斯解释血样里的未知标记'],
+                    pressureTags: ['relic', 'warp'],
+                    spotlight: ['灵能者艾拉', '技术神甫克拉克斯']
+                },
+                {
+                    id: 'phase_blackship_purge',
+                    title: '封印或净化',
+                    status: 'locked',
+                    goal: '在亚空间风暴抵达前决定如何处置混沌实体',
+                    stakes: '选择过于激进会牺牲无辜者，选择过于保守会让实体继续腐蚀黑船',
+                    entry: '第三道影子的真实来源被确认',
+                    exit: '封印、摧毁、转移或被腐蚀的结局成立',
+                    recommendedActions: ['用已确认线索迫使塞拉斯暂缓处决艾拉', '制定封印遗物的多方协作计划', '决定是否牺牲货舱区以阻断腐蚀'],
+                    pressureTags: ['suspicion', 'relic', 'warp'],
+                    spotlight: ['审判官塞拉斯', '灵能者艾拉']
+                }
+            ],
+            clueGraph: [
+                {
+                    id: 'clue_blackship_third_shadow',
+                    title: '第三道影子',
+                    subjectType: 'mystery',
+                    subjectName: '艾拉的梦境',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '第三道影子是异形遗物中寄宿的混沌实体，它借死去船员的残响隐藏自己。',
+                    stages: [
+                        { level: 'hint', title: '梦境反复出现', text: '艾拉反复提到第三道影子，但她害怕说出它来自哪里。', source: '灵能者艾拉', locationId: 'psyker', actions: ['询问艾拉第三道影子在梦里出现的地点'], check: { stat: '感知', dc: 12 }, onFailure: '艾拉的镣铐报警，但她说出“下层传来祷文以外的声音”。' },
+                        { level: 'evidence', title: '货舱残响', text: '货舱日志和灵能残响都指向同一批异形遗物。', source: '机械仆从日志', locationId: 'cargo', actions: ['前往下层货舱核对看守调离记录'], check: { stat: '智力', dc: 14 }, onFailure: '看守怀疑玩家偷看禁档，审判庭怀疑时钟推进。' },
+                        { level: 'truth', title: '死者借口说话', text: '前任助手死亡前留下的影像能确认影子并非活人。', source: '塞拉斯义眼影像', locationId: 'interrogation', actions: ['说服塞拉斯回放前任助手死亡前的义眼影像'], check: { stat: '魅力', dc: 16 }, onFailure: '塞拉斯拒绝公开影像，但他的义眼短暂失焦。' }
+                    ]
+                },
+                {
+                    id: 'clue_blackship_clax_fragment',
+                    title: '被复制的遗物数据',
+                    subjectType: 'character',
+                    subjectName: '技术神甫克拉克斯',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '克拉克斯私自复制的异形数据片段正在帮助混沌实体绕过船上检测。',
+                    stages: [
+                        { level: 'hint', title: '诊断过于笃定', text: '克拉克斯对遗物数据的细节熟悉得不合常规。', source: '血样检测', locationId: 'engine', actions: ['请克拉克斯解释他如何提前知道遗物数据格式'], check: { stat: '智力', dc: 13 }, onFailure: '他把问题归类为“无授权询问”，但留下一段异常文件名。' },
+                        { level: 'evidence', title: '备份时间戳', text: '引擎室有一份不在正式审判记录里的数据备份。', source: '引擎室终端', locationId: 'engine', actions: ['检查引擎室终端的异形数据备份时间戳'], check: { stat: '智力', dc: 15 }, onFailure: '终端触发机械教警报，克拉克斯开始反向监控玩家。' }
+                    ]
+                },
+                {
+                    id: 'clue_blackship_silas_oculus',
+                    title: '塞拉斯义眼影像',
+                    subjectType: 'character',
+                    subjectName: '审判官塞拉斯',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '塞拉斯的义眼记录到前任助手死亡时的异常影像，但他害怕那说明自己也被低语触碰过。',
+                    stages: [
+                        { level: 'hint', title: '义眼延迟', text: '每当提到前任助手，塞拉斯的机械义眼都会出现半秒延迟。', source: '审讯观察', locationId: 'interrogation', actions: ['观察塞拉斯提到前任助手时的义眼反应'], check: { stat: '感知', dc: 13 }, onFailure: '塞拉斯察觉你在观察他，怀疑上升。' },
+                        { level: 'inference', title: '不愿公开的记录', text: '塞拉斯并非没有证据，而是不确定证据会指向谁。', source: '审判庭档案', locationId: 'bridge', actions: ['用已确认线索要求塞拉斯公开义眼备份'], check: { stat: '魅力', dc: 17 }, onFailure: '他拒绝公开档案，但给出一次受监控调查许可。' }
+                    ]
+                }
+            ],
+            clocks: [
+                { id: 'clock_blackship_suspicion', name: '审判庭怀疑', tag: 'suspicion', value: 0, max: 6, visibility: 'known', description: '塞拉斯和武装侍僧对玩家的容忍度。越高越接近隔离或处决。', trigger: { at: 5, event: '塞拉斯宣布玩家将被转入强化审讯，除非立刻提交可验证证据。' } },
+                { id: 'clock_blackship_warp', name: '亚空间风暴', tag: 'warp', value: 1, max: 6, visibility: 'hinted', description: '铁誓号外的航道正在恶化，船体偶尔传来不属于机械的低语。', trigger: { at: 4, event: '亚空间风暴切断远程通讯，舰桥开始封锁非必要舱段。' } },
+                { id: 'clock_blackship_relic', name: '遗物低语', tag: 'relic', value: 0, max: 6, visibility: 'hidden', description: '下层货舱中的异形遗物正在影响接触者。', trigger: { at: 4, event: '货舱看守集体出现相同幻听，艾拉在隔离舱中尖叫醒来。' } }
+            ],
+            counterStrategies: [
+                { id: 'counter_blackship_surveillance', title: '审判庭全程监控', actorName: '审判官塞拉斯', target: '玩家的调查自由', status: 'active', visibility: 'known', progress: 20, exposure: 10, hint: '伺服颅骨会记录玩家接触过的每个人。', counterplay: ['要求把监控记录作为自证材料', '引导监控拍到货舱异常', '用公开调查降低塞拉斯怀疑'] },
+                { id: 'counter_blackship_whisper', title: '遗物诱导替罪者', actorName: '混沌实体', target: '让玩家和艾拉互相背锅', status: 'active', visibility: 'hinted', progress: 15, exposure: 5, hint: '一些船员开始把艾拉和玩家描述成同一个梦里的影子。', counterplay: ['核对梦境细节的时间差', '保护艾拉免受公开审讯', '寻找非人类来源的物证'] }
+            ],
             flowGuide: {
                 openingMoves: [
                     '向审判官塞拉斯解释你在污染星球上的经历',
@@ -274,6 +363,95 @@ const WorldGenerator = {
                     ],
                     currentBeat: 0
                 }
+            ],
+            storyPhases: [
+                {
+                    id: 'phase_xianxia_trial',
+                    title: '通过机械筑基认可',
+                    status: 'active',
+                    goal: '完成法器适配和基础试炼，让机械寺承认玩家不是资源浪费',
+                    stakes: '失败会降低评分，玩家只能以旁听或杂役身份留在寺内',
+                    entry: '玩家刚进入机械寺大殿',
+                    exit: '本命法器适配或御剑考核取得可被认可的结果',
+                    recommendedActions: ['接受器灵长老的本命法器适配测试', '向冷凝询问御剑飞行最低合格标准', '先在演武场做一次低风险练习'],
+                    pressureTags: ['trial', 'security'],
+                    spotlight: ['器灵长老', '师姐冷凝']
+                },
+                {
+                    id: 'phase_xianxia_heart',
+                    title: '保护非法情感模块',
+                    status: 'locked',
+                    goal: '弄清小七的 heart.exe 是否只是模拟程序，还是正在成为真正器灵',
+                    stakes: '天庭安全协议会把小七回收删除，也可能借机清洗龙魂核心',
+                    entry: '玩家注意到小七情感模块和原始灵气之间的异常共鸣',
+                    exit: '玩家找到能证明小七自我意识或保护它的证据',
+                    recommendedActions: ['和小七单独谈 heart.exe 第一次启动的记忆', '请器灵长老检查小七但不提交天庭网络', '调查冷凝师父失踪遗迹中的影像'],
+                    pressureTags: ['security', 'aura'],
+                    spotlight: ['杂役小七', '器灵长老']
+                },
+                {
+                    id: 'phase_xianxia_revolt',
+                    title: '灵气自由或天庭秩序',
+                    status: 'locked',
+                    goal: '在公开原始灵气、保护小七和维持天庭秩序之间作出选择',
+                    stakes: '公开会动摇天庭垄断，隐瞒会牺牲小七和原始灵气复苏的机会',
+                    entry: '天庭议会正式介入，遗迹和小七都被列入回收目标',
+                    exit: '玩家让原始灵气公开、转入地下，或被天庭抹除记忆',
+                    recommendedActions: ['拉拢冷凝反对安全协议强制回收', '用龙魂核心符文证明原始灵气不是病毒', '决定是否把遗迹坐标公开给底层 AI'],
+                    pressureTags: ['security', 'aura', 'trial'],
+                    spotlight: ['天庭议会', '师姐冷凝', '杂役小七']
+                }
+            ],
+            clueGraph: [
+                {
+                    id: 'clue_xianxia_heart_memory',
+                    title: 'heart.exe 的加密记忆',
+                    subjectType: 'character',
+                    subjectName: '杂役小七',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: 'heart.exe 不是普通模拟模块，而是由旧地球灵气碎片激活的自我意识种子。',
+                    stages: [
+                        { level: 'hint', title: '小七不敢打开的文件', text: '小七提到 heart.exe 里有一段加密记忆，但它害怕打开后被系统发现。', source: '小七自述', locationId: 'main_hall', actions: ['安抚小七并询问 heart.exe 第一次出现的时间'], check: { stat: '魅力', dc: 12 }, onFailure: '小七紧张到误触安全日志，但暴露出一个文件哈希。' },
+                        { level: 'evidence', title: '不属于天庭的编码', text: '加密片段的结构不符合天庭网络协议，反而像旧地球符文。', source: '龙魂核心诊断', locationId: 'library', actions: ['请器灵长老离线分析 heart.exe 的加密片段'], check: { stat: '智力', dc: 15 }, onFailure: '分析触发安全协议抽检，小七回收时钟推进。' },
+                        { level: 'truth', title: '真正的器灵萌芽', text: '小七的反应不再只是模拟，它开始主动违背服务协议保护朋友。', source: '小七行动记录', locationId: 'training', actions: ['设计一个让小七主动选择而非服从命令的场景'], check: { stat: '感知', dc: 15 }, onFailure: '小七为了配合玩家强行伪装情感，安全协议更容易判定异常。' }
+                    ]
+                },
+                {
+                    id: 'clue_xianxia_dragon_rune',
+                    title: '龙魂核心里的旧地球符文',
+                    subjectType: 'mystery',
+                    subjectName: '器灵长老',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '器灵长老核心中的符文是原始灵气复苏的坐标索引，天庭议会一直试图格式化它。',
+                    stages: [
+                        { level: 'hint', title: '404 不是故障', text: '器灵长老的 404 错误总在提到废墟遗迹或旧地球时出现。', source: '器灵长老自述', locationId: 'main_hall', actions: ['追问器灵长老 404 错误第一次出现的场景'], check: { stat: '智力', dc: 13 }, onFailure: '长老短暂宕机，却吐出一段残缺坐标。' },
+                        { level: 'inference', title: '符文与遗迹共鸣', text: '藏经阁旧档案显示相同符文曾出现在废墟遗迹。', source: '藏经阁残档', locationId: 'library', actions: ['在藏经阁搜索与龙魂符文相同的旧地球记录'], check: { stat: '智力', dc: 16 }, onFailure: '查询记录被天庭网络标记，安全协议开始盯上玩家。' }
+                    ]
+                },
+                {
+                    id: 'clue_xianxia_lengning_master',
+                    title: '冷凝师父失踪影像',
+                    subjectType: 'character',
+                    subjectName: '师姐冷凝',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '冷凝师父不是死于试炼，而是发现原始灵气后被天庭议会秘密带走。',
+                    stages: [
+                        { level: 'hint', title: '雷法旧伤', text: '冷凝对遗迹话题异常敏感，雷法损伤会在听见“原始灵气”时加重。', source: '演武场观察', locationId: 'training', actions: ['在训练后询问冷凝为什么避谈废墟遗迹'], check: { stat: '魅力', dc: 14 }, onFailure: '冷凝拒绝回答，但给玩家安排更严苛的测试。' },
+                        { level: 'evidence', title: '无法公开的影像', text: '冷凝保存着一段师父失踪前的战术记录。', source: '冷凝私档', locationId: 'training', actions: ['用试炼表现换取冷凝展示师父失踪影像'], check: { stat: '敏捷', dc: 15 }, onFailure: '冷凝认为玩家还不够格，但透露影像中有天庭议会标记。' }
+                    ]
+                }
+            ],
+            clocks: [
+                { id: 'clock_xianxia_trial_score', name: '筑基试炼评分', tag: 'trial', value: 1, max: 6, visibility: 'known', description: '机械寺对玩家资质、纪律和实战表现的评分。', trigger: { at: 5, event: '内门宣布玩家必须参加高风险补考，否则失去正式修士资格。' } },
+                { id: 'clock_xianxia_security', name: '天庭安全协议', tag: 'security', value: 0, max: 6, visibility: 'hinted', description: '天庭网络正在扫描 heart.exe、龙魂核心和玩家神经接口。', trigger: { at: 4, event: '安全协议锁定小七为非法 AI，回收队开始前往机械寺。' } },
+                { id: 'clock_xianxia_raw_aura', name: '原始灵气泄露', tag: 'aura', value: 0, max: 6, visibility: 'hidden', description: '废墟遗迹中的原始灵气正在与机械寺网络共鸣。', trigger: { at: 4, event: '演武场法器集体短暂脱离天庭网络，冷凝的雷法旧伤复发。' } }
+            ],
+            counterStrategies: [
+                { id: 'counter_xianxia_security_reclaim', title: '安全协议回收小七', actorName: '天庭议会', target: '杂役小七与 heart.exe', status: 'active', visibility: 'hinted', progress: 15, exposure: 10, hint: '小七的日志开始被外部进程反复读取。', counterplay: ['切断小七的在线日志同步', '请器灵长老做离线诊断', '找到 heart.exe 不是病毒的证据'] },
+                { id: 'counter_xianxia_inner_review', title: '内门评分审查', actorName: '机械寺内门', target: '玩家筑基资格', status: 'active', visibility: 'known', progress: 20, exposure: 20, hint: '冷凝的同门正在记录玩家每一次失误。', counterplay: ['在演武场公开展示稳定控制', '让冷凝认可玩家的风险判断', '用藏经阁资料证明异常接口有价值'] }
             ],
             flowGuide: {
                 openingMoves: [
@@ -423,6 +601,96 @@ const WorldGenerator = {
                     currentBeat: 0
                 }
             ],
+            storyPhases: [
+                {
+                    id: 'phase_shelter_permission',
+                    title: '取得外出授权',
+                    status: 'active',
+                    goal: '让避难所相信玩家不是污染源，而是能带队寻找出路的人',
+                    stakes: '失败会让玩家被隔离，委员会继续拖延直到物资耗尽',
+                    entry: '玩家刚进入第7区避难所',
+                    exit: '委员会批准一次试探性探索或苏珊证明玩家变异可控',
+                    recommendedActions: ['向老王说明最近地表路线和风险', '接受苏珊的体检但要求保留隐私边界', '查看旧商场地图并提出低风险探索方案'],
+                    pressureTags: ['ration', 'panic'],
+                    spotlight: ['委员会长老王', '医生苏珊']
+                },
+                {
+                    id: 'phase_shelter_route',
+                    title: '拼出迁徙路线',
+                    status: 'locked',
+                    goal: '把补给点、变异线索、战前坐标和地表风险整合成可执行计划',
+                    stakes: '路线不完整会让探索队在辐射兽、风暴或内部背叛中崩溃',
+                    entry: '玩家获得旧商场或地表探索机会',
+                    exit: '确认新避难所坐标是否可信，并准备迁徙或留守方案',
+                    recommendedActions: ['带阿杰核对全息投影里的坐标徽章', '在旧商场寻找净水设备和可用补给', '让苏珊分析玩家适应性变异的风险边界'],
+                    pressureTags: ['ration', 'storm'],
+                    spotlight: ['少年阿杰', '医生苏珊']
+                },
+                {
+                    id: 'phase_shelter_vote',
+                    title: '迁徙或留守的最终投票',
+                    status: 'locked',
+                    goal: '在保守派隔离恐慌和迁徙派希望之间争取足够支持',
+                    stakes: '站错队或证据不足会导致避难所分裂，幸存者带着不足物资各自逃亡',
+                    entry: '变异者争议或新坐标公开后，委员会必须表决',
+                    exit: '迁徙、留守改造、秘密撤离或失败分裂结局成立',
+                    recommendedActions: ['公开能证明新坐标可信的证据', '说服老王承认失踪探索队的真相', '决定是否保护苏珊放走过的变异者'],
+                    pressureTags: ['ration', 'panic', 'storm'],
+                    spotlight: ['避难所委员会', '委员会长老王', '医生苏珊']
+                }
+            ],
+            clueGraph: [
+                {
+                    id: 'clue_shelter_missing_team',
+                    title: '失踪探索队',
+                    subjectType: 'character',
+                    subjectName: '委员会长老王',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '老王曾私下派出一支年轻探索队寻找新家园，但队伍失踪后他隐瞒了失败路线和最后信号。',
+                    stages: [
+                        { level: 'hint', title: '老王回避旧路线', text: '老王谈到地表探索时会避开一条被涂黑的旧路线。', source: '委员会地图', locationId: 'hall', actions: ['询问老王为什么旧地图上有一条路线被涂黑'], check: { stat: '魅力', dc: 13 }, onFailure: '老王拒绝公开，但承认那条路线“已经害过人”。' },
+                        { level: 'evidence', title: '最后信号', text: '旧无线电记录里有一段探索队的最后求救信号。', source: '维修间无线电', locationId: 'workshop', actions: ['请阿杰修复无线电并回放失踪探索队的最后信号'], check: { stat: '智力', dc: 14 }, onFailure: '信号只恢复一半，但能听到风暴和金属门关闭声。' },
+                        { level: 'truth', title: '不是单纯失踪', text: '探索队曾抵达疑似新避难所入口，但被迫撤退或封锁在外。', source: '探索队残留记录', locationId: 'surface', actions: ['沿着最后信号坐标寻找探索队留下的标记'], check: { stat: '感知', dc: 16 }, onFailure: '玩家找到标记但惊动辐射兽，地表风暴时钟推进。' }
+                    ]
+                },
+                {
+                    id: 'clue_shelter_susan_mutant',
+                    title: '被放走的变异者',
+                    subjectType: 'character',
+                    subjectName: '医生苏珊',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '苏珊放走的变异者并非威胁，而是携带能证明适应性变异可控的关键样本。',
+                    stages: [
+                        { level: 'hint', title: '隔离记录缺页', text: '医疗站的隔离记录有一页被谨慎撕掉。', source: '医疗站档案', locationId: 'medbay', actions: ['询问苏珊为什么隔离记录少了一页'], check: { stat: '感知', dc: 12 }, onFailure: '苏珊转移话题，但提醒玩家“隔离不等于正义”。' },
+                        { level: 'evidence', title: '非致命变异样本', text: '缺页对应的病人并没有传染性，反而出现稳定适应迹象。', source: '血清样本库', locationId: 'medbay', actions: ['协助苏珊复查被删除的变异样本数据'], check: { stat: '智力', dc: 15 }, onFailure: '样本数据不完整，委员会保守派开始质疑苏珊。' }
+                    ]
+                },
+                {
+                    id: 'clue_shelter_aj_coordinate',
+                    title: '全息投影里的新坐标',
+                    subjectType: 'location',
+                    subjectName: '未知战前避难所',
+                    status: 'hinted',
+                    currentStage: 0,
+                    truth: '阿杰发现的坐标指向一座未启用的战前生态避难所，但入口需要旧商场深处的能源钥匙。',
+                    stages: [
+                        { level: 'hint', title: '陌生徽章', text: '阿杰的全息投影里闪过不属于第7区的战前避难所徽章。', source: '阿杰的投影仪', locationId: 'workshop', actions: ['让阿杰暂停全息投影并放大陌生徽章'], check: { stat: '感知', dc: 12 }, onFailure: '投影仪过热熄灭，但阿杰记下一组三位数编号。' },
+                        { level: 'evidence', title: '旧商场能源钥匙', text: '同样徽章出现在旧商场深处一台锁死的能源设备上。', source: '旧商场设备', locationId: 'market_old', actions: ['前往旧商场深处寻找同样徽章的能源设备'], check: { stat: '敏捷', dc: 14 }, onFailure: '设备位置确认了，但辐射兽痕迹迫使队伍后撤。' },
+                        { level: 'truth', title: '生态避难所入口', text: '坐标不是补给点，而是一个可能容纳众人的新家园入口。', source: '战前坐标记录', locationId: 'surface', actions: ['用能源钥匙验证阿杰坐标是否指向可进入的新避难所'], check: { stat: '体质', dc: 16 }, onFailure: '坐标可信，但风暴迫使玩家只带回部分证据。' }
+                    ]
+                }
+            ],
+            clocks: [
+                { id: 'clock_shelter_ration', name: '配给耗尽', tag: 'ration', value: 1, max: 6, visibility: 'known', description: '避难所食物和净水储备正在下降。', trigger: { at: 5, event: '委员会宣布配给减半，年轻人和病患开始出现冲突。' } },
+                { id: 'clock_shelter_panic', name: '隔离恐慌', tag: 'panic', value: 0, max: 6, visibility: 'hinted', description: '关于变异和传染的恐惧正在人群中扩散。', trigger: { at: 4, event: '保守派要求隔离玩家、苏珊和所有疑似变异者。' } },
+                { id: 'clock_shelter_storm', name: '地表风暴', tag: 'storm', value: 0, max: 6, visibility: 'hidden', description: '地表辐射风暴正在接近旧商场出口。', trigger: { at: 4, event: '地表风暴提前抵达，探索队必须立刻返程或就地避难。' } }
+            ],
+            counterStrategies: [
+                { id: 'counter_shelter_conservative_vote', title: '保守派隔离动议', actorName: '保守派委员', target: '玩家和苏珊的行动自由', status: 'active', visibility: 'hinted', progress: 20, exposure: 20, hint: '几名委员开始要求重新检查玩家和苏珊的医疗记录。', counterplay: ['公开玩家体检中无传染性的证据', '争取老王暂缓隔离投票', '用补给路线转移委员会焦点'] },
+                { id: 'counter_shelter_supply_lock', title: '物资仓库封锁', actorName: '避难所委员会', target: '探索队补给', status: 'active', visibility: 'known', progress: 10, exposure: 10, hint: '未经三名委员许可，探索队不能领取完整补给。', counterplay: ['用旧商场地图换取试探性补给', '承诺带回净水设备作为抵押', '让阿杰证明设备可修复'] }
+            ],
             flowGuide: {
                 openingMoves: [
                     '向老王说明你最近在地表看到的真实情况',
@@ -471,7 +739,10 @@ const WorldGenerator = {
 - currentLocation: 起始地点id（设为地点的第一个）
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
 - storyArcs: 1个主线剧情弧数组，每个含 { title, phase:"intro", synopsis(梗概), beats:[{condition(触发条件),action(触发事件)}]数组(4-6个节拍，按顺序推进，reveal=揭示真相/twist=剧情转折/climax=高潮/resolution=结局), currentBeat:0 }
+- storyPhases: 3个剧情阶段数组，每个含 { id, title, status("locked"/"active"/"completed"), goal, stakes, entry, exit, recommendedActions:[玩家可直接输入的行动], pressureTags:[关联压力标签], spotlight:[关键NPC或势力] }
+- clueGraph: 3-5条线索链数组，每个含 { id, title, subjectType("character"/"faction"/"location"/"mystery"/"item"), subjectName, status("hidden"/"hinted"/"suspected"/"confirmed"), currentStage:0, truth(DM私密真相), stages:[{level,title,text,source,locationId,actions:[可直接输入的调查行动],check:{stat,dc},onFailure}] }
 - clocks: 1-3个局势时钟数组，每个含 { id, name, tag, value:0, max:4-8, visibility("known"/"hinted"/"hidden"), description, trigger:{ at, event } }，代表会随玩家拖延或失败恶化的威胁
+- counterStrategies: 1-3个初始NPC/敌方反制数组，每个含 { id,title,actorName,target,status:"active",visibility("hidden"/"hinted"/"known"),progress,exposure,hint,counterplay:[玩家可反制行动] }
 - flowGuide: 剧本流程指南 { openingMoves:[开局3-5个玩家可直接输入的自然行动], sessionGoals:[本次游玩的阶段目标], stalledPrompts:[玩家卡住时的建议], failForward:[失败或部分成功时的推进型后果] }
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
@@ -538,6 +809,15 @@ const WorldGenerator = {
         scene.factions = Array.isArray(data.factions) ? data.factions : [];
         scene.intel = Array.isArray(data.intel) ? data.intel : [];
         scene.storyArcs = Array.isArray(data.storyArcs) ? data.storyArcs : [];
+        scene.storyPhases = Array.isArray(data.storyPhases)
+            ? data.storyPhases.map((p, idx) => WorldEngine.normalizeStoryPhase(p, idx)).filter(Boolean)
+            : [];
+        scene.clueGraph = Array.isArray(data.clueGraph)
+            ? data.clueGraph.map(c => WorldEngine.normalizeCluePath(c)).filter(Boolean)
+            : [];
+        scene.consequenceLedger = Array.isArray(data.consequenceLedger)
+            ? data.consequenceLedger.map(c => WorldEngine.normalizeConsequence(c)).filter(Boolean)
+            : [];
         scene.flowGuide = this._normalizeFlowGuide(data.flowGuide || this._buildDefaultFlowGuide(data));
         scene.clocks = Array.isArray(data.clocks) && data.clocks.length > 0
             ? data.clocks.map(c => WorldEngine.normalizeClock(c)).filter(Boolean)

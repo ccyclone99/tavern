@@ -135,6 +135,9 @@ const State = {
         }
         if (!scene.gameState) scene.gameState = 'playing';
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
+        if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
+        if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
+        if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
         if (!Array.isArray(scene.clocks)) scene.clocks = [];
         if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
         if (!scene.flowGuide || typeof scene.flowGuide !== 'object') {
@@ -242,6 +245,9 @@ const State = {
             playerMaxHp: 10,
             gameState: 'playing',
             storyArcs: [],
+            storyPhases: [],
+            clueGraph: [],
+            consequenceLedger: [],
             clocks: [],
             counterStrategies: [],
             flowGuide: { openingMoves: [], sessionGoals: [], stalledPrompts: [], failForward: [], completedMoves: [] },

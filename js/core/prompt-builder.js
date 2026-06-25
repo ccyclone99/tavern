@@ -308,6 +308,12 @@ const PromptBuilder = {
         const flowBlock = this.buildFlowGuideContext(scene);
         if (flowBlock) parts.push(flowBlock);
 
+        const phaseBlock = this.buildStoryPhaseContext(scene);
+        if (phaseBlock) parts.push(phaseBlock);
+
+        const clueBlock = this.buildClueGraphContext(scene);
+        if (clueBlock) parts.push(clueBlock);
+
         const pressureBlock = this.buildWorldPressureContext(scene);
         if (pressureBlock) parts.push(pressureBlock);
 
@@ -385,6 +391,40 @@ const PromptBuilder = {
         ].filter(Boolean);
         if (blocks.length === 0) return '';
         return `【剧本流程指南】\n${blocks.join('\n')}\n\n规则：\n- 用这些内容保持节奏，但不要替玩家做选择。\n- 建议应包装成 NPC 提问、环境线索或可选行动。\n- 玩家失败或部分成功时，参考失败推进方向制造代价、新线索、时钟推进或关系变化。\n- 不要直接泄露未解锁的 NPC 秘密或剧情真相。`;
+    },
+
+    buildStoryPhaseContext(scene) {
+        const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases : [];
+        if (phases.length === 0) return '';
+        const active = typeof WorldEngine !== 'undefined' && WorldEngine.getActiveStoryPhase
+            ? WorldEngine.getActiveStoryPhase(scene)
+            : (phases.find(p => p.status === 'active') || phases.find(p => p.status !== 'completed') || phases[0]);
+        const phaseLines = phases.slice(0, 6).map(p => {
+            const status = p === active ? '当前' : (p.status || 'locked');
+            const actions = Array.isArray(p.recommendedActions) && p.recommendedActions.length > 0
+                ? `\n  可推动行动：${p.recommendedActions.slice(0, 3).join('；')}`
+                : '';
+            return `- [${status}] ${p.title || '阶段'}：目标=${p.goal || '—'}；赌注=${p.stakes || '—'}${actions}`;
+        }).join('\n');
+        return `【剧情阶段】\n${phaseLines}\n\n阶段规则：\n- 优先围绕当前阶段的目标和赌注组织场景。\n- 推荐行动只是推动方向，不替玩家选择。\n- 当阶段目标实际达成，可用 storyPhaseUpdate 激活下一阶段，也可配合 storyArcUpdate 推进主线；不要突然跳过中段。\n- 赌注要通过 NPC 反应、环境变化、时钟和代价体现。`;
+    },
+
+    buildClueGraphContext(scene) {
+        const clues = Array.isArray(scene?.clueGraph) ? scene.clueGraph.filter(c => c && c.title) : [];
+        if (clues.length === 0) return '';
+        const lines = clues.slice(0, 8).map(clue => {
+            const stages = Array.isArray(clue.stages) ? clue.stages : [];
+            const idx = Math.max(0, Math.min(Number(clue.currentStage || 0), Math.max(0, stages.length - 1)));
+            const stage = stages[idx] || {};
+            const actions = Array.isArray(stage.actions) && stage.actions.length > 0
+                ? `\n  下一步可追查：${stage.actions.slice(0, 3).join('；')}`
+                : '';
+            const evidence = Array.isArray(clue.evidence) && clue.evidence.length > 0
+                ? `\n  已有证据：${clue.evidence.slice(-3).join('；')}`
+                : '';
+            return `- ${clue.title}（${clue.status || 'hinted'}，阶段${idx + 1}/${Math.max(1, stages.length)}）\n  当前可见线索：${stage.text || clue.title}\n  来源/地点：${stage.source || '未知'}${stage.locationId ? ` / ${stage.locationId}` : ''}\n  DM私密真相：${clue.truth || '—'}${actions}${evidence}${stage.onFailure ? `\n  失败推进：${stage.onFailure}` : ''}`;
+        }).join('\n');
+        return `【线索图 · 私密结构】\n${lines}\n\n线索规则：\n- DM私密真相只能用于组织剧情，不能直接说给玩家听。\n- 玩家通过观察、询问、交易、潜入、检定、物证或 NPC 承认推进线索。\n- 当玩家取得新线索时，同时使用 knowledgeAdd 记录玩家已知信息；如推进了线索链，使用 clueUpdate 更新 status/currentStage/evidenceAdd。\n- 即使失败，也应给出片面信息、代价或新问题，而不是让调查停住。`;
     },
 
     /**
@@ -593,6 +633,10 @@ const PromptBuilder = {
 
         // 计策上下文
         systemParts.push(this.buildStrategyProtocol(scene));
+        const phaseBlock = this.buildStoryPhaseContext(scene);
+        if (phaseBlock) systemParts.push(phaseBlock);
+        const clueBlock = this.buildClueGraphContext(scene);
+        if (clueBlock) systemParts.push(clueBlock);
         const pressureBlock = this.buildWorldPressureContext(scene);
         if (pressureBlock) systemParts.push(pressureBlock);
 

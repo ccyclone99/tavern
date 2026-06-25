@@ -165,6 +165,8 @@ const StrategyManager = {
         let locAdded = false;
         let clockChanged = false;
         let storyChanged = false;
+        let phaseChanged = false;
+        let clueChanged = false;
         let counterChanged = false;
         let agendaChanged = false;
 
@@ -252,6 +254,14 @@ const StrategyManager = {
 
         if (Array.isArray(update.storyArcUpdate) && typeof WorldEngine !== 'undefined') {
             storyChanged = WorldEngine.applyStoryArcUpdate(scene, update.storyArcUpdate);
+        }
+
+        if (Array.isArray(update.storyPhaseUpdate) && typeof WorldEngine !== 'undefined') {
+            phaseChanged = WorldEngine.applyStoryPhaseUpdate(scene, update.storyPhaseUpdate);
+        }
+
+        if (Array.isArray(update.clueUpdate) && typeof WorldEngine !== 'undefined') {
+            clueChanged = WorldEngine.applyClueUpdate(scene, update.clueUpdate);
         }
 
         if (Array.isArray(update.counterStrategyUpdate) && typeof WorldEngine !== 'undefined') {
@@ -449,6 +459,6 @@ const StrategyManager = {
         if (discoveryChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || counterChanged || agendaChanged) SidebarRight.markTabNew('situation');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || counterChanged || agendaChanged) SidebarRight.markTabNew('situation');
     }
 };

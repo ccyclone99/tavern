@@ -89,6 +89,9 @@ const SceneManager = {
                         factions: JSON.parse(JSON.stringify(scene.factions || [])),
                         conflictSeeds: JSON.parse(JSON.stringify(scene.conflictSeeds || [])),
                         storyArcs: JSON.parse(JSON.stringify(scene.storyArcs || [])),
+                        storyPhases: JSON.parse(JSON.stringify(scene.storyPhases || [])),
+                        clueGraph: JSON.parse(JSON.stringify(scene.clueGraph || [])),
+                        consequenceLedger: JSON.parse(JSON.stringify(scene.consequenceLedger || [])),
                         clocks: JSON.parse(JSON.stringify(scene.clocks || [])),
                         counterStrategies: JSON.parse(JSON.stringify(scene.counterStrategies || [])),
                         flowGuide: JSON.parse(JSON.stringify(scene.flowGuide || {})),
@@ -182,8 +185,9 @@ const SceneManager = {
         if (s.lorebookEntries) scene.lorebookEntries = JSON.parse(JSON.stringify(s.lorebookEntries));
         // 完整字段恢复（新快照）
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
-         'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs', 'clocks',
-         'counterStrategies', 'flowGuide', 'currentSituation', 'pendingAction', 'pendingCheck', 'summary'].forEach(f => {
+         'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs',
+         'storyPhases', 'clueGraph', 'consequenceLedger', 'clocks', 'counterStrategies', 'flowGuide',
+         'currentSituation', 'pendingAction', 'pendingCheck', 'summary'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',

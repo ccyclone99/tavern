@@ -153,6 +153,17 @@ const SidebarRight = {
         const locationDesc = situation.location?.description || '';
         const quest = situation.activeQuest;
         const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
+        const phase = situation.storyPhase;
+        const phaseHtml = phase ? `
+            <div class="situation-section">
+                <h4>当前阶段</h4>
+                <div class="situation-main-goal">
+                    <strong>${Renderer.escapeHtml(phase.title || '剧情阶段')}</strong>
+                    ${phase.goal ? `<span>${Renderer.escapeHtml(phase.goal)}</span>` : ''}
+                    ${phase.stakes ? `<p class="situation-stakes">${Renderer.escapeHtml(phase.stakes)}</p>` : ''}
+                </div>
+            </div>
+        ` : '';
         const questHtml = quest ? `
             <div class="situation-section">
                 <h4>主线目标</h4>
@@ -198,6 +209,22 @@ const SidebarRight = {
         const cluesHtml = situation.availableClues.length > 0
             ? situation.availableClues.map(c => `<span>${Renderer.escapeHtml(c.title || c.text || '线索')}</span>`).join('')
             : '<span>暂无可用线索</span>';
+        const unknownsHtml = (situation.knownUnknowns || []).length > 0
+            ? situation.knownUnknowns.slice(0, 3).map(item => {
+                const actions = (item.actions || []).slice(0, 2)
+                    .map(a => `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(a)}" aria-label="追查线索：${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`)
+                    .join('');
+                return `<div class="situation-unknown">
+                    <div class="situation-row">
+                        <span>${Renderer.escapeHtml(item.title || '关键未知')}</span>
+                        <strong>${Renderer.escapeHtml(item.level || item.status || '线索')}</strong>
+                    </div>
+                    <p>${Renderer.escapeHtml(item.text || '仍需调查')}</p>
+                    ${item.source ? `<small>来源：${Renderer.escapeHtml(item.source)}</small>` : ''}
+                    ${actions ? `<div class="situation-actions">${actions}</div>` : ''}
+                </div>`;
+            }).join('')
+            : '<p class="placeholder">暂无明确关键未知</p>';
         const actionsHtml = situation.recommendedActions.map(a => `<button class="situation-action" type="button" data-action="${Renderer.escapeAttr(a)}" aria-label="采用行动：${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`).join('');
 
         this.situationEl.innerHTML = `
@@ -207,6 +234,7 @@ const SidebarRight = {
                 ${locationDesc ? `<p>${Renderer.escapeHtml(locationDesc)}</p>` : ''}
                 <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
             </div>
+            ${phaseHtml}
             ${questHtml}
             <div class="situation-section">
                 <h4>局势时钟</h4>
@@ -224,6 +252,10 @@ const SidebarRight = {
             <div class="situation-section">
                 <h4>可用线索</h4>
                 <div class="situation-tags">${cluesHtml}</div>
+            </div>
+            <div class="situation-section">
+                <h4>关键未知</h4>
+                ${unknownsHtml}
             </div>
             <div class="situation-section">
                 <h4>可选行动</h4>

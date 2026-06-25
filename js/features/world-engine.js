@@ -10,6 +10,9 @@ const WorldEngine = {
         if (!scene) return scene;
         if (!Array.isArray(scene.clocks)) scene.clocks = [];
         if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
+        if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
+        if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
+        if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
         scene.flowGuide = this.normalizeFlowGuide(scene.flowGuide);
         if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
             scene.currentSituation = { recentRisks: [], recommendedActions: [] };
@@ -20,6 +23,9 @@ const WorldEngine = {
 
         scene.clocks = scene.clocks.map(c => this.normalizeClock(c)).filter(Boolean).slice(0, 12);
         scene.counterStrategies = scene.counterStrategies.map(c => this.normalizeCounterStrategy(c)).filter(Boolean).slice(0, 20);
+        scene.storyPhases = scene.storyPhases.map((p, idx) => this.normalizeStoryPhase(p, idx)).filter(Boolean).slice(0, 12);
+        scene.clueGraph = scene.clueGraph.map(c => this.normalizeCluePath(c)).filter(Boolean).slice(0, 40);
+        scene.consequenceLedger = scene.consequenceLedger.map(c => this.normalizeConsequence(c)).filter(Boolean).slice(-60);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
     },
@@ -35,6 +41,83 @@ const WorldEngine = {
             stalledPrompts: list('stalledPrompts', 8),
             failForward: list('failForward', 8, 220),
             completedMoves: list('completedMoves', 20)
+        };
+    },
+
+    normalizeStoryPhase(phase = {}, index = 0) {
+        if (!phase || typeof phase !== 'object') return null;
+        const statuses = ['locked', 'active', 'completed'];
+        const status = statuses.includes(phase.status) ? phase.status : (index === 0 ? 'active' : 'locked');
+        const list = (key, limit, itemLimit = 160) => (
+            Array.isArray(phase[key]) ? phase[key] : []
+        ).map(s => String(s || '').trim()).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
+        return {
+            id: String(phase.id || 'phase_' + index).slice(0, 80),
+            title: String(phase.title || '剧情阶段').slice(0, 80),
+            status,
+            goal: String(phase.goal || '').slice(0, 260),
+            stakes: String(phase.stakes || '').slice(0, 260),
+            entry: String(phase.entry || '').slice(0, 220),
+            exit: String(phase.exit || '').slice(0, 220),
+            recommendedActions: list('recommendedActions', 8),
+            pressureTags: list('pressureTags', 8, 60),
+            spotlight: list('spotlight', 8, 80),
+            updatedAt: typeof phase.updatedAt === 'number' ? phase.updatedAt : Date.now()
+        };
+    },
+
+    normalizeCluePath(path = {}) {
+        if (!path || typeof path !== 'object') return null;
+        const statuses = ['hidden', 'hinted', 'suspected', 'confirmed'];
+        const stages = (Array.isArray(path.stages) ? path.stages : []).map((stage, idx) => this.normalizeClueStage(stage, idx)).filter(Boolean).slice(0, 8);
+        const maxStage = Math.max(0, stages.length - 1);
+        return {
+            id: String(path.id || 'clue_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
+            title: String(path.title || '未解之谜').slice(0, 100),
+            subjectType: String(path.subjectType || 'mystery').slice(0, 40),
+            subjectName: String(path.subjectName || '').slice(0, 100),
+            status: statuses.includes(path.status) ? path.status : 'hinted',
+            currentStage: this._clamp(Number(path.currentStage || 0), 0, maxStage),
+            truth: String(path.truth || '').slice(0, 500),
+            stages,
+            evidence: Array.isArray(path.evidence) ? path.evidence.map(String).slice(0, 20) : [],
+            lastReason: String(path.lastReason || '').slice(0, 240),
+            updatedAt: typeof path.updatedAt === 'number' ? path.updatedAt : Date.now()
+        };
+    },
+
+    normalizeClueStage(stage = {}, index = 0) {
+        if (!stage || typeof stage !== 'object') return null;
+        const check = stage.check && typeof stage.check === 'object'
+            ? {
+                stat: String(stage.check.stat || '').slice(0, 20),
+                dc: this._clamp(Number(stage.check.dc || 12), 5, 30)
+            }
+            : null;
+        return {
+            id: String(stage.id || 'stage_' + index).slice(0, 80),
+            level: String(stage.level || 'hint').slice(0, 40),
+            title: String(stage.title || '线索阶段').slice(0, 100),
+            text: String(stage.text || '').slice(0, 320),
+            source: String(stage.source || '').slice(0, 120),
+            locationId: String(stage.locationId || '').slice(0, 80),
+            actions: Array.isArray(stage.actions) ? stage.actions.map(String).filter(Boolean).slice(0, 5) : [],
+            requires: Array.isArray(stage.requires) ? stage.requires.map(String).filter(Boolean).slice(0, 6) : [],
+            check,
+            onFailure: String(stage.onFailure || '').slice(0, 260)
+        };
+    },
+
+    normalizeConsequence(data = {}) {
+        if (!data || typeof data !== 'object') return null;
+        return {
+            id: String(data.id || 'cons_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
+            title: String(data.title || '后果').slice(0, 120),
+            cause: String(data.cause || '').slice(0, 260),
+            effect: String(data.effect || '').slice(0, 260),
+            severity: String(data.severity || 'low').slice(0, 40),
+            turn: Number.isFinite(Number(data.turn)) ? Number(data.turn) : 0,
+            createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now()
         };
     },
 
@@ -217,6 +300,45 @@ const WorldEngine = {
         return changed;
     },
 
+    applyStoryPhaseUpdate(scene, updates) {
+        if (!scene || !Array.isArray(updates)) return false;
+        this.normalizeScene(scene);
+        const statuses = ['locked', 'active', 'completed'];
+        let changed = false;
+        updates.slice(0, 8).forEach(update => {
+            if (!update || typeof update !== 'object') return;
+            const id = update.id ? String(update.id) : '';
+            const title = update.title ? String(update.title) : '';
+            let phase = scene.storyPhases.find(p => (id && p.id === id) || (title && p.title === title));
+            if (!phase && (id || title)) {
+                phase = this.normalizeStoryPhase({
+                    id: id || undefined,
+                    title: title || '新增剧情阶段',
+                    status: update.status || 'locked'
+                }, scene.storyPhases.length);
+                if (!phase) return;
+                scene.storyPhases.push(phase);
+            }
+            if (!phase) return;
+            if (update.activate === true) {
+                scene.storyPhases.forEach(p => {
+                    if (p.id !== phase.id && p.status === 'active') p.status = 'completed';
+                });
+                phase.status = 'active';
+            }
+            if (update.status !== undefined && statuses.includes(update.status)) phase.status = update.status;
+            ['goal', 'stakes', 'entry', 'exit'].forEach(key => {
+                if (update[key] !== undefined) phase[key] = String(update[key]).slice(0, 260);
+            });
+            if (Array.isArray(update.recommendedActions)) phase.recommendedActions = update.recommendedActions.map(String).slice(0, 8);
+            if (Array.isArray(update.pressureTags)) phase.pressureTags = update.pressureTags.map(String).slice(0, 8);
+            if (Array.isArray(update.spotlight)) phase.spotlight = update.spotlight.map(String).slice(0, 8);
+            phase.updatedAt = Date.now();
+            changed = true;
+        });
+        return changed;
+    },
+
     applyCounterStrategyUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -242,6 +364,58 @@ const WorldEngine = {
             if (update.exposureDelta !== undefined) counter.exposure = this._clamp(Number(counter.exposure || 0) + Number(update.exposureDelta || 0), 0, 100);
             if (Array.isArray(update.counterplay)) counter.counterplay = update.counterplay.map(String).slice(0, 6);
             counter.updatedAt = Date.now();
+            changed = true;
+        });
+        return changed;
+    },
+
+    applyClueUpdate(scene, updates) {
+        if (!scene || !Array.isArray(updates)) return false;
+        this.normalizeScene(scene);
+        const statuses = ['hidden', 'hinted', 'suspected', 'confirmed'];
+        let changed = false;
+        updates.slice(0, 12).forEach(update => {
+            if (!update || typeof update !== 'object') return;
+            const id = update.id ? String(update.id) : '';
+            const title = update.title ? String(update.title) : '';
+            let clue = scene.clueGraph.find(c => (id && c.id === id) || (title && c.title === title));
+            if (!clue && (id || title)) {
+                clue = this.normalizeCluePath({
+                    id: id || undefined,
+                    title: title || '新增线索链',
+                    status: update.status || 'hinted',
+                    stages: []
+                });
+                if (!clue) return;
+                scene.clueGraph.push(clue);
+                changed = true;
+            }
+            if (!clue) return;
+
+            if (update.status !== undefined && statuses.includes(update.status)) clue.status = update.status;
+            if (update.currentStage !== undefined) {
+                const maxStage = Math.max(0, (clue.stages || []).length - 1);
+                clue.currentStage = this._clamp(Number(update.currentStage), 0, maxStage);
+            } else if (update.advance === true || Number(update.advanceBy || 0) !== 0) {
+                const step = update.advance === true ? 1 : Number(update.advanceBy || 0);
+                const maxStage = Math.max(0, (clue.stages || []).length - 1);
+                clue.currentStage = this._clamp(Number(clue.currentStage || 0) + step, 0, maxStage);
+            }
+            ['subjectType', 'subjectName', 'truth', 'lastReason'].forEach(key => {
+                if (update[key] !== undefined) clue[key] = String(update[key]).slice(0, key === 'truth' ? 500 : 240);
+            });
+            if (Array.isArray(update.stages)) {
+                clue.stages = update.stages.map((stage, idx) => this.normalizeClueStage(stage, idx)).filter(Boolean).slice(0, 8);
+                clue.currentStage = this._clamp(Number(clue.currentStage || 0), 0, Math.max(0, clue.stages.length - 1));
+            }
+            if (update.evidenceAdd !== undefined) {
+                const items = Array.isArray(update.evidenceAdd) ? update.evidenceAdd : [update.evidenceAdd];
+                items.map(String).filter(Boolean).forEach(item => {
+                    if (!clue.evidence.includes(item)) clue.evidence.push(item);
+                });
+                clue.evidence = clue.evidence.slice(-20);
+            }
+            clue.updatedAt = Date.now();
             changed = true;
         });
         return changed;
@@ -468,18 +642,26 @@ const WorldEngine = {
             ...counterStrategies.slice(-3).map(c => c.hint || c.title).filter(Boolean)
         ].slice(-6);
         const availableClues = (scene.knowledge?.discoveries || []).slice(-5);
-        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure });
+        const storyPhase = this.getActiveStoryPhase(scene);
+        const knownUnknowns = this.getKnownUnknowns(scene);
+        const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
+        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions };
+        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns };
     },
 
     _buildRecommendedActions(scene, data) {
         const actions = [];
         this._buildFlowActions(scene).forEach(a => actions.push(a));
+        if (data.storyPhase?.recommendedActions?.length) {
+            data.storyPhase.recommendedActions.slice(0, 2).forEach(a => actions.push(a));
+        }
         if (data.activeQuest) {
             const objective = (data.activeQuest.objectives || []).find(o => !o.completed);
             if (objective) actions.push(`围绕「${objective.text}」采取下一步`);
         }
+        const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
+        if (unknown) actions.push(unknown.actions[0]);
         const arcAction = this._buildStoryArcAction(scene);
         if (arcAction) actions.push(arcAction);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
@@ -490,6 +672,41 @@ const WorldEngine = {
         if (clue) actions.push(`利用线索：${clue.title || clue.text}`);
         if (actions.length === 0) actions.push('观察当前地点', '询问在场 NPC', '提出一个具体行动');
         return [...new Set(actions)].slice(0, 4);
+    },
+
+    getActiveStoryPhase(scene) {
+        const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases : [];
+        if (phases.length === 0) return null;
+        return phases.find(p => p.status === 'active')
+            || phases.find(p => p.status !== 'completed')
+            || phases[phases.length - 1]
+            || null;
+    },
+
+    getKnownUnknowns(scene) {
+        const paths = Array.isArray(scene?.clueGraph) ? scene.clueGraph : [];
+        return paths
+            .filter(path => path && path.status !== 'hidden' && path.status !== 'confirmed')
+            .map(path => {
+                const stages = Array.isArray(path.stages) ? path.stages : [];
+                const idx = this._clamp(Number(path.currentStage || 0), 0, Math.max(0, stages.length - 1));
+                const stage = stages[idx] || {};
+                return {
+                    id: path.id,
+                    title: path.title,
+                    status: path.status,
+                    subjectType: path.subjectType,
+                    subjectName: path.subjectName,
+                    level: stage.level || 'hint',
+                    text: stage.text || path.title,
+                    source: stage.source || '',
+                    locationId: stage.locationId || '',
+                    actions: Array.isArray(stage.actions) ? stage.actions.slice(0, 3) : [],
+                    onFailure: stage.onFailure || '',
+                    evidenceCount: Array.isArray(path.evidence) ? path.evidence.length : 0
+                };
+            })
+            .slice(0, 6);
     },
 
     _buildFlowActions(scene) {
@@ -549,7 +766,9 @@ const WorldEngine = {
         const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
         const hiddenPressure = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
         const counterStrategies = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
-        return { activeQuest, clocks, counterStrategies, hiddenPressure };
+        const storyPhase = this.getActiveStoryPhase(scene);
+        const knownUnknowns = this.getKnownUnknowns(scene);
+        return { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns };
     },
 
     _normalizeFlowText(text) {
@@ -605,6 +824,7 @@ const WorldEngine = {
         scene.currentSituation.recentRisks = (scene.currentSituation.recentRisks || []).slice(-12);
         scene.currentSituation.recommendedActions = (scene.currentSituation.recommendedActions || []).slice(-8);
         scene.counterStrategies = (scene.counterStrategies || []).slice(-30);
+        scene.consequenceLedger = (scene.consequenceLedger || []).slice(-60);
     },
 
     _clamp(value, min, max) {

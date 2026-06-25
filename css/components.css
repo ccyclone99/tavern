@@ -1842,13 +1842,26 @@
     font-size: 13px;
 }
 
+.situation-stakes {
+    border-left: 2px solid var(--gold-dim);
+    padding-left: 8px;
+}
+
 .situation-clock,
-.situation-counter {
+.situation-counter,
+.situation-unknown {
     border: 1px solid var(--border);
     background: var(--bg-input);
     border-radius: 7px;
     padding: 9px;
     margin-top: 8px;
+}
+
+.situation-unknown small {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 11px;
 }
 
 .situation-row {
@@ -1948,6 +1961,12 @@
 .situation-action:hover {
     border-color: var(--gold-dim);
     color: var(--gold);
+}
+
+.situation-action-compact {
+    min-height: 28px;
+    padding: 5px 7px;
+    font-size: 11px;
 }
 
 .st-exposure {
