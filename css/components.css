@@ -524,7 +524,7 @@
 
 .knowledge-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
     margin-bottom: 4px;
 }
@@ -539,6 +539,15 @@
     font-size: 11px;
     text-align: center;
     white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.knowledge-pill:hover,
+.knowledge-pill.active {
+    border-color: rgba(59,130,246,0.45);
+    background: rgba(59,130,246,0.1);
+    color: #93c5fd;
 }
 
 .knowledge-card {
@@ -1562,6 +1571,13 @@
     word-break: break-word;
 }
 
+.pending-action-note {
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
 .pending-action-type {
     flex-shrink: 0;
     padding: 2px 7px;
@@ -1621,6 +1637,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+}
+
+.pending-action-factor-row {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    align-items: start;
+    gap: 6px;
     margin-top: 8px;
 }
 
@@ -1630,6 +1653,23 @@
     background: var(--bg-card);
     color: var(--text-dim);
     font-size: 10px;
+}
+
+.pending-action-factor-good {
+    color: var(--green);
+    border: 1px solid rgba(34,197,94,0.28);
+    background: rgba(34,197,94,0.08);
+}
+
+.pending-action-factor-bad {
+    color: var(--red);
+    border: 1px solid rgba(239,68,68,0.28);
+    background: rgba(239,68,68,0.08);
+}
+
+.pending-action-factor-neutral {
+    color: var(--text-muted);
+    border: 1px solid var(--border);
 }
 
 .pending-action-risks {
@@ -1725,7 +1765,9 @@
 
 .pending-action-factor-label {
     color: var(--text-muted);
-    border-style: dashed;
+    font-size: 10px;
+    line-height: 1.7;
+    white-space: nowrap;
 }
 
 .pending-action-factor-available {
@@ -1900,6 +1942,7 @@
     font-size: 12px;
     cursor: pointer;
     text-align: left;
+    min-height: 32px;
 }
 
 .situation-action:hover {

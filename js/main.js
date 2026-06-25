@@ -385,16 +385,13 @@ const WorldPicker = {
         }
     });
 
-    // 任务快捷按钮：直接跳到任务 tab + 展开右侧栏
+    // 局势快捷按钮：直接跳到局势 tab + 展开右侧栏
     const quickQuestBtn = document.getElementById('quickQuestBtn');
     if (quickQuestBtn) {
-        quickQuestBtn.innerHTML = Icons.get('quest');
+        quickQuestBtn.innerHTML = Icons.get('situation');
         quickQuestBtn.onclick = () => {
             if (typeof SidebarRight !== 'undefined') {
-                if (window.innerWidth <= 900 && !document.getElementById('rightSidebar').classList.contains('open')) {
-                    SidebarRight.toggle();
-                }
-                SidebarRight.switchTab('quests');
+                SidebarRight.openTab('situation');
             }
         };
     }

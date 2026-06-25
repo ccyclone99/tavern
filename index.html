@@ -54,7 +54,7 @@
             <span class="room-status" id="roomStatus"></span>
         </div>
         <div class="top-bar-right">
-            <button class="icon-btn" id="quickQuestBtn" title="任务面板">📋</button>
+            <button class="icon-btn" id="quickQuestBtn" title="当前局势" aria-label="当前局势">📋</button>
             <button class="icon-btn" id="toggleRightSidebar" title="右侧面板">📖</button>
             <button class="icon-btn" id="settingsBtn" title="设置">⚙️</button>
             <a href="../../archive/deepseek-chat/index.html" class="icon-btn" title="返回对话模式">💬</a>
@@ -78,6 +78,10 @@
 
         <!-- 中间：聊天区 -->
         <main class="chat-area" id="chatArea">
+            <button class="status-summary hidden" id="statusSummary" type="button" aria-label="打开当前局势">
+                <span class="status-summary-main">暂无局势</span>
+                <span class="status-summary-sub">选择世界后显示当前位置、目标和风险</span>
+            </button>
             <div class="chat-messages" id="chatMessages">
                 <div class="empty-state" id="emptyState">
                     <div class="empty-icon">🍷</div>
@@ -102,12 +106,18 @@
                         <span>你：</span><input type="text" id="playerNameInput" value="旅人" placeholder="你的名字">
                     </div>
                     <div class="input-toolbar">
-                        <button class="toolbar-btn" id="snapshotBtn" title="存档">💾</button>
-                        <button class="toolbar-btn" id="loadSnapshotBtn" title="读档">📂</button>
-                        <button class="toolbar-btn" id="oocBtn" title="OOC模式">/ooc</button>
-                        <button class="toolbar-btn" id="actionBtn" title="行动预览">/行动</button>
-                        <button class="toolbar-btn" id="strategyBtn" title="计策模式">/计策</button>
+                        <div class="input-mode-tabs" role="tablist" aria-label="输入模式">
+                            <button class="toolbar-btn active" id="talkBtn" data-mode="talk" role="tab" aria-selected="true" title="对话模式">对话</button>
+                            <button class="toolbar-btn" id="actionBtn" data-mode="action" role="tab" aria-selected="false" title="行动预览">行动</button>
+                            <button class="toolbar-btn" id="strategyBtn" data-mode="strategy" role="tab" aria-selected="false" title="计策模式">计策</button>
+                            <button class="toolbar-btn" id="oocBtn" data-mode="ooc" role="tab" aria-selected="false" title="OOC模式">OOC</button>
+                        </div>
+                        <div class="input-tool-actions" aria-label="存档操作">
+                            <button class="toolbar-btn icon-mode-btn" id="snapshotBtn" title="存档" aria-label="存档">💾</button>
+                            <button class="toolbar-btn icon-mode-btn" id="loadSnapshotBtn" title="读档" aria-label="读档">📂</button>
+                        </div>
                     </div>
+                    <div class="input-mode-hint" id="inputModeHint">普通对话会进入角色扮演上下文。</div>
                     <div class="pending-action-preview hidden" id="pendingActionPreview"></div>
                     <div class="pending-check-preview hidden" id="pendingCheckPreview"></div>
                     <div class="input-box">
@@ -121,17 +131,17 @@
 
         <!-- 右侧边栏：世界书 / 角色详情 -->
         <aside class="sidebar sidebar-right" id="rightSidebar">
-            <div class="sidebar-tabs">
-                <button class="tab-btn" data-tab="situation">局势</button>
-                <button class="tab-btn" data-tab="strategies">计策</button>
-                <button class="tab-btn" data-tab="knowledge">线索</button>
-                <button class="tab-btn" data-tab="lorebook">世界书</button>
-                <button class="tab-btn" data-tab="map">地图</button>
-                <button class="tab-btn active" data-tab="quests">任务</button>
-                <button class="tab-btn" data-tab="inventory">背包</button>
-                <button class="tab-btn" data-tab="detail">详情</button>
+            <div class="sidebar-tabs" role="tablist" aria-label="右侧面板">
+                <button class="tab-btn active" data-tab="situation" role="tab" aria-selected="true">局势</button>
+                <button class="tab-btn" data-tab="quests" role="tab" aria-selected="false">任务</button>
+                <button class="tab-btn" data-tab="knowledge" role="tab" aria-selected="false">线索</button>
+                <button class="tab-btn" data-tab="strategies" role="tab" aria-selected="false">计策</button>
+                <button class="tab-btn" data-tab="inventory" role="tab" aria-selected="false">背包</button>
+                <button class="tab-btn" data-tab="map" role="tab" aria-selected="false">地图</button>
+                <button class="tab-btn" data-tab="detail" role="tab" aria-selected="false">详情</button>
+                <button class="tab-btn" data-tab="lorebook" role="tab" aria-selected="false">世界书</button>
             </div>
-            <div class="tab-content hidden" id="tabSituation">
+            <div class="tab-content" id="tabSituation">
                 <div class="lorebook-header">
                     <h3>当前局势</h3>
                 </div>
@@ -170,7 +180,7 @@
             <div class="tab-content hidden" id="tabMap">
                 <!-- MapView 动态渲染 -->
             </div>
-            <div class="tab-content" id="tabQuests">
+            <div class="tab-content hidden" id="tabQuests">
                 <div class="quest-list" id="questList">
                     <!-- QuestTracker 动态渲染 -->
                 </div>

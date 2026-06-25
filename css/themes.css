@@ -49,6 +49,11 @@
 .room-status {
     font-size: 12px;
     color: var(--text-muted);
+    display: inline-block;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ===== 标签页 ===== */
@@ -57,13 +62,16 @@
     gap: 4px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .tab-btn {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: 52px;
     padding: 6px 0;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-muted);
     background: transparent;
     transition: color var(--transition-fast), background var(--transition-fast);
