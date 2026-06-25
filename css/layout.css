@@ -172,9 +172,9 @@
 .input-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .input-mode-tabs,
@@ -189,6 +189,10 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--bg-input);
+}
+
+.input-mode-tabs[hidden] {
+    display: none;
 }
 
 .input-mode-tabs .toolbar-btn {
@@ -342,8 +346,8 @@
     .chat-messages { padding: 10px; gap: 10px; }
     .chat-bottom { flex-direction: column; }
     .input-toolbar {
-        align-items: stretch;
-        flex-direction: column;
+        align-items: flex-end;
+        flex-direction: row;
     }
     .input-mode-tabs {
         overflow-x: auto;

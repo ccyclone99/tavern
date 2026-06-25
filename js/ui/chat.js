@@ -170,7 +170,7 @@ const ChatUI = {
             action: {
                 btn: this.actionBtn,
                 placeholder: '描述一个明确行动，例如：我想套出他隐瞒的事...',
-                hint: '行动模式会先生成风险预览；确认前不会推进剧情。',
+                hint: '高风险行动会先生成风险预览；确认前不会推进剧情。',
                 send: '预览'
             },
             strategy: {
