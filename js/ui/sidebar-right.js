@@ -3,6 +3,7 @@
  */
 const SidebarRight = {
     _tabBadges: {},  // { tabName: count } 未读角标计数
+    _knowledgeFilter: 'all',
 
     init() {
         this.el = document.getElementById('rightSidebar');
@@ -34,6 +35,7 @@ const SidebarRight = {
 
         State.on('characterSelected', () => this.renderDetail());
         State.on('sceneChanged', () => {
+            this.switchTab('situation');
             this.renderStrategies();
             this.renderSituation();
             this.renderKnowledge();
@@ -66,7 +68,11 @@ const SidebarRight = {
     },
 
     switchTab(tab) {
-        this.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        this.tabBtns.forEach(b => {
+            const active = b.dataset.tab === tab;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
         Object.values(this.tabContents).forEach(c => c.classList.add('hidden'));
         if (this.tabContents[tab]) this.tabContents[tab].classList.remove('hidden');
         if (tab === 'map') MapView.render();
@@ -77,6 +83,13 @@ const SidebarRight = {
         if (tab === 'knowledge') this.renderKnowledge();
         // 玩家查看该 tab，清除角标
         this.clearTabBadge(tab);
+    },
+
+    openTab(tab) {
+        if (window.innerWidth <= 900 && !this.el.classList.contains('open')) {
+            this.toggle();
+        }
+        this.switchTab(tab);
     },
 
     /** 标记某 tab 有新内容（AI 驱动/被动获得时调用） */
@@ -123,6 +136,7 @@ const SidebarRight = {
         const scene = State.scene;
         if (!scene) {
             this.situationEl.innerHTML = '<p class="placeholder">暂无世界</p>';
+            this.renderStatusSummary(null);
             return;
         }
         const situation = typeof WorldEngine !== 'undefined'
@@ -130,8 +144,10 @@ const SidebarRight = {
             : null;
         if (!situation) {
             this.situationEl.innerHTML = '<p class="placeholder">暂无局势信息</p>';
+            this.renderStatusSummary(null);
             return;
         }
+        this.renderStatusSummary(situation);
 
         const locationName = situation.location?.name || '未知地点';
         const locationDesc = situation.location?.description || '';
@@ -182,7 +198,7 @@ const SidebarRight = {
         const cluesHtml = situation.availableClues.length > 0
             ? situation.availableClues.map(c => `<span>${Renderer.escapeHtml(c.title || c.text || '线索')}</span>`).join('')
             : '<span>暂无可用线索</span>';
-        const actionsHtml = situation.recommendedActions.map(a => `<button class="situation-action" data-action="${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`).join('');
+        const actionsHtml = situation.recommendedActions.map(a => `<button class="situation-action" type="button" data-action="${Renderer.escapeAttr(a)}" aria-label="采用行动：${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`).join('');
 
         this.situationEl.innerHTML = `
             <div class="situation-card situation-location">
@@ -219,12 +235,57 @@ const SidebarRight = {
             btn.onclick = () => {
                 const input = document.getElementById('chatInput');
                 if (!input) return;
-                State.inputMode = 'action';
-                ChatUI._syncInputMode();
+                if (typeof ChatUI !== 'undefined' && ChatUI.setInputMode) {
+                    ChatUI.setInputMode('action');
+                } else {
+                    State.inputMode = 'action';
+                    State.isOOC = false;
+                }
                 input.value = btn.dataset.action || '';
                 input.focus();
+                if (window.innerWidth <= 900 && this.el.classList.contains('open')) {
+                    this.el.classList.remove('open');
+                    this._syncBackdrop();
+                }
             };
         });
+    },
+
+    renderStatusSummary(situation) {
+        const summaryEl = document.getElementById('statusSummary');
+        const roomStatus = document.getElementById('roomStatus');
+        const scene = State.scene;
+        if (!summaryEl || !roomStatus) return;
+        if (!scene || !situation) {
+            summaryEl.classList.add('hidden');
+            roomStatus.textContent = '';
+            return;
+        }
+
+        const locationName = situation.location?.name || '未知地点';
+        const quest = situation.activeQuest;
+        const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
+        const goal = objective?.text || quest?.description || quest?.name || '等待下一步';
+        const urgentClock = [...(situation.clocks || [])]
+            .sort((a, b) => (b.value / Math.max(1, b.max)) - (a.value / Math.max(1, a.max)))[0];
+        const risk = (situation.recentRisks || []).slice(-1)[0] || '';
+        const pressure = urgentClock
+            ? `${urgentClock.name} ${urgentClock.value}/${urgentClock.max}`
+            : (situation.hiddenPressure > 0 ? `${situation.hiddenPressure} 股暗处压力` : '局势稳定');
+
+        summaryEl.classList.remove('hidden');
+        summaryEl.innerHTML = `
+            <span class="status-summary-main">
+                <span class="status-chip status-chip-location">${Renderer.escapeHtml(locationName)}</span>
+                <span class="status-goal">${Renderer.escapeHtml(goal)}</span>
+            </span>
+            <span class="status-summary-sub">
+                <span>${Renderer.escapeHtml(pressure)}</span>
+                ${risk ? `<span>${Renderer.escapeHtml(risk)}</span>` : '<span>暂无公开风险</span>'}
+            </span>
+        `;
+        roomStatus.textContent = `${locationName} · ${pressure}`;
+        summaryEl.onclick = () => this.openTab('situation');
     },
 
     renderKnowledge() {
@@ -271,17 +332,24 @@ const SidebarRight = {
             acc[level] = (acc[level] || 0) + 1;
             return acc;
         }, {});
+        const filters = [
+            ['all', '全部', entries.length],
+            ['hint', '观察', counts.hint || 0],
+            ['rumor', '传闻', counts.rumor || 0],
+            ['evidence', '证据', counts.evidence || 0],
+            ['inference', '推论', counts.inference || 0],
+            ['truth', '确认', counts.truth || 0]
+        ];
         const summaryHtml = `
             <div class="knowledge-summary">
-                <span class="knowledge-pill">全部 ${entries.length}</span>
-                <span class="knowledge-pill">观察 ${counts.hint || 0}</span>
-                <span class="knowledge-pill">传闻 ${counts.rumor || 0}</span>
-                <span class="knowledge-pill">证据 ${counts.evidence || 0}</span>
-                <span class="knowledge-pill">确认 ${counts.truth || 0}</span>
+                ${filters.map(([key, label, count]) => `<button class="knowledge-pill ${this._knowledgeFilter === key ? 'active' : ''}" type="button" data-filter="${Renderer.escapeAttr(key)}">${Renderer.escapeHtml(label)} ${count}</button>`).join('')}
             </div>
         `;
 
-        const cardsHtml = entries.map(item => {
+        const visibleEntries = this._knowledgeFilter === 'all'
+            ? entries
+            : entries.filter(item => (levelLabels[item.level] ? item.level : 'hint') === this._knowledgeFilter);
+        const cardsHtml = visibleEntries.map(item => {
             const level = levelLabels[item.level] ? item.level : 'hint';
             const reliability = reliabilityLabels[item.reliability] ? item.reliability : 'unverified';
             const subjectType = subjectLabels[item.subjectType] ? item.subjectType : 'event';
@@ -316,7 +384,13 @@ const SidebarRight = {
             `;
         }).join('');
 
-        this.knowledgeEl.innerHTML = summaryHtml + cardsHtml;
+        this.knowledgeEl.innerHTML = summaryHtml + (cardsHtml || '<p class="placeholder">该分类下暂无线索</p>');
+        this.knowledgeEl.querySelectorAll('.knowledge-pill').forEach(btn => {
+            btn.onclick = () => {
+                this._knowledgeFilter = btn.dataset.filter || 'all';
+                this.renderKnowledge();
+            };
+        });
     },
 
     _buildProfileKnowledgeEntries(scene) {
@@ -416,12 +490,17 @@ const SidebarRight = {
                 const typeIcons = { weapon: '⚔', armor: '🛡', consumable: '🧪', quest: '📜', misc: '📦' };
                 const icon = typeIcons[item.type] || '📦';
                 const usesHtml = item.uses !== undefined ? `<span class="inv-effect-chip">剩余 ${Renderer.escapeHtml(item.uses)}</span>` : '';
+                const statLabels = { strength: '力量', dexterity: '敏捷', constitution: '体质', intelligence: '智力', wisdom: '感知', charisma: '魅力' };
                 const effectsHtml = (item.effects || []).slice(0, 3).map(effect => {
                     const label = effect.type === 'check_bonus'
-                        ? `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stat ? ` ${effect.stat}` : ''}`
+                        ? `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stat ? ` · ${statLabels[effect.stat] || effect.stat}` : ''}${effect.consume ? ' · 需选择消耗' : ''}`
                         : effect.type === 'risk_delta'
                             ? `风险${effect.value >= 0 ? '+' : ''}${effect.value}`
-                            : effect.type;
+                            : effect.type === 'dc_delta'
+                                ? `DC${effect.value >= 0 ? '+' : ''}${effect.value}`
+                                : effect.type === 'clock_resist'
+                                    ? `时钟抗性${effect.value >= 0 ? '+' : ''}${effect.value}`
+                                    : effect.type;
                     return `<span class="inv-effect-chip">${Renderer.escapeHtml(label)}</span>`;
                 }).join('');
                 const tagsHtml = (item.tags || []).slice(0, 4).map(tag => `<span class="inv-tag">${Renderer.escapeHtml(tag)}</span>`).join('');

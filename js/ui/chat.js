@@ -88,9 +88,11 @@ const ChatUI = {
         this.sendBtn = document.getElementById('sendBtn');
         this.stopBtn = document.getElementById('stopBtn');
         this.playerNameInput = document.getElementById('playerNameInput');
+        this.talkBtn = document.getElementById('talkBtn');
         this.oocBtn = document.getElementById('oocBtn');
         this.actionBtn = document.getElementById('actionBtn');
         this.strategyBtn = document.getElementById('strategyBtn');
+        this.modeHintEl = document.getElementById('inputModeHint');
 
         this.sendBtn.onclick = async () => {
             try { await this.onSend(); }
@@ -109,7 +111,8 @@ const ChatUI = {
             }
         });
         this.inputEl.addEventListener('input', () => this.autoResize());
-        this.oocBtn.onclick = () => this.toggleOOC();
+        if (this.talkBtn) this.talkBtn.onclick = () => this.setInputMode('talk');
+        this.oocBtn.onclick = () => this.setInputMode('ooc');
         if (this.actionBtn) this.actionBtn.onclick = () => this.toggleAction();
         if (this.strategyBtn) this.strategyBtn.onclick = () => this.toggleStrategy();
         this.playerNameInput.addEventListener('change', async () => {
@@ -125,11 +128,13 @@ const ChatUI = {
             this._renderedCount = 0;
             this.render();
             ActionBar.renderStatsDisplay();
+            this._syncInputMode();
             const sceneNameEl = document.getElementById('sceneName');
             if (sceneNameEl) {
                 sceneNameEl.textContent = State.scene ? State.scene.name : '酒馆大厅';
             }
         });
+        this._syncInputMode();
     },
 
     autoResize() {
@@ -149,56 +154,81 @@ const ChatUI = {
         State.isStreaming = false;
         if (this.sendBtn) this.sendBtn.style.display = 'block';
         if (this.stopBtn) this.stopBtn.style.display = 'none';
+        this._syncInputMode();
     },
 
     _syncInputMode() {
-        if (State.isOOC) {
-            this.oocBtn.classList.add('active');
-            if (this.actionBtn) this.actionBtn.classList.remove('active');
-            if (this.strategyBtn) this.strategyBtn.classList.remove('active');
-            this.inputEl.placeholder = 'OOC 消息（不会进入角色扮演上下文）...';
-        } else {
-            this.oocBtn.classList.remove('active');
-        }
-        if (!State.isOOC && State.inputMode === 'action') {
-            if (this.actionBtn) this.actionBtn.classList.add('active');
-            if (this.strategyBtn) this.strategyBtn.classList.remove('active');
-            this.inputEl.placeholder = '描述一个明确行动，例如：我想套出他隐瞒的事...';
-        } else if (!State.isOOC && State.inputMode === 'strategy') {
-            if (this.actionBtn) this.actionBtn.classList.remove('active');
-            if (this.strategyBtn) this.strategyBtn.classList.add('active');
-            if (!State.isOOC) this.inputEl.placeholder = '描述目标或计策意图，例如：我想挑拨商会和城卫...';
-        } else {
-            if (this.actionBtn) this.actionBtn.classList.remove('active');
-            if (this.strategyBtn) this.strategyBtn.classList.remove('active');
-            if (!State.isOOC) this.inputEl.placeholder = '输入消息...';
+        const mode = State.isOOC ? 'ooc' : (State.inputMode || 'talk');
+        const modes = {
+            talk: {
+                btn: this.talkBtn,
+                placeholder: '输入对话、观察或轻量互动...',
+                hint: '普通对话会进入角色扮演上下文。',
+                send: '发送'
+            },
+            action: {
+                btn: this.actionBtn,
+                placeholder: '描述一个明确行动，例如：我想套出他隐瞒的事...',
+                hint: '行动模式会先生成风险预览；确认前不会推进剧情。',
+                send: '预览'
+            },
+            strategy: {
+                btn: this.strategyBtn,
+                placeholder: '描述目标或计策意图，例如：我想挑拨商会和城卫...',
+                hint: '计策适合多阶段计划、拉拢、离间和长期目标。',
+                send: '提出'
+            },
+            ooc: {
+                btn: this.oocBtn,
+                placeholder: 'OOC 消息（不会进入角色扮演上下文）...',
+                hint: 'OOC 用于说明偏好、修正设定或询问系统，不作为角色行动。',
+                send: '发送'
+            }
+        };
+        [this.talkBtn, this.actionBtn, this.strategyBtn, this.oocBtn].forEach(btn => {
+            if (!btn) return;
+            const active = btn.dataset.mode === mode;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        const current = modes[mode] || modes.talk;
+        if (this.inputEl) this.inputEl.placeholder = current.placeholder;
+        if (this.modeHintEl) this.modeHintEl.textContent = current.hint;
+        if (this.sendBtn && !State.isStreaming) {
+            this.sendBtn.textContent = current.send;
+            this.sendBtn.setAttribute('aria-label', current.send);
         }
     },
 
-    toggleOOC() {
-        State.isOOC = !State.isOOC;
-        if (State.isOOC) State.inputMode = 'talk';
+    setInputMode(mode) {
+        if (mode === 'ooc') {
+            State.isOOC = true;
+            State.inputMode = 'talk';
+        } else {
+            State.isOOC = false;
+            State.inputMode = mode || 'talk';
+        }
         this._syncInputMode();
+    },
+
+    toggleOOC() {
+        this.setInputMode(State.isOOC ? 'talk' : 'ooc');
     },
 
     toggleAction() {
         if (State.inputMode === 'action' && !State.isOOC) {
-            State.inputMode = 'talk';
+            this.setInputMode('talk');
         } else {
-            State.inputMode = 'action';
-            State.isOOC = false;
+            this.setInputMode('action');
         }
-        this._syncInputMode();
     },
 
     toggleStrategy() {
-        if (State.inputMode === 'strategy') {
-            State.inputMode = 'talk';
+        if (State.inputMode === 'strategy' && !State.isOOC) {
+            this.setInputMode('talk');
         } else {
-            State.inputMode = 'strategy';
-            State.isOOC = false;
+            this.setInputMode('strategy');
         }
-        this._syncInputMode();
         // 教学钩子：进入计策模式（step2）
         if (TutorialWorld.isCurrentScene() && State.inputMode === 'strategy') {
             Tutorial.afterStrategyMode().catch(e => console.warn('[Tutorial] afterStrategyMode 失败:', e));
@@ -415,6 +445,12 @@ const ChatUI = {
         if (!scene) {
             await State.createScene('酒馆大厅');
             scene = State.scene;
+        }
+
+        if (scene.pendingCheck && !State.isOOC) {
+            showToast('请先完成或取消当前检定');
+            if (typeof ActionBar !== 'undefined') ActionBar.renderPendingCheck();
+            return;
         }
 
         const isActionIntent = State.inputMode === 'action' && !State.isOOC;
