@@ -124,6 +124,7 @@ AI 回复文本
 | `world-generator.js` | 预设世界、自定义世界生成提示词、模板应用到 scene/characters |
 | `world-engine.js` | 局势时钟、剧情弧推进、NPC 日程/离屏行动、反制、消息可见性、物品效果规则 |
 | `action-planner.js` | 本地行动意图分类、风险预览、建议检定估算 |
+| `intent-router.js` | 单输入框自然语言路由，处理帮助、pending action/check、计策、OOC 和高风险行动预览 |
 | `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |
 | `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用 |
 | `relationship.js` | 好感/情绪规则更新和 LLM 分析更新 |
@@ -231,7 +232,7 @@ AI 回复文本
   -> WorldEngine 根据成功完成的回合结果推进时钟/离屏行动
 ```
 
-`[check:]` 会创建 `scene.pendingCheck` 并在输入区显示检定卡。玩家点击“掷骰”后，系统写入 `type: "check"` 的结果消息，再触发 DM 续写后果。
+`[check:]` 会创建 `scene.pendingCheck` 并在输入区显示检定卡。玩家点击“掷骰”或在主输入框输入“掷骰”后，系统写入 `type: "check"` 的结果消息，再触发 DM 续写后果。
 检定卡会区分自动生效修正和可用但未自动消耗的消耗品；当前稳定版不会在掷骰时自动扣除消耗品。
 检定结果分为 `critical_success`、`success`、`partial`、`fail`、`critical_fail`；部分成功和失败会写入最近风险并可推进时钟。
 

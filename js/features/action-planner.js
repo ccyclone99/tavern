@@ -55,6 +55,12 @@ const ActionPlanner = {
         const dc = this._clamp(profile.baseDc + dcDelta + (risk >= 75 ? 2 : risk <= 25 ? -1 : 0), 8, 25);
         const needsCheck = risk >= 20 || profile.type !== 'talk';
 
+        const suggestedCheck = needsCheck ? {
+            stat: profile.stat,
+            statName: this.statLabels[profile.stat] || profile.stat,
+            dc
+        } : null;
+
         return {
             id: 'action_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
             status: 'preview',
@@ -63,10 +69,14 @@ const ActionPlanner = {
             intent: text,
             risk,
             riskLevel: this._riskLevel(risk),
-            suggestedCheck: needsCheck ? {
+            suggestedCheck,
+            adjudication: suggestedCheck ? {
+                source: 'local',
                 stat: profile.stat,
                 statName: this.statLabels[profile.stat] || profile.stat,
-                dc
+                dc,
+                risk,
+                reason: this._adjudicationReason(profile.type, risk)
             } : null,
             modifiers,
             risks: this._risksFor(profile.type, risk),
@@ -92,7 +102,7 @@ const ActionPlanner = {
 ${modifiers}
 失败推进：
 ${risks}
-玩家已确认承担风险。请按公正 DM 规则结算：可以要求 [check:属性|DC]，也可以让 NPC 提出条件、代价或局势变化；失败时必须推进剧情，而不是简单阻断。`;
+玩家已确认承担风险。请按公正 DM 规则结算：若需要检定，请沿用上方建议检定并输出 [check:auto] 或完全相同的 [check:属性|DC]，不要另定不同 DC；也可以让 NPC 提出条件、代价或局势变化。失败时必须推进剧情，而不是简单阻断。`;
     },
 
     _classify(text) {
@@ -238,6 +248,11 @@ ${risks}
     _stakesFor(type, risk) {
         const firstRisk = this._risksFor(type, risk)[0] || '局势发生变化';
         return risk >= 55 ? `失败很可能导致：${firstRisk}` : `失败可能导致：${firstRisk}`;
+    },
+
+    _adjudicationReason(type, risk) {
+        const label = this.typeLabels[type] || '行动';
+        return `${label}存在${risk >= 55 ? '较高' : '可见'}失败代价，使用本地风险预览统一 DC。`;
     },
 
     _clamp(value, min, max) {

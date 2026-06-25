@@ -235,12 +235,9 @@ const SidebarRight = {
             btn.onclick = () => {
                 const input = document.getElementById('chatInput');
                 if (!input) return;
-                if (typeof ChatUI !== 'undefined' && ChatUI.setInputMode) {
-                    ChatUI.setInputMode('action');
-                } else {
-                    State.inputMode = 'action';
-                    State.isOOC = false;
-                }
+                State.isOOC = false;
+                State.inputMode = 'talk';
+                if (typeof ChatUI !== 'undefined' && ChatUI._syncInputMode) ChatUI._syncInputMode();
                 input.value = btn.dataset.action || '';
                 input.focus();
                 if (window.innerWidth <= 900 && this.el.classList.contains('open')) {
@@ -864,9 +861,10 @@ const SidebarRight = {
         if (replanBtn) replanBtn.onclick = () => {
             const input = document.getElementById('chatInput');
             if (input) {
-                State.inputMode = 'strategy';
+                State.isOOC = false;
+                State.inputMode = 'talk';
                 ChatUI._syncInputMode();
-                input.value = `重新规划「${active.title}」：`;
+                input.value = `我想重新规划「${active.title}」：`;
                 input.focus();
             }
         };

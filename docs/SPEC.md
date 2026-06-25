@@ -311,15 +311,24 @@ scene.pendingAction = {
 - `/行动` 模式会用本地 `ActionPlanner` 生成 `scene.pendingAction`。
 - 输入区显示行动类型、建议检定、风险百分比、风险来源和失败推进。
 - 玩家确认后写入 `type: "action_intent"` 的用户消息，并由 PromptBuilder 注入 `[玩家行动意图]`。
-- AI 输出 `[check:]` 时会创建 `scene.pendingCheck`，输入区显示检定卡，玩家点击“掷骰”后再生成结果。
+- AI 输出 `[check:]` 时会创建 `scene.pendingCheck`，输入区显示检定卡，玩家点击“掷骰”或输入“掷骰”后再生成结果。
+
+下一阶段输入流：
+
+- 玩家默认不需要切换 `/行动` 或 `/计策` 模式。
+- `IntentRouter` 或等价逻辑应从同一个输入框识别闲聊、帮助、观察、行动、计策和 OOC。
+- 高风险行动仍生成 `scene.pendingAction`，但触发来源是自然语言，而不是按钮模式。
+- 检定不是主动功能；只有玩家描述了有风险且结果不确定的行动后，系统才要求检定。
+- 当 `pendingAction.suggestedCheck` 或 `pendingAction.adjudication` 存在时，后续检定必须沿用同一个属性和 DC。
+- 细则见 `docs/INPUT_FLOW_SPEC.md`。
 
 ### 4.7 检定卡
 
 `[check:]` 现在会生成交互式检定卡：
 
-1. AI 或规则提出检定。
+1. AI 或规则在行动上下文中提出检定。
 2. UI 显示属性、DC、风险、自动加成和可用但未自动消耗的物品。
-3. 玩家点击“掷骰”。
+3. 玩家点击“掷骰”，或在主输入框输入“掷骰”。
 4. 系统生成结果。
 5. AI 根据结果进行 fail-forward 叙事。
 
@@ -582,16 +591,24 @@ Prompt 必须区分以下块：
 
 - 增加行动意图识别。
 - 增加 pending action / risk card。
-- 检定改为玩家点击掷骰。
+- 检定改为玩家点击或输入“掷骰”后结算。
 - 支持 partial success 和 fail-forward。
 
-当前实现已完成行动意图识别、pending action / risk card、pending check / 点击掷骰、partial success、fail-forward 后果提示、非消耗物品自动加成展示，以及可用消耗品的展示。
+当前实现已完成行动意图识别、pending action / risk card、pending check / 点击或输入“掷骰”、partial success、fail-forward 后果提示、非消耗物品自动加成展示，以及可用消耗品的展示。
+
+本轮自然输入实现已按 `docs/INPUT_FLOW_SPEC.md` 将输入入口改为自然语言路由：
+
+- 默认单输入框识别行动、计策、帮助和 OOC。
+- 模式按钮降级为高级快捷。
+- pending action/check 可通过输入框处理执行、取消、改写和掷骰。
+- 同一次行动只允许一个有效 DC。
 
 验收：
 
 - 高风险行动先展示风险。
 - 检定结果能解释 DC、加成和后果。
 - 失败能产生新剧情或新状态。
+- 玩家不切换输入模式也能完成高风险行动和检定。
 
 ### Phase 3: 时钟与剧情弧
 

@@ -126,7 +126,7 @@ const GroupChat = {
             const checkMarkers = markers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
 
-            // 处理检定标记：生成交互式检定卡，等待玩家点击掷骰
+            // 处理检定标记：生成交互式检定卡，等待玩家点击或输入“掷骰”
             for (const cm of checkMarkers) {
                 this._createPendingCheck(cm.raw, msg.id);
             }
@@ -139,7 +139,8 @@ const GroupChat = {
 
             if (checkMarkers.length > 0) {
                 ActionBar.renderPendingCheck();
-                showToast('需要检定：点击掷骰继续');
+                ChatUI._syncInputMode?.();
+                showToast('需要检定：点击或输入“掷骰”继续');
             }
 
             // 自动摘要：消息超 80 条时压缩最早 30 条（含冷却：距上次压缩不足 30 条时不触发）
@@ -355,10 +356,21 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return null;
 
+        if (String(raw || '').trim().toLowerCase() === 'auto') return null;
         const parts = raw.split('|');
         const statName = (parts[0] || '').trim();
-        const dc = parseInt(parts[1]) || 15;
+        const dc = this._parseDc(parts[1], 15);
+        return this._buildParsedCheck(statName || '属性', dc);
+    },
 
+    _parseDc(value, fallback = 15) {
+        const match = String(value ?? '').match(/\d+/);
+        return match ? parseInt(match[0], 10) : fallback;
+    },
+
+    _buildParsedCheck(statName, dc) {
+        const scene = State.scene;
+        if (!scene) return null;
         // 中文属性名 → 英文 key
         const statMap = {
             '力量': 'strength', '敏捷': 'dexterity', '体质': 'constitution',
@@ -372,6 +384,20 @@ const GroupChat = {
         return { statName: statName || '属性', key, val, mod, dc };
     },
 
+    _parseActionAdjudication(actionData) {
+        if (!actionData) return null;
+        const adj = actionData.adjudication || actionData.suggestedCheck;
+        if (!adj) return null;
+        const statName = adj.statName || adj.stat || '属性';
+        const dc = this._parseDc(adj.dc, 15);
+        const parsed = this._buildParsedCheck(statName, dc);
+        if (!parsed) return null;
+        parsed.adjudicationSource = adj.source || 'local';
+        parsed.adjudicationReason = adj.reason || '';
+        parsed.risk = Number(adj.risk ?? actionData.risk ?? 0);
+        return parsed;
+    },
+
     /**
      * 处理 [check:属性名|DC]：创建待掷骰检定卡
      */
@@ -383,9 +409,17 @@ const GroupChat = {
             return scene.pendingCheck;
         }
 
-        const parsed = this._parseCheckRaw(raw);
-        if (!parsed) return null;
         const latestAction = [...(scene.messages || [])].reverse().find(m => m.type === 'action_intent' && m.actionData);
+        const actionParsed = this._parseActionAdjudication(latestAction?.actionData);
+        const aiParsed = this._parseCheckRaw(raw);
+        const parsed = actionParsed || aiParsed;
+        if (!parsed) return null;
+        if (actionParsed && aiParsed && (actionParsed.key !== aiParsed.key || actionParsed.dc !== aiParsed.dc)) {
+            console.warn('[GroupChat] AI 检定与本地裁决冲突，已使用本地裁决', {
+                ai: { stat: aiParsed.key, dc: aiParsed.dc },
+                local: { stat: actionParsed.key, dc: actionParsed.dc }
+            });
+        }
         const itemBonus = typeof WorldEngine !== 'undefined'
             ? WorldEngine.getCheckItemBonus(scene, {
                 key: parsed.key,
@@ -415,10 +449,12 @@ const GroupChat = {
             itemBonus: Number(itemBonus.bonus || 0),
             mod: totalMod,
             dc: parsed.dc,
-            source: 'AI 要求检定',
+            source: actionParsed ? '本地行动裁决' : 'AI 要求检定',
             sourceMessageId,
             actionType: latestAction?.actionData?.type || '',
             intent: latestAction?.actionData?.intent || '',
+            adjudicationReason: parsed.adjudicationReason || '',
+            adjudicationSource: parsed.adjudicationSource || (actionParsed ? 'local' : 'ai'),
             itemModifiers: itemBonus.modifiers || [],
             availableItemModifiers: availableItems,
             stakes: latestAction?.actionData?.stakes || '',
@@ -430,7 +466,7 @@ const GroupChat = {
     },
 
     /**
-     * 玩家点击检定卡后掷骰，插入检定结果，再交给 DM 叙述后果。
+     * 玩家点击检定卡或输入“掷骰”后结算，插入检定结果，再交给 DM 叙述后果。
      */
     async rollPendingCheck() {
         const scene = State.scene;
@@ -478,6 +514,9 @@ const GroupChat = {
                 consequenceOptions,
                 stakes: check.stakes || '',
                 risks: check.risks || [],
+                source: check.source || '',
+                actionType: check.actionType || '',
+                intent: check.intent || '',
                 statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod,
                 itemBonus: Number(check.itemBonus || 0),
                 itemModifiers: Array.isArray(check.itemModifiers) ? check.itemModifiers : [],
@@ -495,6 +534,7 @@ const GroupChat = {
         scene.messages.push(msg);
         ChatUI.onMessageAdded(msg);
         ActionBar.renderPendingCheck();
+        ChatUI._syncInputMode?.();
         await State.saveCurrentSceneDebounced();
 
         if (!this._isCheckContinuation) {
@@ -599,6 +639,7 @@ const GroupChat = {
         scene.pendingCheck = null;
         await State.saveCurrentSceneDebounced();
         ActionBar.renderPendingCheck();
+        ChatUI._syncInputMode?.();
         showToast('已取消检定');
     },
 

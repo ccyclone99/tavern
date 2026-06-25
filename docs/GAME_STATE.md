@@ -98,6 +98,13 @@
   worldTension: 0,
   activeStrategyId: null,
   pendingAction: null,
+  pendingCheck: null,
+  inputContext: {
+    state: "idle",
+    prompt: "",
+    suggestions: [],
+    lastIntentId: ""
+  },
 
   createdAt: 1710000000000,
   updatedAt: 1710000000000,
@@ -145,7 +152,8 @@
 | `worldTension` | number | 世界紧张度，prompt 以 `/100` 展示 |
 | `activeStrategyId` | string/null | 当前激活计策 |
 | `pendingAction` | PendingAction/null | 玩家已生成但尚未确认的行动风险预览 |
-| `pendingCheck` | PendingCheck/null | AI 已要求、等待玩家点击掷骰的检定卡 |
+| `pendingCheck` | PendingCheck/null | AI 或规则已要求、等待玩家点击或输入“掷骰”的检定卡 |
+| `inputContext` | object | 输入框当前状态与建议，默认 idle；pending action/check 时由 UI 同步 |
 | `createdAt` / `updatedAt` | number | 毫秒时间戳 |
 | `snapshots` | array | 存档快照预留字段 |
 
@@ -342,6 +350,14 @@
     statName: "魅力",
     dc: 14
   },
+  adjudication: {
+    source: "local",
+    stat: "charisma",
+    statName: "魅力",
+    dc: 14,
+    risk: 42,
+    reason: "说服存在可见失败代价，使用本地风险预览统一 DC。"
+  },
   modifiers: [
     { source: "可用已确认线索", label: "风险 -6", riskDelta: -6, dcDelta: -1 }
   ],
@@ -351,7 +367,7 @@
 }
 ```
 
-`pendingAction` 由本地 `ActionPlanner` 生成，玩家点击“确认行动”后会被转写为一条 `type: "action_intent"` 的用户消息，并清空 `pendingAction`。
+`pendingAction` 由本地 `ActionPlanner` 生成。玩家点击“执行行动”或在主输入框输入“执行”后，会被转写为一条 `type: "action_intent"` 的用户消息，并清空 `pendingAction`。输入“取消”会放弃预览；直接输入新动作会改写预览。
 
 ### PendingCheck
 
@@ -366,10 +382,12 @@
   itemBonus: 1,
   mod: 3,
   dc: 15,
-  source: "AI 要求检定",
+  source: "本地行动裁决",
   sourceMessageId: "msg_...",
   actionType: "persuade",
   intent: "说服审判官允许我查看货舱日志",
+  adjudicationSource: "local",
+  adjudicationReason: "说服存在可见失败代价，使用本地风险预览统一 DC。",
   itemModifiers: [
     { source: "审讯记录", label: "+1 检定", value: 1 }
   ],
@@ -382,7 +400,7 @@
 }
 ```
 
-`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 是当前可用但尚未自动消耗的物品。玩家点击“掷骰”后，系统生成 `type: "check"` 的结果消息并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 是当前可用但尚未自动消耗的物品。玩家点击“掷骰”或在主输入框输入“掷骰”后，系统生成 `type: "check"` 的结果消息并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
 
 ### Clock
 
@@ -578,7 +596,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 | `strategy` | `/strategy` 或 `（计策）` | 玩家计策意图，prompt 前缀为 `[玩家计策意图]` |
 | `ooc` | `/ooc` / `(OOC)` / `（OOC）` | 出戏说明 |
 | `narrate` | DM 旁白、地点描述、退场 | 第三人称叙事 |
-| `check` | 玩家点击检定卡“掷骰” | 检定结果消息，带 `checkData` |
+| `check` | 玩家点击检定卡“掷骰”或输入“掷骰” | 检定结果消息，带 `checkData` |
 | `system` | 关系/奖励/伤害等系统反馈 | UI 系统消息 |
 | `divider` | 世界初始化 | “故事开始”等分割线 |
 | `gameover` | HP 归零 | 失败结局 |

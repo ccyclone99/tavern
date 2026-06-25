@@ -105,6 +105,10 @@ const State = {
         if (scene.activeStrategyId === undefined) scene.activeStrategyId = null;
         if (scene.pendingAction === undefined) scene.pendingAction = null;
         if (scene.pendingCheck === undefined) scene.pendingCheck = null;
+        if (!scene.inputContext || typeof scene.inputContext !== 'object') {
+            scene.inputContext = { state: 'idle', prompt: '', suggestions: [], lastIntentId: '' };
+        }
+        if (!Array.isArray(scene.inputContext.suggestions)) scene.inputContext.suggestions = [];
         if (!Array.isArray(scene.messages)) scene.messages = [];
         if (!Array.isArray(scene.lorebookEntries)) scene.lorebookEntries = [];
         if (!scene.playerStats) scene.playerStats = { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 };
@@ -258,6 +262,7 @@ const State = {
             activeStrategyId: null,
             pendingAction: null,
             pendingCheck: null,
+            inputContext: { state: 'idle', prompt: '', suggestions: [], lastIntentId: '' },
             createdAt: Date.now(),
             updatedAt: Date.now(),
             snapshots: []

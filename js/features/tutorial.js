@@ -101,15 +101,15 @@ const TutorialScript = {
         },
         {
             id: 2,
-            title: '计策模式',
-            goal: '让玩家进入计策模式，制定一个计划',
-            cue: '引导玩家：「想让莫里斯给你打折？光靠聊天可不够——你可以把输入区切到『计策』模式，让我（作为 DM）帮你制定一个说服计策。点一下试试，哪怕只是个馊主意也行。」',
+            title: '制定计划',
+            goal: '让玩家用自然语言提出一个计划',
+            cue: '引导玩家：「想让莫里斯给你打折？你不用找按钮，直接在输入框写‘我想制定一个计划：让莫里斯多给我一块苹果派’就行。计划可以很简单，先说目标，我会帮你拆步骤。」',
         },
         {
             id: 3,
             title: 'D20 检定',
             goal: '让玩家经历一次检定并看懂结果',
-            cue: '玩家已在计策模式。引导他尝试一个有风险的小行动（比如说服莫里斯、或跟艾莉掷骰子）。当系统检测到检定发生并叙述完结果后，本步自动完成。',
+            cue: '引导玩家描述一个有风险的小动作，例如“我趁莫里斯转身时悄悄拿走苹果派”。强调：玩家只要描述动作，系统会在需要时要求掷骰；检定不是玩家主动打开的功能。当系统检测到检定发生并叙述完结果后，本步自动完成。',
         },
         {
             id: 4,
@@ -300,9 +300,20 @@ const Tutorial = {
     },
 
     /**
-     * 玩家进入计策模式后的钩子（用于 step2）。
+     * 玩家进入计策快捷模式后的兼容钩子（旧流程）。
      */
     async afterStrategyMode() {
+        if (!TutorialWorld.isCurrentScene()) return;
+        if (this._isBusy()) return;
+        if (TutorialState.getStep() === 2) {
+            await this._advanceStep(2);
+        }
+    },
+
+    /**
+     * 玩家用自然语言提出计策后的钩子（用于 step2）。
+     */
+    async afterStrategyIntent() {
         if (!TutorialWorld.isCurrentScene()) return;
         if (this._isBusy()) return;
         if (TutorialState.getStep() === 2) {
@@ -346,8 +357,8 @@ const Tutorial = {
                 // 兜底：检测最近 4 条消息里是否出现了对非默认角色的 user 对话
                 return this._playerTalkedToNonDefaultChar();
             case 2:
-                // step2 由 afterStrategyMode 推进
-                return State.inputMode === 'strategy';
+                // step2 可由自然计策输入或旧快捷模式推进
+                return scene.messages.some(m => m.role === 'user' && m.type === 'strategy') || State.inputMode === 'strategy';
             case 3:
                 // step3 由 afterCheckResolved 推进
                 return false;
@@ -366,7 +377,11 @@ const Tutorial = {
         if (chars.length < 2) return false;
         const defaultCharId = chars[0].id;
         return scene.messages.some(m =>
-            m.role === 'user' && m.characterId && m.characterId !== defaultCharId
+            m.role === 'user' && (
+                (m.characterId && m.characterId !== defaultCharId) ||
+                (Array.isArray(m.visibility?.participants) && m.visibility.participants.some(id => id !== defaultCharId)) ||
+                chars.some(c => c.id !== defaultCharId && String(m.content || '').includes('@' + c.name))
+            )
         );
     },
 

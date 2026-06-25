@@ -268,7 +268,13 @@ const WorldEngine = {
         }
 
         const offscreenMessages = this.runNpcOffscreenActions(scene);
-        offscreenMessages.forEach(content => this.addSystemMessage(scene, content, 'offscreen'));
+        offscreenMessages.forEach(content => {
+            const brief = String(content).replace(/^【离屏行动】/, '暗处变化：');
+            scene.currentSituation.recentRisks.push(brief);
+        });
+        if (offscreenMessages.length > 0 && typeof SidebarRight !== 'undefined') {
+            SidebarRight.markTabNew?.('situation');
+        }
         this._trimSituation(scene);
         SidebarRight.renderSituation?.();
         await State.saveCurrentSceneDebounced();

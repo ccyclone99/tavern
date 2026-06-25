@@ -158,12 +158,13 @@ const ChatUI = {
     },
 
     _syncInputMode() {
+        const scene = State.scene;
         const mode = State.isOOC ? 'ooc' : (State.inputMode || 'talk');
         const modes = {
             talk: {
                 btn: this.talkBtn,
-                placeholder: '输入对话、观察或轻量互动...',
-                hint: '普通对话会进入角色扮演上下文。',
+                placeholder: '你想说什么，或打算怎么做？',
+                hint: '直接输入对话、观察、询问、行动或计划；有风险时会先让你确认。',
                 send: '发送'
             },
             action: {
@@ -191,12 +192,29 @@ const ChatUI = {
             btn.classList.toggle('active', active);
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
-        const current = modes[mode] || modes.talk;
+        let current = modes[mode] || modes.talk;
+        if (!State.isOOC && scene?.pendingCheck) {
+            current = {
+                placeholder: '输入“掷骰”继续，或输入“取消”放弃检定。',
+                hint: '当前等待检定结果；检定完成前不会推进其他行动。',
+                send: '掷骰'
+            };
+        } else if (!State.isOOC && scene?.pendingAction) {
+            current = {
+                placeholder: '输入“执行”确认，输入“取消”放弃，或直接改写行动。',
+                hint: '行动预览尚未进入剧情；确认后才会推进。',
+                send: '执行'
+            };
+        }
         if (this.inputEl) this.inputEl.placeholder = current.placeholder;
         if (this.modeHintEl) this.modeHintEl.textContent = current.hint;
         if (this.sendBtn && !State.isStreaming) {
             this.sendBtn.textContent = current.send;
             this.sendBtn.setAttribute('aria-label', current.send);
+        }
+        if (scene?.inputContext) {
+            scene.inputContext.state = scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle');
+            scene.inputContext.prompt = current.placeholder;
         }
     },
 
@@ -229,7 +247,7 @@ const ChatUI = {
         } else {
             this.setInputMode('strategy');
         }
-        // 教学钩子：进入计策模式（step2）
+        // 教学兼容钩子：旧计策快捷入口（step2）
         if (TutorialWorld.isCurrentScene() && State.inputMode === 'strategy') {
             Tutorial.afterStrategyMode().catch(e => console.warn('[Tutorial] afterStrategyMode 失败:', e));
         }
@@ -309,7 +327,8 @@ const ChatUI = {
             div.innerHTML = `<div class="strategy-label">计策意图</div><div>${Renderer.renderRP(parsed.content)}</div>`;
         } else if (parsed.type === 'action_intent') {
             div.className = 'rp-message rp-strategy rp-action-intent';
-            div.innerHTML = `<div class="strategy-label">行动意图</div><div>${Renderer.renderRP(parsed.content)}</div>`;
+            const displayIntent = msg.actionData?.intent || parsed.content;
+            div.innerHTML = `<div class="strategy-label">行动意图</div><div>${Renderer.renderRP(displayIntent)}</div>`;
         } else if (parsed.type === 'system') {
             div.className = 'rp-message rp-system';
             div.innerHTML = `<div class="system-chip">${Renderer.renderRP(parsed.content)}</div>`;
@@ -447,28 +466,36 @@ const ChatUI = {
             scene = State.scene;
         }
 
-        if (scene.pendingCheck && !State.isOOC) {
-            showToast('请先完成或取消当前检定');
-            if (typeof ActionBar !== 'undefined') ActionBar.renderPendingCheck();
-            return;
-        }
+        const route = typeof IntentRouter !== 'undefined'
+            ? IntentRouter.route(text, scene)
+            : { kind: State.isOOC ? 'ooc' : 'talk', text };
 
-        const isActionIntent = State.inputMode === 'action' && !State.isOOC;
+        if (!State.isOOC && await this._handleRoutedInput(route, text, scene)) return;
+
+        const isActionIntent = State.inputMode === 'action' && !State.isOOC && route.kind === 'talk';
         if (isActionIntent) {
             await this.preparePendingAction(text);
             return;
         }
 
-        const isStrategy = State.inputMode === 'strategy' && !State.isOOC;
-        const participantIds = State.currentCharacterId ? [State.currentCharacterId] : [];
+        const isStrategy = (State.inputMode === 'strategy' && !State.isOOC) || route.kind === 'strategy';
+        const isOoc = State.isOOC || route.kind === 'ooc';
+        const participantIds = this._resolveParticipants(text);
         const msg = {
             id: 'msg_' + Date.now(),
             role: 'user',
-            content: isStrategy ? '/strategy ' + text : (State.isOOC ? '/ooc ' + text : text),
-            type: State.isOOC ? 'ooc' : (isStrategy ? 'strategy' : 'talk'),
+            content: isStrategy ? '/strategy ' + text : (isOoc ? '/ooc ' + (route.text || text) : text),
+            type: isOoc ? 'ooc' : (isStrategy ? 'strategy' : 'talk'),
+            intentMeta: route.meta ? {
+                kind: route.kind || 'talk',
+                actionType: route.meta.actionType || '',
+                confidence: route.meta.confidence || 0,
+                targetCharacterIds: participantIds,
+                routerReason: route.reason || ''
+            } : undefined,
             visibility: typeof WorldEngine !== 'undefined'
                 ? WorldEngine.createVisibility({
-                    public: !State.isOOC && !isStrategy && State.activeCharacters.length > 1,
+                    public: !isOoc && !isStrategy && State.activeCharacters.length > 1,
                     participants: participantIds
                 })
                 : undefined,
@@ -481,7 +508,7 @@ const ChatUI = {
         this.inputEl.value = '';
         this.inputEl.style.height = 'auto';
 
-        if (!State.isOOC) {
+        if (!isOoc) {
             try {
                 await GroupChat.handleUserMessage();
             } catch (err) {
@@ -493,14 +520,106 @@ const ChatUI = {
         }
     },
 
-    async preparePendingAction(text) {
+    async _handleRoutedInput(route, originalText, scene) {
+        switch (route.kind) {
+            case 'roll_check':
+                this._clearInput();
+                await GroupChat.rollPendingCheck();
+                return true;
+            case 'cancel_check':
+                this._clearInput();
+                await GroupChat.cancelPendingCheck();
+                this._syncInputMode();
+                return true;
+            case 'blocked_by_check':
+                showToast('请先输入“掷骰”完成检定，或输入“取消”放弃');
+                if (typeof ActionBar !== 'undefined') ActionBar.renderPendingCheck();
+                this._syncInputMode();
+                return true;
+            case 'confirm_action':
+                this._clearInput();
+                await this.confirmPendingAction();
+                this._syncInputMode();
+                return true;
+            case 'cancel_action':
+                this._clearInput();
+                await this.cancelPendingAction();
+                this._syncInputMode();
+                return true;
+            case 'rewrite_action':
+                await this.preparePendingAction(route.text || originalText, route.meta);
+                return true;
+            case 'explain_action':
+                this._clearInput();
+                this._appendLocalSystemMessage(this._buildPendingActionExplanation(scene.pendingAction));
+                return true;
+            case 'help':
+                this._clearInput();
+                this._appendLocalSystemMessage(IntentRouter.buildHelpText(originalText, scene));
+                return true;
+            case 'action_preview':
+                await this.preparePendingAction(originalText, route.meta);
+                return true;
+            default:
+                return false;
+        }
+    },
+
+    _clearInput() {
+        this.inputEl.value = '';
+        this.inputEl.style.height = 'auto';
+    },
+
+    _appendLocalSystemMessage(content) {
+        const scene = State.scene;
+        if (!scene || !content) return;
+        const msg = {
+            id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            role: 'assistant',
+            content,
+            type: 'system',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
+            timestamp: Date.now()
+        };
+        scene.messages.push(msg);
+        this.onMessageAdded(msg);
+        State.saveCurrentSceneDebounced();
+    },
+
+    _buildPendingActionExplanation(action) {
+        if (!action) return '当前没有待确认行动。';
+        const check = action.suggestedCheck
+            ? `${action.suggestedCheck.statName} DC${action.suggestedCheck.dc}`
+            : '通常无需检定';
+        const risks = (action.risks || []).slice(0, 2).join('；') || '局势发生变化';
+        return `当前行动还没有进入剧情：${action.intent}。风险 ${action.risk}%（${action.riskLevel}），建议检定：${check}。失败可能导致：${risks}。输入“执行”确认，或直接输入新动作改写。`;
+    },
+
+    _resolveParticipants(text) {
+        const names = [];
+        const raw = String(text || '');
+        State.activeCharacters.forEach(char => {
+            const name = String(char.name || '').trim();
+            if (name && raw.includes('@' + name)) names.push(char.id);
+        });
+        if (names.length > 0) {
+            State.setCurrentCharacter(names[0]);
+            return names;
+        }
+        return State.currentCharacterId ? [State.currentCharacterId] : [];
+    },
+
+    async preparePendingAction(text, intentMeta = null) {
         const scene = State.scene;
         if (!scene) return;
         scene.pendingAction = ActionPlanner.create(scene, text);
+        if (intentMeta) scene.pendingAction.intentMeta = JSON.parse(JSON.stringify(intentMeta));
         await State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
-        this.inputEl.value = '';
-        this.inputEl.style.height = 'auto';
+        this._clearInput();
+        this._syncInputMode();
         showToast('已生成行动预览');
     },
 
@@ -529,6 +648,7 @@ const ChatUI = {
         this.onMessageAdded(msg);
         await State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+        this._syncInputMode();
 
         try {
             await GroupChat.handleUserMessage();
@@ -546,6 +666,7 @@ const ChatUI = {
         scene.pendingAction = null;
         await State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+        this._syncInputMode();
         showToast('已取消行动预览');
     },
 

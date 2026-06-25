@@ -117,7 +117,7 @@ const ActionBar = {
             ${!positiveHtml && !negativeHtml && !neutralHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">修正</span><div class="pending-action-factors"><span class="pending-action-factor pending-action-factor-neutral">本地未发现显著修正</span></div></div>` : ''}
             ${risksHtml ? `<ul class="pending-action-risks">${risksHtml}</ul>` : ''}
             <div class="pending-action-actions">
-                <button class="btn btn-primary" id="confirmPendingActionBtn" type="button">确认行动</button>
+                <button class="btn btn-primary" id="confirmPendingActionBtn" type="button">执行行动</button>
                 <button class="btn btn-secondary" id="cancelPendingActionBtn" type="button">取消</button>
             </div>
         `;
@@ -159,6 +159,9 @@ const ActionBar = {
         const risksHtml = (check.risks || []).slice(0, 3).map(r =>
             `<li>${Renderer.escapeHtml(r)}</li>`
         ).join('');
+        const sourceText = check.intent
+            ? `来自行动：${Renderer.escapeHtml(check.intent)}`
+            : Renderer.escapeHtml(check.source || '系统要求检定');
 
         el.classList.remove('hidden');
         el.innerHTML = `
@@ -166,7 +169,7 @@ const ActionBar = {
                 <div>
                     <div class="pending-action-kicker">检定</div>
                     <div class="pending-check-title">${iconHtml}<span>${Renderer.escapeHtml(check.statName || '属性')}检定</span></div>
-                    <div class="pending-action-note">先掷骰再继续叙事；待掷状态不会提前推进世界。</div>
+                    <div class="pending-action-note">${sourceText}。点击或输入“掷骰”继续；待掷状态不会提前推进世界。</div>
                 </div>
                 <span class="pending-check-dc">DC ${dc}</span>
             </div>
