@@ -300,6 +300,15 @@
     }
 }
 
+@media (max-width: 1180px) {
+    .world-picker-body {
+        max-width: 760px;
+    }
+    .world-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 /* 手机断点 */
 @media (max-width: 600px) {
     .app-layout { flex-direction: column; }
@@ -375,7 +384,22 @@
     .tab-btn { min-height: 44px; padding: 10px 12px; }
     .character-item { padding: 12px 10px; min-height: 56px; }
     .modal { max-width: 95vw; max-height: 90vh; }
-    .world-card { min-width: 0; }
+    .world-picker-header {
+        padding: 24px 16px 12px;
+    }
+    .world-picker-body {
+        padding: 12px 14px 24px;
+    }
+    .world-grid {
+        grid-template-columns: 1fr;
+    }
+    .world-card {
+        min-width: 0;
+        min-height: 0;
+    }
+    .world-generate {
+        flex-direction: column;
+    }
     .pending-action-grid {
         grid-template-columns: 1fr;
     }

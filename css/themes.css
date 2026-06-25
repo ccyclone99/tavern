@@ -137,12 +137,12 @@
 
 .world-picker-header {
     text-align: center;
-    padding: 40px 20px 20px;
+    padding: 28px 20px 14px;
 }
 .world-picker-header h1 {
-    font-size: 36px;
+    font-size: 34px;
     color: var(--text-gold);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     letter-spacing: 2px;
 }
 .world-picker-header p {
@@ -152,14 +152,14 @@
 
 .world-picker-body {
     flex: 1;
-    max-width: 960px;
+    max-width: 1180px;
     width: 100%;
     margin: 0 auto;
-    padding: 20px;
+    padding: 14px 20px 28px;
 }
 
 .world-section {
-    margin-bottom: 32px;
+    margin-bottom: 24px;
 }
 .world-section h2 {
     font-size: 14px;
@@ -173,19 +173,22 @@
 
 .world-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
 }
 
 .world-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
+    border-radius: 8px;
+    padding: 16px;
     cursor: pointer;
     transition: all 0.25s ease;
     position: relative;
     overflow: hidden;
+    min-height: 226px;
+    display: flex;
+    flex-direction: column;
 }
 .world-card:hover {
     transform: translateY(-4px);
@@ -204,12 +207,12 @@
 .world-card:hover::before { opacity: 1; }
 
 .world-card-cover {
-    font-size: 48px;
-    margin-bottom: 12px;
+    font-size: 42px;
+    margin-bottom: 10px;
     line-height: 1;
 }
 .world-card-name {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-main);
     margin-bottom: 6px;
@@ -219,12 +222,13 @@
     color: var(--text-muted);
     line-height: 1.5;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 .world-card-chars {
-    margin-top: 12px;
+    margin-top: auto;
+    padding-top: 12px;
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
@@ -241,11 +245,11 @@
 .world-generate {
     display: flex;
     gap: 12px;
-    padding: 24px;
+    padding: 18px;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    margin-bottom: 40px;
+    border-radius: 8px;
+    margin-bottom: 28px;
 }
 .world-generate input {
     flex: 1;
