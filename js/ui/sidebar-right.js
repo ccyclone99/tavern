@@ -758,7 +758,7 @@ const SidebarRight = {
         const scene = State.scene;
         if (!this.strategiesEl) return;
         if (!scene || !scene.strategies || scene.strategies.length === 0) {
-            this.strategiesEl.innerHTML = '<p class="placeholder">暂无计策<br>在输入栏切换到“计策”模式提出目标</p>';
+            this.strategiesEl.innerHTML = '<p class="placeholder">暂无计策<br>直接输入“我想制定一个计划...”提出目标</p>';
             return;
         }
 
