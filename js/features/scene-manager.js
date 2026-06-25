@@ -91,6 +91,7 @@ const SceneManager = {
                         storyArcs: JSON.parse(JSON.stringify(scene.storyArcs || [])),
                         clocks: JSON.parse(JSON.stringify(scene.clocks || [])),
                         counterStrategies: JSON.parse(JSON.stringify(scene.counterStrategies || [])),
+                        flowGuide: JSON.parse(JSON.stringify(scene.flowGuide || {})),
                         currentSituation: JSON.parse(JSON.stringify(scene.currentSituation || {})),
                         worldTension: scene.worldTension || 0,
                         turnCount: scene.turnCount || 0,
@@ -182,7 +183,7 @@ const SceneManager = {
         // 完整字段恢复（新快照）
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
          'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs', 'clocks',
-         'counterStrategies', 'currentSituation', 'pendingAction', 'pendingCheck', 'summary'].forEach(f => {
+         'counterStrategies', 'flowGuide', 'currentSituation', 'pendingAction', 'pendingCheck', 'summary'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',

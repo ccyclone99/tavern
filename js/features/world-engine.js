@@ -526,6 +526,39 @@ const WorldEngine = {
         return `追查剧情线索：${condition}`;
     },
 
+    markFlowMoveCompleted(scene, text) {
+        if (!scene?.flowGuide) return false;
+        this.normalizeScene(scene);
+        const guide = scene.flowGuide;
+        const haystack = this._normalizeFlowText(text);
+        if (haystack.length < 6) return false;
+        const move = guide.openingMoves.find(item => {
+            const needle = this._normalizeFlowText(item);
+            return needle.length >= 6 && (haystack === needle || haystack.includes(needle) || needle.includes(haystack));
+        });
+        if (!move || guide.completedMoves.includes(move)) return false;
+        guide.completedMoves.push(move);
+        guide.completedMoves = guide.completedMoves.slice(-20);
+        scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+        return true;
+    },
+
+    _currentSituationData(scene) {
+        const activeQuest = (scene.quests || []).find(q => q.status === 'active' && q.type === 'main')
+            || (scene.quests || []).find(q => q.status === 'active') || null;
+        const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
+        const hiddenPressure = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
+        const counterStrategies = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
+        return { activeQuest, clocks, counterStrategies, hiddenPressure };
+    },
+
+    _normalizeFlowText(text) {
+        return String(text || '')
+            .trim()
+            .replace(/[你我他她它的了着过和与在上。！？!?，,；;：:\s「」《》“”"'`]/g, '')
+            .toLowerCase();
+    },
+
     _selectClockForTick(scene, reason) {
         const active = (scene.clocks || []).filter(c => c.value < c.max);
         if (active.length === 0) return null;

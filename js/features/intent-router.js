@@ -50,13 +50,23 @@ const IntentRouter = {
     },
 
     isHelp(raw, normalized = this._normalize(raw)) {
-        const helpPatterns = [
-            '怎么搞', '怎么做', '怎么操作', '什么情况', '然后呢', '我现在该干什么',
-            '该干什么', '下一步', '怎么玩', '什么意思', '是什么', '干嘛用',
-            '如何', '帮助', '检定', 'help'
-        ];
         const questionOnly = /^[?？]+$/.test(String(raw || '').trim());
-        return questionOnly || helpPatterns.some(p => {
+        if (questionOnly) return true;
+        if (this._looksLikeInWorldQuestion(raw, normalized)) return false;
+
+        const exactHelp = [
+            '帮助', 'help', '我该做什么', '我该干什么', '我现在该做什么', '我现在该干什么',
+            '现在该做什么', '现在该干什么', '接下来做什么', '接下来干什么',
+            '下一步', '下一步做什么', '下一步干什么', '然后呢', '什么情况'
+        ];
+        if (exactHelp.includes(normalized)) return true;
+
+        const helpPatterns = [
+            '怎么玩', '怎么操作', '如何操作', '怎么使用', '如何使用',
+            '怎么存档', '怎么读档', '怎么设置', '怎么掷骰', '如何掷骰',
+            '什么是检定', '检定是什么', '这是什么检定', '怎么检定', 'api key'
+        ];
+        return helpPatterns.some(p => {
             const pattern = this._normalize(p);
             return pattern && normalized.includes(pattern);
         });
@@ -89,8 +99,15 @@ const IntentRouter = {
             return `当前：行动预览还没有进入剧情。你准备做的是“${action.intent || '这个行动'}”。输入“执行”确认，输入“取消”放弃，或直接输入新的动作来改写。`;
         }
         const objective = this._currentObjective(scene);
-        return objective
-            ? `当前：${objective}。你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认。`
+        const actions = this._recommendedActions(scene);
+        const actionText = actions.length > 0
+            ? `\n可以尝试：\n${actions.map((a, i) => `${i + 1}. ${a}`).join('\n')}`
+            : '';
+        if (objective) {
+            return `当前：${objective}。${actionText || '\n你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认。'}`;
+        }
+        return actionText
+            ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
             : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。';
     },
 
@@ -135,6 +152,33 @@ const IntentRouter = {
 
     _startsWithAny(text, prefixes) {
         return prefixes.some(p => text.startsWith(this._normalize(p)));
+    },
+
+    _looksLikeInWorldQuestion(raw, normalized) {
+        const text = String(raw || '').trim();
+        if (text.includes('@')) return true;
+        if (normalized.startsWith('请问') || normalized.startsWith('告诉我')) return false;
+        const prefixes = [
+            '我问', '我询问', '询问', '问', '向', '对', '跟', '和',
+            '告诉', '请', '让', '要求', '试探', '打听'
+        ];
+        return prefixes.some(p => normalized.startsWith(this._normalize(p)));
+    },
+
+    _recommendedActions(scene) {
+        const situation = scene && typeof WorldEngine !== 'undefined' && WorldEngine.getCurrentSituation
+            ? WorldEngine.getCurrentSituation(scene)
+            : null;
+        const recommended = Array.isArray(situation?.recommendedActions)
+            ? situation.recommendedActions
+            : (Array.isArray(scene?.currentSituation?.recommendedActions) ? scene.currentSituation.recommendedActions : []);
+        const guide = scene?.flowGuide || {};
+        const fallback = Array.isArray(guide.stalledPrompts) ? guide.stalledPrompts : [];
+        return [...recommended, ...fallback]
+            .map(a => String(a || '').trim())
+            .filter(Boolean)
+            .filter((a, i, arr) => arr.indexOf(a) === i)
+            .slice(0, 4);
     },
 
     _currentObjective(scene) {

@@ -592,6 +592,9 @@ const ChatUI = {
         };
 
         scene.messages.push(msg);
+        if (!isOoc && !isStrategy && typeof WorldEngine !== 'undefined' && WorldEngine.markFlowMoveCompleted) {
+            WorldEngine.markFlowMoveCompleted(scene, text);
+        }
         this.onMessageAdded(msg);
         await State.saveCurrentSceneDebounced();
         this.inputEl.value = '';
@@ -734,6 +737,9 @@ const ChatUI = {
         };
         scene.pendingAction = null;
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.markFlowMoveCompleted) {
+            WorldEngine.markFlowMoveCompleted(scene, action.intent || '');
+        }
         this.onMessageAdded(msg);
         await State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
