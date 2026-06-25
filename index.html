@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>酒馆 — AI 角色扮演</title>
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/themes.css">
-    <link rel="stylesheet" href="css/layout.css">
-    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/base.css?v=20260625-ux2">
+    <link rel="stylesheet" href="css/themes.css?v=20260625-ux2">
+    <link rel="stylesheet" href="css/layout.css?v=20260625-ux2">
+    <link rel="stylesheet" href="css/components.css?v=20260625-ux2">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 </head>
 <body>
@@ -120,6 +120,7 @@
                     <div class="input-mode-hint" id="inputModeHint">普通对话会进入角色扮演上下文。</div>
                     <div class="pending-action-preview hidden" id="pendingActionPreview"></div>
                     <div class="pending-check-preview hidden" id="pendingCheckPreview"></div>
+                    <div class="input-suggestion-chips" id="inputSuggestionChips" aria-label="输入建议"></div>
                     <div class="input-box">
                         <textarea id="chatInput" rows="1" placeholder="输入消息..."></textarea>
                         <button class="send-btn" id="sendBtn">发送</button>
@@ -260,35 +261,35 @@
     <div class="toast" id="toast"></div>
 
     <!-- JS 加载 -->
-    <script src="js/core/storage.js"></script>
-    <script src="js/core/api.js"></script>
-    <script src="js/core/state.js"></script>
-    <script src="js/core/ai-generator.js"></script>
-    <script src="js/core/prompt-builder.js"></script>
-    <script src="js/ui/renderer.js"></script>
-    <script src="js/ui/icons.js"></script>
-    <script src="js/features/world-engine.js"></script>
-    <script src="js/features/action-planner.js"></script>
-    <script src="js/features/intent-router.js"></script>
-    <script src="js/ui/chat.js"></script>
-    <script src="js/ui/sidebar-left.js"></script>
-    <script src="js/ui/sidebar-right.js"></script>
-    <script src="js/ui/action-bar.js"></script>
-    <script src="js/ui/quest-tracker.js"></script>
-    <script src="js/ui/map-view.js"></script>
-    <script src="js/ui/character-editor.js"></script>
-    <script src="js/ui/player-creator.js"></script>
-    <script src="js/ui/new-character-handler.js"></script>
-    <script src="js/features/png-metadata.js"></script>
-    <script src="js/features/character-card.js"></script>
-    <script src="js/features/lorebook.js"></script>
-    <script src="js/features/relationship.js"></script>
-    <script src="js/features/strategy-manager.js"></script>
-    <script src="js/features/group-chat.js"></script>
-    <script src="js/features/scene-manager.js"></script>
-    <script src="js/features/world-generator.js"></script>
-    <script src="js/features/tutorial.js"></script>
+    <script src="js/core/storage.js?v=20260625-ux2"></script>
+    <script src="js/core/api.js?v=20260625-ux2"></script>
+    <script src="js/core/state.js?v=20260625-ux2"></script>
+    <script src="js/core/ai-generator.js?v=20260625-ux2"></script>
+    <script src="js/core/prompt-builder.js?v=20260625-ux2"></script>
+    <script src="js/ui/renderer.js?v=20260625-ux2"></script>
+    <script src="js/ui/icons.js?v=20260625-ux2"></script>
+    <script src="js/features/world-engine.js?v=20260625-ux2"></script>
+    <script src="js/features/action-planner.js?v=20260625-ux2"></script>
+    <script src="js/features/intent-router.js?v=20260625-ux2"></script>
+    <script src="js/ui/chat.js?v=20260625-ux2"></script>
+    <script src="js/ui/sidebar-left.js?v=20260625-ux2"></script>
+    <script src="js/ui/sidebar-right.js?v=20260625-ux2"></script>
+    <script src="js/ui/action-bar.js?v=20260625-ux2"></script>
+    <script src="js/ui/quest-tracker.js?v=20260625-ux2"></script>
+    <script src="js/ui/map-view.js?v=20260625-ux2"></script>
+    <script src="js/ui/character-editor.js?v=20260625-ux2"></script>
+    <script src="js/ui/player-creator.js?v=20260625-ux2"></script>
+    <script src="js/ui/new-character-handler.js?v=20260625-ux2"></script>
+    <script src="js/features/png-metadata.js?v=20260625-ux2"></script>
+    <script src="js/features/character-card.js?v=20260625-ux2"></script>
+    <script src="js/features/lorebook.js?v=20260625-ux2"></script>
+    <script src="js/features/relationship.js?v=20260625-ux2"></script>
+    <script src="js/features/strategy-manager.js?v=20260625-ux2"></script>
+    <script src="js/features/group-chat.js?v=20260625-ux2"></script>
+    <script src="js/features/scene-manager.js?v=20260625-ux2"></script>
+    <script src="js/features/world-generator.js?v=20260625-ux2"></script>
+    <script src="js/features/tutorial.js?v=20260625-ux2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/main.js?v=20260625-ux2"></script>
 </body>
 </html>
