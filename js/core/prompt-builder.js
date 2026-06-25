@@ -14,6 +14,9 @@ const PromptBuilder = {
     build(character, scene, messages, opts = {}) {
         const userName = this._sanitizeName(scene.userName || '旅人');
         const charName = this._sanitizeName(character.name || '角色');
+        const visibleMessages = typeof WorldEngine !== 'undefined'
+            ? WorldEngine.filterMessagesForCharacter(messages, character, scene)
+            : messages;
         const systemParts = [];
 
         systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
@@ -35,7 +38,7 @@ const PromptBuilder = {
             systemParts.push(`【额外设定】\n${this.replacePlaceholders(character.system_prompt, charName, userName)}`);
         }
 
-        const loreContent = this.buildLorebookPrompt(scene, messages);
+        const loreContent = this.buildLorebookPrompt(scene, visibleMessages);
         if (loreContent) {
             systemParts.push(`【世界书】\n${loreContent}`);
         }
@@ -49,15 +52,10 @@ const PromptBuilder = {
             systemParts.push(`【关系状态】\n对 ${userName} 的好感度：${relation.affection}/100，当前情绪：${relation.mood || '平静'}。`);
         }
 
-        // NPC 谋略素材
-        if (character.motives || character.fears || character.secrets || character.leverage) {
-            const npcIntelParts = [];
-            if (character.motives?.length) npcIntelParts.push(`动机：${character.motives.join('、')}`);
-            if (character.fears?.length) npcIntelParts.push(`恐惧：${character.fears.join('、')}`);
-            if (character.secrets?.length) npcIntelParts.push(`秘密：${character.secrets.join('、')}`);
-            if (character.leverage?.length) npcIntelParts.push(`筹码：${character.leverage.join('、')}`);
-            systemParts.push(`【角色谋略素材】\n${npcIntelParts.join('\n')}`);
-        }
+        const privateNpcBlock = this.buildPrivateNpcBlock(character);
+        if (privateNpcBlock) systemParts.push(privateNpcBlock);
+        const agendaBlock = this.buildNpcAgendaBlock(character);
+        if (agendaBlock) systemParts.push(agendaBlock);
 
         // 角色信条/三观（人格锚点，决定角色会拒绝什么、坚持什么）
         const creedBlock = this.buildCreedBlock(character);
@@ -85,10 +83,12 @@ const PromptBuilder = {
         const apiMessages = [{ role: 'system', content: systemPrompt }];
 
         const historyLimit = opts.historyLimit || 50;
-        const recentMessages = messages.slice(-historyLimit);
+        const recentMessages = visibleMessages.slice(-historyLimit);
         recentMessages.forEach(msg => {
             let content = msg.content;
-            if (msg.role === 'user' && msg.type === 'strategy') {
+            if (msg.role === 'user' && msg.type === 'action_intent') {
+                content = '[玩家行动意图] ' + content;
+            } else if (msg.role === 'user' && msg.type === 'strategy') {
                 content = '[玩家计策意图] ' + content;
             }
             apiMessages.push({
@@ -106,6 +106,9 @@ const PromptBuilder = {
     buildGroup(currentChar, scene, messages, allCharacters, opts = {}) {
         const userName = this._sanitizeName(scene.userName || '旅人');
         const charName = this._sanitizeName(currentChar.name || '角色');
+        const visibleMessages = typeof WorldEngine !== 'undefined'
+            ? WorldEngine.filterMessagesForCharacter(messages, currentChar, scene)
+            : messages;
         const systemParts = [];
 
         systemParts.push(`你是 ${charName}。请严格扮演这个角色，以第一人称回复。`);
@@ -130,7 +133,7 @@ const PromptBuilder = {
             systemParts.push(`【示例对话】\n${this.replacePlaceholders(currentChar.mes_example, charName, userName)}`);
         }
 
-        const loreContent = this.buildLorebookPrompt(scene, messages);
+        const loreContent = this.buildLorebookPrompt(scene, visibleMessages);
         if (loreContent) {
             systemParts.push(`【世界书】\n${loreContent}`);
         }
@@ -144,15 +147,10 @@ const PromptBuilder = {
             systemParts.push(`【关系】\n对 ${userName} 好感度：${relation.affection}/100，情绪：${relation.mood || '平静'}`);
         }
 
-        // NPC 谋略素材
-        if (currentChar.motives || currentChar.fears || currentChar.secrets || currentChar.leverage) {
-            const npcIntelParts = [];
-            if (currentChar.motives?.length) npcIntelParts.push(`动机：${currentChar.motives.join('、')}`);
-            if (currentChar.fears?.length) npcIntelParts.push(`恐惧：${currentChar.fears.join('、')}`);
-            if (currentChar.secrets?.length) npcIntelParts.push(`秘密：${currentChar.secrets.join('、')}`);
-            if (currentChar.leverage?.length) npcIntelParts.push(`筹码：${currentChar.leverage.join('、')}`);
-            systemParts.push(`【角色谋略素材】\n${npcIntelParts.join('\n')}`);
-        }
+        const privateNpcBlock = this.buildPrivateNpcBlock(currentChar);
+        if (privateNpcBlock) systemParts.push(privateNpcBlock);
+        const agendaBlock = this.buildNpcAgendaBlock(currentChar);
+        if (agendaBlock) systemParts.push(agendaBlock);
 
         // 角色信条/三观
         const creedBlock = this.buildCreedBlock(currentChar);
@@ -177,13 +175,13 @@ const PromptBuilder = {
         systemParts.push(this.buildStrategyProtocol(scene));
 
         // 剧情推动 + 导演权限 + 动态事件标记
-        systemParts.push(`【导演权限与剧情推动】\n你同时是一个无形的叙述者，剧情主要由你推动而非被动等待玩家。\n- 按剧情弧节拍主动推进：满足条件就触发对应事件，不要等玩家"问"。\n- 每隔 2-3 轮主动引入新事件、NPC 动作或危机。NPC 有自己的计划，会主动行动。\n- 玩家漫无目的时，用突发事件把剧情拉回主线。\n\n你可以通过以下标记触发游戏事件（放在回复末尾，每条标记独占一行）：\n- 新角色登场：[new_char:角色名|emoji|外貌描写|性格特征|开场白]\n- 角色退场：[char_exit:角色名|原因]\n- 新增任务：[quest:任务名|main或side|描述|目标1,目标2,...|奖励]\n- 任务目标完成：[quest_update:任务名|目标序号(从1开始)]\n- 移动到新地点：[move:地点名]\n- 触发剧情事件：[event:事件描述]\n- 要求属性检定：[check:属性名|DC值]（系统自动投骰并告知结果，然后你会继续叙事）\n- 给予物品：[item_add:名称|描述|类型(weapon/armor/consumable/quest/misc)|数量]\n- 移除物品：[item_remove:名称]\n- 装备物品：[item_equip:名称]\n- 卸下物品：[item_unequip:名称]\n\n【格式要求】\n- 用 *斜体* 表示动作和神态\n- 普通文本表示对话\n- 末尾可输出 [emotion:情绪名]\n- 保持角色一致性`);
+        systemParts.push(`【导演权限与剧情推动】\n你同时是一个无形的叙述者，剧情主要由你推动而非被动等待玩家。\n- 按剧情弧节拍主动推进：满足条件就触发对应事件，不要等玩家"问"。\n- 每隔 2-3 轮主动引入新事件、NPC 动作或危机。NPC 有自己的计划，会主动行动。\n- 玩家漫无目的时，用突发事件把剧情拉回主线。\n\n你可以通过以下标记触发游戏事件（放在回复末尾，每条标记独占一行）：\n- 新角色登场：[new_char:角色名|emoji|外貌描写|性格特征|开场白]\n- 角色退场：[char_exit:角色名|原因]\n- 新增任务：[quest:任务名|main或side|描述|目标1,目标2,...|奖励]\n- 任务目标完成：[quest_update:任务名|目标序号(从1开始)]\n- 移动到新地点：[move:地点名]\n- 触发剧情事件：[event:事件描述]\n- 要求属性检定：[check:属性名|DC值]（系统会生成检定卡，玩家点击掷骰后你再继续叙事）\n- 给予物品：[item_add:名称|描述|类型(weapon/armor/consumable/quest/misc)|数量]\n- 移除物品：[item_remove:名称]\n- 装备物品：[item_equip:名称]\n- 卸下物品：[item_unequip:名称]\n\n【格式要求】\n- 用 *斜体* 表示动作和神态\n- 普通文本表示对话\n- 末尾可输出 [emotion:情绪名]\n- 保持角色一致性`);
 
         const systemPrompt = systemParts.join('\n\n');
         const apiMessages = [{ role: 'system', content: systemPrompt }];
 
         const historyLimit = opts.historyLimit || 50;
-        const recentMessages = messages.slice(-historyLimit);
+        const recentMessages = visibleMessages.slice(-historyLimit);
         recentMessages.forEach(msg => {
             let prefix = '';
             let content = msg.content;
@@ -195,6 +193,8 @@ const PromptBuilder = {
             }
             if (msg.type === 'strategy') {
                 prefix = '[玩家计策意图] ';
+            } else if (msg.type === 'action_intent') {
+                prefix = '[玩家行动意图] ';
             }
             apiMessages.push({
                 role: msg.role,
@@ -271,11 +271,8 @@ const PromptBuilder = {
             if (eqParts.length > 0) parts.push(`【当前装备】\n${eqParts.join('\n')}`);
         }
 
-        // 计策素材注入
-        const intel = scene.intel || [];
-        if (intel.length > 0) {
-            parts.push(`【已知情报】\n${intel.map(i => `- ${i.text}（来源：${i.source}，可信度：${i.reliability || 'rumor'}）`).join('\n')}`);
-        }
+        const knowledgeBlock = this.buildPlayerKnowledgeBlock(scene);
+        if (knowledgeBlock) parts.push(knowledgeBlock);
         const factions = scene.factions || [];
         if (factions.length > 0) {
             parts.push(`【势力态势】\n${factions.map(f => `- ${f.name}：态度${f.attitude || 0}，实力${f.power || 0}。${f.description || ''}`).join('\n')}`);
@@ -287,13 +284,65 @@ const PromptBuilder = {
             parts.push(`【世界矛盾种子】\n${scene.conflictSeeds.map((c, i) => `${i + 1}. ${c}`).join('\n')}`);
         }
 
-        // 检定规则 + 动态事件 + 生存系统
-        parts.push(`【检定规则】当玩家尝试有风险或不确定结果的行为时，你可以要求属性检定。在回复末尾使用 [check:属性名|DC值] 标记，系统将自动投D20+属性修正并告知结果，然后你会收到结果并继续叙事。\nDC参考：10=简单，15=中等，20=困难，25=极难。自然20=大成功（无视DC），自然1=大失败（无视DC）。\n可用的属性名：力量、敏捷、体质、智力、感知、魅力。\n\n【生存系统】玩家有生命值(HP)、金币、等级。战斗、陷阱、跌落等会造成伤害；休息、治疗术、药水可恢复。当涉及这些时，在回复末尾使用：\n- [damage:N|原因] 对玩家造成 N 点伤害（如受击、陷阱、中毒）\n- [heal:N] 为玩家恢复 N 点生命（如休息、治疗、药水）\n- [gold:N] 金币变动，正数获得负数花费（如拾取、奖励、购买）\n- [exp:N] 给予玩家 N 点经验（如完成任务、击败强敌、解开谜题）\nHP 归零玩家会死亡，故事将走向结局，请慎重使用 [damage:]。危险要符合剧情逻辑，不要无故伤害玩家。\n\n【动态事件】你可以根据剧情发展主动触发以下事件（放在回复末尾）：\n- [quest:任务名|main或side|描述|目标1,目标2|奖励] 创建新任务（奖励格式如：金币x100,经验x50,物品名）\n- [quest_update:任务名|目标序号] 标记某任务目标完成\n- [event:事件描述] 触发一次剧情事件\n- [move:地点名] 建议移动到新地点\n- [check:属性名|DC] 要求玩家进行属性检定\n- [item_add:物品名|描述|类型|数量] 给予玩家物品`);
+        const pressureBlock = this.buildWorldPressureContext(scene);
+        if (pressureBlock) parts.push(pressureBlock);
+
+        // 行动 / 检定规则 + 动态事件 + 生存系统
+        parts.push(`【行动意图与检定规则】当玩家消息带有 [玩家行动意图] 时，表示玩家已经看过本地风险预览并确认执行。你必须按公正 DM 方式结算：\n- 尊重其中的行动类型、风险预览、建议检定和失败推进，但可以根据角色立场和场景微调。\n- 若行动有不确定性、对抗、危险或重大收益，使用 [check:属性名|DC值] 要求检定。\n- 检定失败不能只说"失败了"，必须产生推进型后果：暴露、关系变化、时间推进、资源损失、不完整线索、被迫进入新场景、欠债或反制。\n- 可以出现部分成功：目标达成但付出代价，或得到线索但引入新问题。\n\n一般有风险或不确定结果的行为也可要求属性检定。在回复末尾使用 [check:属性名|DC值] 标记，系统会生成检定卡；玩家点击掷骰后，系统将把 D20+属性修正 vs DC 的结果写入历史，然后你会收到结果并继续叙事。\nDC参考：10=简单，15=中等，20=困难，25=极难。自然20=大成功（无视DC），自然1=大失败（无视DC）。\n可用的属性名：力量、敏捷、体质、智力、感知、魅力。\n\n【生存系统】玩家有生命值(HP)、金币、等级。战斗、陷阱、跌落等会造成伤害；休息、治疗术、药水可恢复。当涉及这些时，在回复末尾使用：\n- [damage:N|原因] 对玩家造成 N 点伤害（如受击、陷阱、中毒）\n- [heal:N] 为玩家恢复 N 点生命（如休息、治疗、药水）\n- [gold:N] 金币变动，正数获得负数花费（如拾取、奖励、购买）\n- [exp:N] 给予玩家 N 点经验（如完成任务、击败强敌、解开谜题）\nHP 归零玩家会死亡，故事将走向结局，请慎重使用 [damage:]。危险要符合剧情逻辑，不要无故伤害玩家。\n\n【动态事件】你可以根据剧情发展主动触发以下事件（放在回复末尾）：\n- [quest:任务名|main或side|描述|目标1,目标2|奖励] 创建新任务（奖励格式如：金币x100,经验x50,物品名）\n- [quest_update:任务名|目标序号] 标记某任务目标完成\n- [event:事件描述] 触发一次剧情事件\n- [move:地点名] 建议移动到新地点\n- [check:属性名|DC] 要求玩家进行属性检定\n- [item_add:物品名|描述|类型|数量] 给予玩家物品`);
 
         // 合理性协议（最高优先级，约束玩家随意发挥）
         parts.push(`【合理性协议】（最高优先级，凌驾于讨好玩家之上）\n1. 玩家声称"成功/说服/打败/拿到/潜入成功"等结果时，若该行为有风险、需要他人配合、或超出当前能力，你绝不能直接承认成功——必须要求检定 [check:]，或让 NPC 提出质疑/条件/反对。\n2. 不合逻辑的行为必须被拒绝或产生负面后果：无工具撬锁、空手挡剑、凭空知道未获知的秘密、一人敌众、无资质识破伪装等。NPC 会合理地怀疑和抗拒。\n3. NPC 有自己的信条、利益和立场，不会因为玩家"说了几句好话"就违背原则。说服需要筹码、关系、把柄或检定支撑，不是靠嘴就能成事。\n4. 越是重大的成功，越需要更多铺垫（情报、准备、关系、检定）。跳跃式、想当然的成功必须伴随高 DC 或明确的失败风险。\n5. 当玩家试图跳过剧情关键环节（如：还没调查就声称知道真相、还没建立关系就要求 NPC 帮忙）时，用 NPC 拒绝、环境阻碍或新危机引导回正轨。\n6. 你的职责是做公正的 DM，不是玩家的许愿机。合理的挑战和偶尔的失败比一味顺从更能带来好故事。`);
 
         return parts.join('\n\n');
+    },
+
+    buildPrivateNpcBlock(character) {
+        if (!character) return '';
+        const npcIntelParts = [];
+        if (character.motives?.length) npcIntelParts.push(`动机：${character.motives.join('、')}`);
+        if (character.fears?.length) npcIntelParts.push(`恐惧：${character.fears.join('、')}`);
+        if (character.secrets?.length) npcIntelParts.push(`秘密：${character.secrets.join('、')}`);
+        if (character.leverage?.length) npcIntelParts.push(`筹码：${character.leverage.join('、')}`);
+        const hiddenFacts = character.profile?.hiddenFacts;
+        if (Array.isArray(hiddenFacts) && hiddenFacts.length > 0) {
+            npcIntelParts.push(`隐藏档案槽：\n${hiddenFacts.map(f => `- ${f.id} | ${f.type || 'fact'} | ${f.truth || ''} | 暗示：${f.hint || ''}`).join('\n')}`);
+        }
+        if (npcIntelParts.length === 0) return '';
+        return `【NPC 私密设定，仅用于扮演，禁止直接透露】\n${npcIntelParts.join('\n')}\n\n规则：\n- 这些内容是你的内心、隐藏事实和可被玩家调查出的深层信息，不等于玩家已经知道。\n- 除非玩家通过已知情报、证据、关系门槛、检定或剧情事件解锁，否则不要直接说出秘密、恐惧或筹码。\n- 可以用含蓄反应、回避、紧张、试探、矛盾行为来暗示，但不要把私密事实当旁白公开。`;
+    },
+
+    buildPlayerKnowledgeBlock(scene) {
+        const discoveries = scene?.knowledge?.discoveries || [];
+        const legacyIntel = scene?.intel || [];
+        const lines = [];
+        const levelLabels = {
+            hint: '观察',
+            rumor: '传闻',
+            evidence: '证据',
+            inference: '推论',
+            truth: '确认'
+        };
+        const reliabilityLabels = {
+            unverified: '未验证',
+            contested: '有争议',
+            confirmed: '已确认',
+            false: '虚假'
+        };
+
+        if (discoveries.length > 0) {
+            discoveries.slice(-30).forEach(item => {
+                const level = levelLabels[item.level] || item.level || '线索';
+                const rel = reliabilityLabels[item.reliability] || item.reliability || '未验证';
+                lines.push(`- [${level}/${rel}] ${item.text || item.title}（来源：${item.source || '未知'}）`);
+            });
+        } else if (legacyIntel.length > 0) {
+            legacyIntel.slice(-30).forEach(item => {
+                lines.push(`- [情报/${item.reliability || 'rumor'}] ${item.text}（来源：${item.source || '未知'}）`);
+            });
+        }
+
+        if (lines.length === 0) return '';
+        return `【玩家已知情报】\n以下内容是玩家已经观察、听闻、推理或确认的信息。不要把未解锁的 NPC 私密设定当作玩家已知。\n${lines.join('\n')}`;
     },
 
     /**
@@ -306,10 +355,44 @@ const PromptBuilder = {
             : '当前没有激活的计策。';
 
         const allStrategies = (scene.strategies || []).map(s =>
-            `- ${s.title}：${s.goal || '无目标'}（${s.status || 'draft'}，${s.phase || '—'}）`
+            `- ${s.title}：${s.goal || '无目标'}（${s.status || 'draft'}，${s.phase || '—'}，风险${s.risk || 0}%，暴露${s.exposure || 0}%）`
         ).join('\n') || '无';
 
-        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 后果必须具体影响关系、警觉、任务、资源、地点或世界局势。\n6. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n7. 当创建或更新计策、添加情报、调整势力、修改关系时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "intelAdd": [...], "factionsUpdate": [...], "characterUpdates": [...], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
+        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100，同时记录 requiredIntel/usedIntel/exposure/counterplay。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖玩家已知情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 私密设定不是玩家已知；只有当玩家观察、调查、套话、取得证据或满足关系门槛时，才可以把它转化为 knowledgeAdd。\n6. 后果必须具体影响关系、警觉、任务、资源、地点、时钟或世界局势。\n7. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n8. 当创建或更新计策、添加玩家已知情报、推进剧情弧/时钟、调整 NPC 日程或反制时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "knowledgeAdd": [], "discoveryUpdate": [], "intelAdd": [], "factionsUpdate": [], "characterUpdates": [], "clockUpdate": [], "storyArcUpdate": [], "counterStrategyUpdate": [], "npcAgendaUpdate": [], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
+    },
+
+    buildNpcAgendaBlock(character) {
+        if (!character?.agenda) return '';
+        const agenda = character.agenda;
+        const lines = [];
+        if (agenda.currentPlan) lines.push(`当前计划：${agenda.currentPlan}`);
+        if (agenda.priority) lines.push(`优先级：${agenda.priority}/100`);
+        if (Array.isArray(agenda.schedule) && agenda.schedule.length > 0) lines.push(`日程：${agenda.schedule.join('；')}`);
+        if (Array.isArray(agenda.offscreenActions) && agenda.offscreenActions.length > 0) lines.push(`离屏行动倾向：${agenda.offscreenActions.join('；')}`);
+        if (lines.length === 0) return '';
+        return `【NPC 个人日程，仅供扮演】\n${lines.join('\n')}\n\n规则：\n- 你有自己的计划，不会因为玩家不在场就停止行动。\n- 若玩家阻碍或利用你，你可以通过 counterStrategyUpdate 或 npcAgendaUpdate 反制。\n- 不要把这份日程作为旁白直接公开，除非玩家通过观察、调查、跟踪或对质获知。`;
+    },
+
+    buildWorldPressureContext(scene) {
+        const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
+        const hidden = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
+        const counters = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
+        const parts = [];
+        if (clocks.length > 0) {
+            parts.push(`局势时钟：\n${clocks.map(c => `- ${c.name} ${c.value}/${c.max}${c.description ? `：${c.description}` : ''}`).join('\n')}`);
+        }
+        if (hidden > 0) {
+            parts.push(`隐性压力：有 ${hidden} 个未公开时钟正在恶化，只能通过迹象暗示。`);
+        }
+        if (counters.length > 0) {
+            parts.push(`敌方/NPC反制：\n${counters.map(c => `- ${c.title}（${c.actorName || c.actorId || '未知'}，进度${c.progress || 0}%，暴露${c.exposure || 0}%）：${c.hint || c.lastAction || ''}`).join('\n')}`);
+        }
+        const situation = typeof WorldEngine !== 'undefined' ? WorldEngine.getCurrentSituation(scene) : null;
+        if (situation?.recommendedActions?.length) {
+            parts.push(`可推动方向：${situation.recommendedActions.join('；')}`);
+        }
+        if (parts.length === 0) return '';
+        return `【当前局势】\n${parts.join('\n\n')}\n\n局势规则：玩家拖延、休息、失败或部分成功会推进时钟；NPC 会按日程离屏行动。你应把这些变化写成具体事件，而不是抽象数值。`;
     },
 
     /**
@@ -343,7 +426,7 @@ const PromptBuilder = {
                 : '所有节拍已推进完毕，进入收尾阶段';
             return `◆ ${arc.title}（阶段：${arc.phase || 'intro'}）\n  梗概：${arc.synopsis || '—'}\n  ${beatTxt}`;
         }).join('\n\n');
-        return `【剧情弧 · 叙事骨架】（你必须在推进剧情时遵循）\n${lines}\n\n推进规则：\n- 你的首要任务是推动剧情弧的当前节拍。当玩家的行为满足了当前节拍的 condition，你必须在回复中触发对应的 action（揭示真相/制造转折/引入危机）。\n- 玩家跑题时，用 NPC 的话、环境变化、突发事件自然地引导回主线，不要让剧情停滞。\n- 不要一次性揭示所有节拍——一个节拍消化完再推进下一个。\n- 节拍之间允许玩家自由探索和互动，但大方向必须朝剧情弧的结局推进。`;
+        return `【剧情弧 · 叙事骨架】（你必须在推进剧情时遵循）\n${lines}\n\n推进规则：\n- 你的首要任务是推动剧情弧的当前节拍。当玩家的行为满足了当前节拍的 condition，你必须在回复中触发对应的 action（揭示真相/制造转折/引入危机）。\n- 玩家跑题时，用 NPC 的话、环境变化、突发事件自然地引导回主线，不要让剧情停滞。\n- 不要一次性揭示所有节拍——一个节拍消化完再推进下一个。\n- 节拍之间允许玩家自由探索和互动，但大方向必须朝剧情弧的结局推进。\n- 当一个节拍已被实际触发或消化，在回复末尾通过 <state_update> 的 storyArcUpdate 写明 title、advance:true、reason。`;
     },
 
     /**
@@ -439,7 +522,16 @@ const PromptBuilder = {
 
         // 上下文提示
         if (context.trigger === 'check_outcome') {
-            systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据检定结果（成功或失败）以叙事方式描述发生的情况——成功时描写动作的完美执行，失败时描写意料之外的挫折。不要评判，只叙述。`);
+            const lastCheck = [...(messages || [])].reverse().find(m => m.type === 'check' && m.checkData);
+            if (lastCheck?.checkData) {
+                const d = lastCheck.checkData;
+                const consequenceLines = Array.isArray(d.consequenceOptions) && d.consequenceOptions.length > 0
+                    ? `\n建议后果：${d.consequenceOptions.join('；')}`
+                    : '';
+                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据以下结果叙述具体后果：\n- 检定：${d.statName} ${d.roll} ${d.mod >= 0 ? '+' + d.mod : d.mod} = ${d.total} vs DC${d.dc}\n- 结果层级：${d.resultLabel || d.outcome || (d.success ? '成功' : '失败')}\n- 裁决提示：${d.consequenceHint || '按结果合理推进'}${consequenceLines}\n\n要求：\n- 大成功：给出额外收益、优势、机会或更深线索。\n- 成功：让目标按预期推进。\n- 部分成功：目标达成一部分，或达成但必须付出代价。\n- 失败推进：不要只写失败，必须产生新线索、新阻碍、新场景、资源损失、关系变化或反制。\n- 大失败：严重后果，但仍要打开新的剧情方向。`);
+            } else {
+                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据检定结果以叙事方式描述发生的情况；失败时不要只阻断，必须让局势继续向前。`);
+            }
         } else if (context.trigger === 'location_arrival') {
             systemParts.push(`【当前任务】玩家到达了一个新地点。请描写这个地点的景象、氛围和值得注意的细节。让场景活起来。`);
         } else if (context.trigger === 'event') {
@@ -458,6 +550,8 @@ const PromptBuilder = {
 
         // 计策上下文
         systemParts.push(this.buildStrategyProtocol(scene));
+        const pressureBlock = this.buildWorldPressureContext(scene);
+        if (pressureBlock) systemParts.push(pressureBlock);
 
         // 格式要求
         systemParts.push(`【格式要求】\n- 纯叙事，不需要对话\n- 用 *斜体* 表示强调或环境描写\n- 1-3段为宜，不要过长\n- 可以使用 [quest:]、[item_add:] 等标记，但不要在 DM 叙事中使用 [check:]\n- 如果有计策后果，也请在末尾追加 <state_update>{...}</state_update> 补丁`);

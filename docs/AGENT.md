@@ -51,7 +51,7 @@
 
 ## 当前实现边界
 
-- `storyArcs.currentBeat` 目前只作为 prompt 上下文注入，系统不会自动推进；外部 agent 如需严格节拍，需要自行维护。
+- `storyArcs.currentBeat` 可通过 `storyArcUpdate` 推进；浏览器端还会用 `WorldEngine.tickAfterPlayerTurn()` 推进时钟和 NPC 离屏行动。外部 agent 若不驱动浏览器，需要自行应用同等状态推进。
 - `<state_update>` 是安全补丁，不是任意存档写入。玩家 HP、金币、经验、任务创建等优先使用方括号标记。
 - 动态新角色只会补基础角色字段；深层信条、秘密、筹码需要后续人工或 agent 补全。
 - 浏览器端使用 IndexedDB 持久化，外部 agent 若不驱动浏览器，需要自行实现等价的读写层。

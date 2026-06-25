@@ -26,7 +26,7 @@ const GroupChat = {
             State.setCurrentCharacter(replyChar.id);
         }
 
-        await this.replyAs(replyChar);
+        const replyResult = await this.replyAs(replyChar);
 
         // 多角色场景：自动轮换到下一个角色
         if (chars.length > 1) {
@@ -36,6 +36,11 @@ const GroupChat = {
         }
 
         ChatUI.clearStreaming();
+
+        if (replyResult?.ok && !replyResult.pendingCheck && typeof WorldEngine !== 'undefined') {
+            const reason = this._inferTurnReason(scene);
+            await WorldEngine.tickAfterPlayerTurn(reason);
+        }
 
         // 教学钩子：玩家发消息后检测是否完成当前教学步骤（仅教学世界生效）
         if (TutorialWorld.isCurrentScene()) {
@@ -105,6 +110,9 @@ const GroupChat = {
                 content: cleanedContent,
                 type: parsed.type,
                 emotion,
+                visibility: typeof WorldEngine !== 'undefined'
+                    ? WorldEngine.createVisibility({ public: allChars.length > 1, participants: [char.id] })
+                    : undefined,
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
@@ -118,9 +126,9 @@ const GroupChat = {
             const checkMarkers = markers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
 
-            // 处理检定标记：自动投骰 + 结果插入
+            // 处理检定标记：生成交互式检定卡，等待玩家点击掷骰
             for (const cm of checkMarkers) {
-                this._handleCheckMarker(cm.raw);
+                this._createPendingCheck(cm.raw, msg.id);
             }
 
             // 更新关系
@@ -129,18 +137,9 @@ const GroupChat = {
                 console.warn('关系分析失败（非致命）:', err.message || err);
             });
 
-            // AI 要求检定 → DM 叙述检定结果（防止无限循环）
-            if (checkMarkers.length > 0 && !this._isCheckContinuation) {
-                this._isCheckContinuation = true;
-                try {
-                    await this._dmNarrate({ trigger: 'check_outcome', focus: '检定结果已出，请叙述其后果' });
-                } finally {
-                    this._isCheckContinuation = false;
-                }
-                // 教学钩子：检定已叙述完成（step3）
-                if (TutorialWorld.isCurrentScene()) {
-                    Tutorial.afterCheckResolved().catch(e => console.warn('[Tutorial] afterCheckResolved 失败:', e));
-                }
+            if (checkMarkers.length > 0) {
+                ActionBar.renderPendingCheck();
+                showToast('需要检定：点击掷骰继续');
             }
 
             // 自动摘要：消息超 80 条时压缩最早 30 条（含冷却：距上次压缩不足 30 条时不触发）
@@ -154,6 +153,11 @@ const GroupChat = {
                 }
             }
 
+            return {
+                ok: true,
+                pendingCheck: checkMarkers.length > 0 || !!scene.pendingCheck
+            };
+
         } catch (err) {
             ChatUI.removeStreamingMessage();
             if (err.name !== 'AbortError') {
@@ -161,6 +165,7 @@ const GroupChat = {
                 showToast(info.message);
                 console.error('回复失败:', err);
             }
+            return { ok: false, pendingCheck: false };
         }
     },
 
@@ -171,14 +176,15 @@ const GroupChat = {
     _extractStateUpdate(content) {
         if (!content) return { content, update: null };
         const match = content.match(/<state_update>([\s\S]*?)<\/state_update>/i);
-        if (!match) return { content, update: null };
 
-        const rawJson = match[1].trim();
         let update = null;
-        try {
-            update = JSON.parse(rawJson);
-        } catch (err) {
-            console.warn('AI 状态补丁 JSON 解析失败（非致命）:', err.message || err);
+        if (match) {
+            const rawJson = match[1].trim();
+            try {
+                update = JSON.parse(rawJson);
+            } catch (err) {
+                console.warn('AI 状态补丁 JSON 解析失败（非致命）:', err.message || err);
+            }
         }
 
         const cleaned = Renderer.stripStateUpdate(content);
@@ -332,6 +338,9 @@ const GroupChat = {
             role: 'user',
             content: `【剧情事件：${raw.trim()}】`,
             type: 'action',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -340,12 +349,11 @@ const GroupChat = {
     },
 
     /**
-     * 处理 [check:属性名|DC]
-     * 自动投 D20 + 属性调整值，插入检定结果卡片
+     * 解析 [check:属性名|DC]
      */
-    _handleCheckMarker(raw) {
+    _parseCheckRaw(raw) {
         const scene = State.scene;
-        if (!scene) return;
+        if (!scene) return null;
 
         const parts = raw.split('|');
         const statName = (parts[0] || '').trim();
@@ -361,32 +369,237 @@ const GroupChat = {
         const key = statMap[statName] || statName;
         const val = (scene.playerStats && scene.playerStats[key]) ? scene.playerStats[key] : 10;
         const mod = Math.floor((val - 10) / 2);
+        return { statName: statName || '属性', key, val, mod, dc };
+    },
+
+    /**
+     * 处理 [check:属性名|DC]：创建待掷骰检定卡
+     */
+    _createPendingCheck(raw, sourceMessageId = '') {
+        const scene = State.scene;
+        if (!scene) return null;
+        if (scene.pendingCheck) {
+            console.warn('[GroupChat] 已存在待处理检定，忽略新的 check 标记');
+            return scene.pendingCheck;
+        }
+
+        const parsed = this._parseCheckRaw(raw);
+        if (!parsed) return null;
+        const latestAction = [...(scene.messages || [])].reverse().find(m => m.type === 'action_intent' && m.actionData);
+        const itemBonus = typeof WorldEngine !== 'undefined'
+            ? WorldEngine.getCheckItemBonus(scene, {
+                key: parsed.key,
+                stat: parsed.key,
+                actionType: latestAction?.actionData?.type || '',
+                intent: latestAction?.actionData?.intent || '',
+                stakes: latestAction?.actionData?.stakes || ''
+            })
+            : { bonus: 0, modifiers: [] };
+        const availableItems = typeof WorldEngine !== 'undefined'
+            ? WorldEngine.getAvailableCheckItems(scene, {
+                key: parsed.key,
+                stat: parsed.key,
+                actionType: latestAction?.actionData?.type || '',
+                intent: latestAction?.actionData?.intent || '',
+                stakes: latestAction?.actionData?.stakes || ''
+            })
+            : [];
+        const totalMod = parsed.mod + Number(itemBonus.bonus || 0);
+        scene.pendingCheck = {
+            id: 'check_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            status: 'pending',
+            statName: parsed.statName,
+            key: parsed.key,
+            statValue: parsed.val,
+            statMod: parsed.mod,
+            itemBonus: Number(itemBonus.bonus || 0),
+            mod: totalMod,
+            dc: parsed.dc,
+            source: 'AI 要求检定',
+            sourceMessageId,
+            actionType: latestAction?.actionData?.type || '',
+            intent: latestAction?.actionData?.intent || '',
+            itemModifiers: itemBonus.modifiers || [],
+            availableItemModifiers: availableItems,
+            stakes: latestAction?.actionData?.stakes || '',
+            risks: latestAction?.actionData?.risks || [],
+            createdAt: Date.now()
+        };
+        State.saveCurrentSceneDebounced();
+        return scene.pendingCheck;
+    },
+
+    /**
+     * 玩家点击检定卡后掷骰，插入检定结果，再交给 DM 叙述后果。
+     */
+    async rollPendingCheck() {
+        const scene = State.scene;
+        const check = scene?.pendingCheck;
+        if (!scene || !check || State.isStreaming) return;
 
         const roll = Math.floor(Math.random() * 20) + 1;
+        const mod = Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0;
+        const dc = Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15;
         const total = roll + mod;
-        let success, crit = null;
-        if (roll === 20) { success = true; crit = 'success'; }
-        else if (roll === 1) { success = false; crit = 'fail'; }
-        else { success = total >= dc; }
+        const outcomeInfo = this._classifyCheckOutcome(roll, total, dc);
+        const consequenceOptions = this._buildCheckConsequences(outcomeInfo.outcome, check);
+        const success = outcomeInfo.success;
+        const crit = outcomeInfo.crit;
+        if (['partial', 'fail', 'critical_fail'].includes(outcomeInfo.outcome)) {
+            if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+            if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+            scene.currentSituation.recentRisks.push(consequenceOptions[0] || outcomeInfo.hint);
+        }
 
         const sign = mod >= 0 ? '+' + mod : String(mod);
-        const critText = crit === 'success' ? ' — 大成功！' : crit === 'fail' ? ' — 大失败！' : '';
+        const consequenceText = consequenceOptions.length > 0
+            ? `\n【后果提示：${consequenceOptions.join('；')}】`
+            : '';
         // AI 收到的文本结果（保持兼容）
-        const resultText = success
-            ? `【${statName}检定：D20=${roll} ${sign} = ${total} vs DC${dc} → 成功！${critText}】`
-            : `【${statName}检定：D20=${roll} ${sign} = ${total} vs DC${dc} → 失败${critText}】`;
+        const resultText = `【${check.statName}检定：D20=${roll} ${sign} = ${total} vs DC${dc} → ${outcomeInfo.label}】${consequenceText}`;
 
         const msg = {
             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
             role: 'user',
             content: resultText,
             type: 'check',
-            checkData: { statName, key, roll, mod, total, dc, success, crit },
+            checkData: {
+                statName: check.statName,
+                key: check.key,
+                roll,
+                mod,
+                total,
+                dc,
+                success,
+                crit,
+                outcome: outcomeInfo.outcome,
+                resultLabel: outcomeInfo.label,
+                consequenceHint: outcomeInfo.hint,
+                consequenceOptions,
+                stakes: check.stakes || '',
+                risks: check.risks || [],
+                statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod,
+                itemBonus: Number(check.itemBonus || 0),
+                itemModifiers: Array.isArray(check.itemModifiers) ? check.itemModifiers : [],
+                availableItemModifiers: Array.isArray(check.availableItemModifiers) ? check.availableItemModifiers : []
+            },
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
+        if (typeof WorldEngine !== 'undefined') {
+            WorldEngine.consumeCheckItems(scene, check.itemModifiers || []);
+        }
+        scene.pendingCheck = null;
         scene.messages.push(msg);
         ChatUI.onMessageAdded(msg);
-        State.saveCurrentSceneDebounced();
+        ActionBar.renderPendingCheck();
+        await State.saveCurrentSceneDebounced();
+
+        if (!this._isCheckContinuation) {
+            this._isCheckContinuation = true;
+            try {
+                await this._dmNarrate({
+                    trigger: 'check_outcome',
+                    focus: this._buildCheckNarrationFocus(msg.checkData)
+                });
+            } finally {
+                this._isCheckContinuation = false;
+            }
+            if (TutorialWorld.isCurrentScene()) {
+                Tutorial.afterCheckResolved().catch(e => console.warn('[Tutorial] afterCheckResolved 失败:', e));
+            }
+            if (typeof WorldEngine !== 'undefined') {
+                const reason = outcomeInfo.outcome === 'partial'
+                    ? 'check_partial'
+                    : (success ? 'check_success' : 'check_fail');
+                await WorldEngine.tickAfterPlayerTurn(reason);
+            }
+        }
+    },
+
+    _classifyCheckOutcome(roll, total, dc) {
+        if (roll === 20) {
+            return {
+                outcome: 'critical_success',
+                label: '大成功！',
+                hint: '目标达成，并给出额外收益、优势、机会或更深线索。',
+                success: true,
+                crit: 'success'
+            };
+        }
+        if (roll === 1) {
+            return {
+                outcome: 'critical_fail',
+                label: '大失败！',
+                hint: '失败必须造成严重但有剧情价值的后果，并打开新的局势。',
+                success: false,
+                crit: 'fail'
+            };
+        }
+        if (total >= dc) {
+            return {
+                outcome: 'success',
+                label: '成功',
+                hint: '目标按预期达成，后果与代价保持合理。',
+                success: true,
+                crit: null
+            };
+        }
+        if (total >= dc - 3) {
+            return {
+                outcome: 'partial',
+                label: '部分成功',
+                hint: '目标达成一部分，或达成目标但必须付出代价、暴露风险、欠下人情或引入新问题。',
+                success: true,
+                crit: null
+            };
+        }
+        return {
+            outcome: 'fail',
+            label: '失败推进',
+            hint: '目标未完全达成，但剧情必须推进：给出新线索、新阻碍、新场景、资源损失、关系变化或反制。',
+            success: false,
+            crit: null
+        };
+    },
+
+    _buildCheckConsequences(outcome, check) {
+        const risks = Array.isArray(check?.risks) ? check.risks.filter(Boolean).map(String) : [];
+        if (outcome === 'critical_success') {
+            return ['额外收益或更深线索', '后续相关行动获得优势'];
+        }
+        if (outcome === 'success') {
+            return ['目标按预期推进'];
+        }
+        if (outcome === 'partial') {
+            return risks.length > 0
+                ? risks.slice(0, 2).map(r => `达成部分目标，但${r}`)
+                : ['达成部分目标，但付出代价或引入新问题'];
+        }
+        if (outcome === 'critical_fail') {
+            return risks.length > 0
+                ? risks.slice(0, 2).map(r => `严重后果：${r}`)
+                : ['严重暴露、资源损失或敌方反制'];
+        }
+        return risks.length > 0
+            ? risks.slice(0, 2)
+            : ['暴露风险、时间推进、资源损失或得到不完整线索'];
+    },
+
+    _buildCheckNarrationFocus(data) {
+        const consequences = (data.consequenceOptions || []).join('；') || data.consequenceHint || '';
+        return `检定结果：${data.resultLabel || '未知'}。${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+    },
+
+    async cancelPendingCheck() {
+        const scene = State.scene;
+        if (!scene || !scene.pendingCheck || State.isStreaming) return;
+        scene.pendingCheck = null;
+        await State.saveCurrentSceneDebounced();
+        ActionBar.renderPendingCheck();
+        showToast('已取消检定');
     },
 
     /**
@@ -516,6 +729,9 @@ const GroupChat = {
             role: 'assistant',
             content: `受到 ${amount} 点伤害${reason ? '（' + reason + '）' : ''}，剩余生命 ${scene.playerHp}/${scene.playerMaxHp}`,
             type: 'system',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -538,6 +754,9 @@ const GroupChat = {
             role: 'assistant',
             content: `恢复 ${amount} 点生命，当前 ${scene.playerHp}/${scene.playerMaxHp}`,
             type: 'system',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -558,6 +777,9 @@ const GroupChat = {
             role: 'assistant',
             content: `${amount >= 0 ? '获得' : '花费'} ${Math.abs(amount)} 金币，持有 ${scene.gold}`,
             type: 'system',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -592,6 +814,9 @@ const GroupChat = {
             role: 'assistant',
             content: `你的生命值归零，倒在了${scene.locations?.find(l => l.id === scene.currentLocation)?.name || '这片土地'}上。冒险就此终结……但或许还有未读的存档能让你重来。`,
             type: 'gameover',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -614,6 +839,9 @@ const GroupChat = {
             role: 'assistant',
             content: `所有主线任务已完成！${scene.name} 的故事迎来了它的结局。恭喜你，冒险者。`,
             type: 'victory',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);
@@ -642,6 +870,9 @@ const GroupChat = {
                 role: 'user',
                 content: `【玩家到达了 ${loc.name}】`,
                 type: 'action',
+                visibility: typeof WorldEngine !== 'undefined'
+                    ? WorldEngine.createVisibility({ public: true })
+                    : undefined,
                 timestamp: Date.now()
             };
             scene.messages.push(tempMsg);
@@ -676,6 +907,9 @@ const GroupChat = {
                 role: 'assistant',
                 content: cleanedDescription,
                 type: 'narrate',
+                visibility: typeof WorldEngine !== 'undefined'
+                    ? WorldEngine.createVisibility({ public: true })
+                    : undefined,
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
@@ -743,6 +977,9 @@ const GroupChat = {
                 role: 'assistant',
                 content: cleanedContent,
                 type: 'narrate',
+                visibility: typeof WorldEngine !== 'undefined'
+                    ? WorldEngine.createVisibility({ public: true })
+                    : undefined,
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
@@ -806,5 +1043,11 @@ const GroupChat = {
         } catch (err) {
             console.warn('会话摘要失败:', err.message || err);
         }
+    },
+
+    _inferTurnReason(scene) {
+        const latest = [...(scene?.messages || [])].reverse().find(m => m.role === 'user' && m.type !== 'check');
+        if (latest?.actionData?.type === 'rest') return 'rest';
+        return 'player_turn';
     }
 };

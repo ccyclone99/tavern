@@ -155,9 +155,10 @@ Observer 不参与剧情裁决，除非模拟明确把它设为仲裁器。
 
 ## 七、已知限制
 
-当前实现的限制，外部多 agent 模拟需要自行处理：
+当前实现的限制，外部多 agent 模拟需要注意：
 
-- `storyArcs.currentBeat` 不会自动推进。
+- `storyArcs.currentBeat` 可通过 `storyArcUpdate` 推进；外部模拟如果绕过浏览器实现，需要自行应用同等补丁。
+- `WorldEngine.tickAfterPlayerTurn()` 会在浏览器端推进局势时钟和 NPC 离屏行动；外部模拟若不驱动浏览器，需要自行复刻。
 - `<state_update>` 不能直接创建任务，只能轻量更新已有任务；创建任务应使用 `[quest:]`。
 - `characterUpdates` 使用 `characterId`，DM 必须知道目标 id；只写角色名不会生效。
 - `[move:]` 按地点名匹配（支持部分匹配），外部模拟最好使用精确名称。

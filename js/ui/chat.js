@@ -34,8 +34,35 @@ const ChatUI = {
         const iconName = statIcons[d.key] || 'int';
         const iconHtml = Icons.get(iconName, { size: 16 });
         const sign = d.mod >= 0 ? '+' + d.mod : String(d.mod);
-        const cls = d.crit === 'success' ? 'crit-success' : d.crit === 'fail' ? 'crit-fail' : (d.success ? 'check-success' : 'check-fail');
-        const resultText = d.crit === 'success' ? '大成功！' : d.crit === 'fail' ? '大失败！' : (d.success ? '成功' : '失败');
+        const outcome = d.outcome || (d.crit === 'success' ? 'critical_success' : d.crit === 'fail' ? 'critical_fail' : (d.success ? 'success' : 'fail'));
+        const clsMap = {
+            critical_success: 'crit-success',
+            success: 'check-success',
+            partial: 'check-partial',
+            fail: 'check-fail',
+            critical_fail: 'crit-fail'
+        };
+        const labelMap = {
+            critical_success: '大成功！',
+            success: '成功',
+            partial: '部分成功',
+            fail: '失败推进',
+            critical_fail: '大失败！'
+        };
+        const cls = clsMap[outcome] || (d.success ? 'check-success' : 'check-fail');
+        const resultText = d.resultLabel || labelMap[outcome] || (d.success ? '成功' : '失败');
+        const breakdown = d.itemBonus
+            ? `<div class="check-breakdown">属性 ${d.statMod >= 0 ? '+' + d.statMod : d.statMod} · 物品 ${d.itemBonus >= 0 ? '+' + d.itemBonus : d.itemBonus}</div>`
+            : '';
+        const itemMods = Array.isArray(d.itemModifiers) && d.itemModifiers.length > 0
+            ? `<div class="check-modifiers">${d.itemModifiers.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
+            : '';
+        const availableItems = Array.isArray(d.availableItemModifiers) && d.availableItemModifiers.length > 0
+            ? `<div class="check-modifiers check-available-modifiers">${d.availableItemModifiers.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
+            : '';
+        const note = d.consequenceHint
+            ? `<div class="check-outcome-note">${Renderer.escapeHtml(d.consequenceHint)}</div>`
+            : '';
         return `<div class="check-card ${cls}">
             <div class="check-stat">${iconHtml}<span>${Renderer.escapeHtml(d.statName)}</span></div>
             <div class="check-roll"><span class="check-d20" data-final="${d.roll}">${d.roll}</span></div>
@@ -45,7 +72,13 @@ const ChatUI = {
                 <span class="check-total">${d.total}</span>
                 <span class="check-vs">vs DC${d.dc}</span>
             </div>
-            <div class="check-result-badge">${resultText}</div>
+            ${breakdown}
+            ${itemMods}
+            ${availableItems}
+            <div class="check-outcome">
+                <div class="check-result-badge">${Renderer.escapeHtml(resultText)}</div>
+                ${note}
+            </div>
         </div>`;
     },
 
@@ -56,6 +89,7 @@ const ChatUI = {
         this.stopBtn = document.getElementById('stopBtn');
         this.playerNameInput = document.getElementById('playerNameInput');
         this.oocBtn = document.getElementById('oocBtn');
+        this.actionBtn = document.getElementById('actionBtn');
         this.strategyBtn = document.getElementById('strategyBtn');
 
         this.sendBtn.onclick = async () => {
@@ -76,6 +110,7 @@ const ChatUI = {
         });
         this.inputEl.addEventListener('input', () => this.autoResize());
         this.oocBtn.onclick = () => this.toggleOOC();
+        if (this.actionBtn) this.actionBtn.onclick = () => this.toggleAction();
         if (this.strategyBtn) this.strategyBtn.onclick = () => this.toggleStrategy();
         this.playerNameInput.addEventListener('change', async () => {
             const scene = State.scene;
@@ -119,14 +154,22 @@ const ChatUI = {
     _syncInputMode() {
         if (State.isOOC) {
             this.oocBtn.classList.add('active');
+            if (this.actionBtn) this.actionBtn.classList.remove('active');
+            if (this.strategyBtn) this.strategyBtn.classList.remove('active');
             this.inputEl.placeholder = 'OOC 消息（不会进入角色扮演上下文）...';
         } else {
             this.oocBtn.classList.remove('active');
         }
-        if (State.inputMode === 'strategy') {
+        if (!State.isOOC && State.inputMode === 'action') {
+            if (this.actionBtn) this.actionBtn.classList.add('active');
+            if (this.strategyBtn) this.strategyBtn.classList.remove('active');
+            this.inputEl.placeholder = '描述一个明确行动，例如：我想套出他隐瞒的事...';
+        } else if (!State.isOOC && State.inputMode === 'strategy') {
+            if (this.actionBtn) this.actionBtn.classList.remove('active');
             if (this.strategyBtn) this.strategyBtn.classList.add('active');
             if (!State.isOOC) this.inputEl.placeholder = '描述目标或计策意图，例如：我想挑拨商会和城卫...';
         } else {
+            if (this.actionBtn) this.actionBtn.classList.remove('active');
             if (this.strategyBtn) this.strategyBtn.classList.remove('active');
             if (!State.isOOC) this.inputEl.placeholder = '输入消息...';
         }
@@ -134,13 +177,23 @@ const ChatUI = {
 
     toggleOOC() {
         State.isOOC = !State.isOOC;
-        if (State.isOOC) State.inputMode = 'action';
+        if (State.isOOC) State.inputMode = 'talk';
+        this._syncInputMode();
+    },
+
+    toggleAction() {
+        if (State.inputMode === 'action' && !State.isOOC) {
+            State.inputMode = 'talk';
+        } else {
+            State.inputMode = 'action';
+            State.isOOC = false;
+        }
         this._syncInputMode();
     },
 
     toggleStrategy() {
         if (State.inputMode === 'strategy') {
-            State.inputMode = 'action';
+            State.inputMode = 'talk';
         } else {
             State.inputMode = 'strategy';
             State.isOOC = false;
@@ -224,6 +277,9 @@ const ChatUI = {
         } else if (parsed.type === 'strategy') {
             div.className = 'rp-message rp-strategy';
             div.innerHTML = `<div class="strategy-label">计策意图</div><div>${Renderer.renderRP(parsed.content)}</div>`;
+        } else if (parsed.type === 'action_intent') {
+            div.className = 'rp-message rp-strategy rp-action-intent';
+            div.innerHTML = `<div class="strategy-label">行动意图</div><div>${Renderer.renderRP(parsed.content)}</div>`;
         } else if (parsed.type === 'system') {
             div.className = 'rp-message rp-system';
             div.innerHTML = `<div class="system-chip">${Renderer.renderRP(parsed.content)}</div>`;
@@ -317,13 +373,16 @@ const ChatUI = {
 
     updateStreamingContent(text) {
         if (this._streamingEl) {
-            this._streamingEl.innerHTML = Renderer.renderRP(text);
+            this._streamingEl.innerHTML = Renderer.renderRP(Renderer.stripHiddenControls(text));
             this._streamingEl.classList.add('is-streaming');
         }
     },
 
     finalizeStreamingMessage(content, emotion) {
         const msgEl = this._streamingEl ? this._streamingEl.closest('.streaming-msg') : null;
+        if (this._streamingEl && content !== undefined) {
+            this._streamingEl.innerHTML = Renderer.renderRP(content);
+        }
         if (msgEl) {
             msgEl.classList.remove('streaming-msg');
             msgEl.removeAttribute('id');
@@ -358,12 +417,25 @@ const ChatUI = {
             scene = State.scene;
         }
 
+        const isActionIntent = State.inputMode === 'action' && !State.isOOC;
+        if (isActionIntent) {
+            await this.preparePendingAction(text);
+            return;
+        }
+
         const isStrategy = State.inputMode === 'strategy' && !State.isOOC;
+        const participantIds = State.currentCharacterId ? [State.currentCharacterId] : [];
         const msg = {
             id: 'msg_' + Date.now(),
             role: 'user',
             content: isStrategy ? '/strategy ' + text : (State.isOOC ? '/ooc ' + text : text),
             type: State.isOOC ? 'ooc' : (isStrategy ? 'strategy' : 'talk'),
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({
+                    public: !State.isOOC && !isStrategy && State.activeCharacters.length > 1,
+                    participants: participantIds
+                })
+                : undefined,
             timestamp: Date.now()
         };
 
@@ -383,6 +455,62 @@ const ChatUI = {
                 }
             }
         }
+    },
+
+    async preparePendingAction(text) {
+        const scene = State.scene;
+        if (!scene) return;
+        scene.pendingAction = ActionPlanner.create(scene, text);
+        await State.saveCurrentSceneDebounced();
+        if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+        this.inputEl.value = '';
+        this.inputEl.style.height = 'auto';
+        showToast('已生成行动预览');
+    },
+
+    async confirmPendingAction() {
+        if (State.isStreaming) return;
+        const scene = State.scene;
+        const action = scene?.pendingAction;
+        if (!scene || !action) return;
+
+        const msg = {
+            id: 'msg_' + Date.now(),
+            role: 'user',
+            content: ActionPlanner.formatForPrompt(action),
+            type: 'action_intent',
+            actionData: JSON.parse(JSON.stringify(action)),
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({
+                    public: State.activeCharacters.length > 1,
+                    participants: State.currentCharacterId ? [State.currentCharacterId] : []
+                })
+                : undefined,
+            timestamp: Date.now()
+        };
+        scene.pendingAction = null;
+        scene.messages.push(msg);
+        this.onMessageAdded(msg);
+        await State.saveCurrentSceneDebounced();
+        if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+
+        try {
+            await GroupChat.handleUserMessage();
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('行动发送失败:', err);
+                showToast('行动发送失败，请重试');
+            }
+        }
+    },
+
+    async cancelPendingAction() {
+        const scene = State.scene;
+        if (!scene || !scene.pendingAction) return;
+        scene.pendingAction = null;
+        await State.saveCurrentSceneDebounced();
+        if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+        showToast('已取消行动预览');
     },
 
     onStop() {

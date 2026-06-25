@@ -84,10 +84,19 @@ const SceneManager = {
                         attrPoints: scene.attrPoints || 0,
                         strategies: JSON.parse(JSON.stringify(scene.strategies || [])),
                         intel: JSON.parse(JSON.stringify(scene.intel || [])),
+                        knowledge: JSON.parse(JSON.stringify(scene.knowledge || {})),
+                        discoveries: JSON.parse(JSON.stringify(scene.discoveries || {})),
                         factions: JSON.parse(JSON.stringify(scene.factions || [])),
                         conflictSeeds: JSON.parse(JSON.stringify(scene.conflictSeeds || [])),
+                        storyArcs: JSON.parse(JSON.stringify(scene.storyArcs || [])),
+                        clocks: JSON.parse(JSON.stringify(scene.clocks || [])),
+                        counterStrategies: JSON.parse(JSON.stringify(scene.counterStrategies || [])),
+                        currentSituation: JSON.parse(JSON.stringify(scene.currentSituation || {})),
                         worldTension: scene.worldTension || 0,
+                        turnCount: scene.turnCount || 0,
                         activeStrategyId: scene.activeStrategyId,
+                        pendingAction: JSON.parse(JSON.stringify(scene.pendingAction || null)),
+                        pendingCheck: JSON.parse(JSON.stringify(scene.pendingCheck || null)),
                         gameState: scene.gameState || 'playing',
                         summary: scene.summary || ''
                     }
@@ -172,11 +181,12 @@ const SceneManager = {
         if (s.lorebookEntries) scene.lorebookEntries = JSON.parse(JSON.stringify(s.lorebookEntries));
         // 完整字段恢复（新快照）
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
-         'strategies', 'intel', 'factions', 'conflictSeeds', 'summary'].forEach(f => {
+         'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs', 'clocks',
+         'counterStrategies', 'currentSituation', 'pendingAction', 'pendingCheck', 'summary'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',
-         'attrPoints', 'worldTension', 'activeStrategyId', 'gameState'].forEach(f => {
+         'attrPoints', 'worldTension', 'turnCount', 'activeStrategyId', 'gameState'].forEach(f => {
             if (s[f] !== undefined) scene[f] = s[f];
         });
 
@@ -185,6 +195,7 @@ const SceneManager = {
         ChatUI.render();
         SidebarLeft.render();
         SidebarRight.renderDetail();
+        SidebarRight.renderSituation();
         SidebarRight.renderQuests();
         SidebarRight.renderInventory();
         SidebarRight.renderStrategies();

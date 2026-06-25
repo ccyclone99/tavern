@@ -166,6 +166,7 @@ const WorldPicker = {
         ChatUI.render();
         SidebarLeft.render();
         SidebarRight.renderLorebook();
+        SidebarRight.renderSituation();
         SidebarRight.renderMap();
         SidebarRight.renderQuests();
         SidebarRight.renderInventory();
@@ -338,6 +339,7 @@ const WorldPicker = {
         ChatUI.render();
         SidebarLeft.render();
         SidebarRight.renderLorebook();
+        SidebarRight.renderSituation();
         SidebarRight.renderMap();
         SidebarRight.renderQuests();
         SidebarRight.renderInventory();
@@ -372,7 +374,7 @@ const WorldPicker = {
 
     // 侧边栏 tab 加图标（图标 + 文字）
     const tabIconMap = {
-        strategies: 'strategy', lorebook: 'book', map: 'map',
+        situation: 'situation', strategies: 'strategy', knowledge: 'knowledge', lorebook: 'book', map: 'map',
         quests: 'quest', inventory: 'bag', detail: 'detail'
     };
     document.querySelectorAll('.tab-btn').forEach(btn => {

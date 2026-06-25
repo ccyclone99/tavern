@@ -391,18 +391,58 @@ const WorldGenerator = {
 - conflictSeeds: 3-4个初始矛盾种子，每个是字符串，描述可供玩家谋略的冲突
 - factions: 2-4个势力数组，每个含 { name, attitude(对玩家初始态度-50~50), power(实力0~100), description, leverage:[筹码数组] }
 - intel: 3-5个可发现情报数组，每个含 { text, source, reliability("rumor"/"confirmed"/"false") }
-- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/first_mes/mes_example/tags/_emotionTags/_talkativeness，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组)。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
+- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/first_mes/mes_example/tags/_emotionTags/_talkativeness，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组), agenda({ currentPlan, priority(0-100), schedule:[日程], offscreenActions:[离屏行动] })。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
 - locations: 4-6个地点节点数组，每个含 { id, name, description, connections:[相邻地点id数组] }，第一个为起始地点
 - currentLocation: 起始地点id（设为地点的第一个）
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
 - storyArcs: 1个主线剧情弧数组，每个含 { title, phase:"intro", synopsis(梗概), beats:[{condition(触发条件),action(触发事件)}]数组(4-6个节拍，按顺序推进，reveal=揭示真相/twist=剧情转折/climax=高潮/resolution=结局), currentBeat:0 }
+- clocks: 1-3个局势时钟数组，每个含 { id, name, tag, value:0, max:4-8, visibility("known"/"hinted"/"hidden"), description, trigger:{ at, event } }，代表会随玩家拖延或失败恶化的威胁
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
 
-要求：所有内容用中文。角色有区分度，每个人都有鲜明的三观信条（会拒绝什么、坚持什么）、可被打探的秘密和可被利用的筹码。角色的信条之间应能产生价值观碰撞和冲突。任务与角色紧密关联。剧情弧的节拍要有递进感，从悬念到高潮到结局。地点要有探索价值。势力之间应有矛盾和合作空间，情报可信度和来源要多样化。
+要求：所有内容用中文。角色有区分度，每个人都有鲜明的三观信条（会拒绝什么、坚持什么）、可被打探的秘密和可被利用的筹码。角色的信条之间应能产生价值观碰撞和冲突。NPC 日程和局势时钟要能在玩家不行动时推动世界变化。任务与角色紧密关联。剧情弧的节拍要有递进感，从悬念到高潮到结局。地点要有探索价值。势力之间应有矛盾和合作空间，情报可信度和来源要多样化。
 只输出纯JSON，不要任何其他文字。`;
 
         return AIGenerator.call(systemPrompt, '世界描述：' + description);
+    },
+
+    _buildCharacterProfile(charData = {}) {
+        const tags = Array.isArray(charData.tags) ? charData.tags : [];
+        const firstSentence = String(charData.description || '')
+            .split(/[。.!！?？]/)
+            .map(s => s.trim())
+            .find(Boolean) || '';
+        const hiddenFacts = [];
+        const addFacts = (list, type, title, hint, trust, dc) => {
+            (Array.isArray(list) ? list : []).forEach((truth, idx) => {
+                const truthText = String(truth || '').trim();
+                if (!truthText) return;
+                hiddenFacts.push({
+                    id: `${type}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+                    type,
+                    title,
+                    hint,
+                    truth: truthText,
+                    unlock: {
+                        trust,
+                        check: { stat: '感知', dc }
+                    }
+                });
+            });
+        };
+
+        addFacts(charData.motives, 'motive', '真实动机', '这个角色的行动背后似乎有更深的目标。', 10, 12);
+        addFacts(charData.fears, 'fear', '恐惧', '某些话题会让这个角色回避或变得紧张。', 20, 14);
+        addFacts(charData.secrets, 'secret', '未公开秘密', '这个角色似乎隐瞒了某件重要的事。', 30, 16);
+        addFacts(charData.leverage, 'leverage', '可利用筹码', '这个角色身边存在可被利用的资源、把柄或弱点。', 20, 15);
+
+        return {
+            public: {
+                title: charData.title || tags[0] || '角色',
+                firstImpression: charData.firstImpression || firstSentence.slice(0, 120)
+            },
+            hiddenFacts
+        };
     },
 
     // ===== 应用模板/生成结果到世界 =====
@@ -422,6 +462,15 @@ const WorldGenerator = {
         scene.factions = Array.isArray(data.factions) ? data.factions : [];
         scene.intel = Array.isArray(data.intel) ? data.intel : [];
         scene.storyArcs = Array.isArray(data.storyArcs) ? data.storyArcs : [];
+        scene.clocks = Array.isArray(data.clocks) && data.clocks.length > 0
+            ? data.clocks.map(c => WorldEngine.normalizeClock(c)).filter(Boolean)
+            : this._buildDefaultClocks(data);
+        scene.counterStrategies = Array.isArray(data.counterStrategies)
+            ? data.counterStrategies.map(c => WorldEngine.normalizeCounterStrategy(c)).filter(Boolean)
+            : [];
+        scene.currentSituation = data.currentSituation || { recentRisks: [], recommendedActions: [] };
+        scene.turnCount = 0;
+        State.normalizeKnowledge(scene);
 
         // 2. 创建角色
         const characters = Array.isArray(data.characters) ? data.characters : [];
@@ -449,9 +498,18 @@ const WorldGenerator = {
                 fears: charData.fears || [],
                 secrets: charData.secrets || [],
                 leverage: charData.leverage || [],
+                agenda: WorldEngine.normalizeAgenda({
+                    agenda: charData.agenda || {
+                        currentPlan: (charData.motives || [])[0] || '',
+                        priority: 40,
+                        schedule: [],
+                        offscreenActions: (charData.motives || []).slice(0, 2)
+                    }
+                }),
                 creed: charData.creed || '',
                 redLines: charData.redLines || [],
-                values: charData.values || ''
+                values: charData.values || '',
+                profile: this._buildCharacterProfile(charData)
             };
             await Storage.saveCharacter(char);
             State.characters.push(char);
@@ -486,6 +544,7 @@ const WorldGenerator = {
                 role: 'assistant',
                 content: opening,
                 type: 'narrate',
+                visibility: { public: true, locationId: scene.currentLocation || '', participants: [], overheardBy: [] },
                 timestamp: Date.now()
             });
         }
@@ -497,6 +556,7 @@ const WorldGenerator = {
                 role: 'assistant',
                 content: '--- 故事开始 ---',
                 type: 'divider',
+                visibility: { public: true, locationId: scene.currentLocation || '', participants: [], overheardBy: [] },
                 timestamp: Date.now()
             });
         }
@@ -511,6 +571,7 @@ const WorldGenerator = {
                     characterId: firstChar.id,
                     content: firstChar.first_mes,
                     type: 'talk',
+                    visibility: { public: true, locationId: scene.currentLocation || '', participants: [firstChar.id], overheardBy: [] },
                     timestamp: Date.now()
                 });
             }
@@ -521,5 +582,22 @@ const WorldGenerator = {
         State.emit('charactersChanged', State.characters);
 
         return scene;
+    },
+
+    _buildDefaultClocks(data = {}) {
+        const seeds = Array.isArray(data.conflictSeeds) ? data.conflictSeeds : [];
+        const firstSeed = seeds[0] || data.description || data.name || '潜在危机正在酝酿';
+        const mainArc = Array.isArray(data.storyArcs) ? data.storyArcs[0] : null;
+        const event = mainArc?.beats?.[1]?.action || firstSeed;
+        return [WorldEngine.normalizeClock({
+            id: 'clock_main_pressure',
+            name: mainArc?.title ? `${mainArc.title}压力` : '主线压力',
+            tag: 'main',
+            value: 0,
+            max: 6,
+            visibility: 'hinted',
+            description: String(firstSeed).slice(0, 240),
+            trigger: { at: 4, event: String(event).slice(0, 240) }
+        })].filter(Boolean);
     }
 };

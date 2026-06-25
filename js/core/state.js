@@ -8,7 +8,7 @@ const State = {
     selectedCharacterIds: [], // 群聊中已选角色
     isStreaming: false,
     isOOC: false,             // 是否OOC模式
-    inputMode: 'action',      // 'action' | 'strategy' | 'ask' | 'ooc'
+    inputMode: 'talk',        // 'talk' | 'action' | 'strategy' | 'ask' | 'ooc'
     messageQueue: [],         // 群聊待回复队列
     editingCharacterId: null, // 当前编辑的角色
 
@@ -103,6 +103,8 @@ const State = {
         if (!Array.isArray(scene.conflictSeeds)) scene.conflictSeeds = [];
         if (typeof scene.worldTension !== 'number') scene.worldTension = 0;
         if (scene.activeStrategyId === undefined) scene.activeStrategyId = null;
+        if (scene.pendingAction === undefined) scene.pendingAction = null;
+        if (scene.pendingCheck === undefined) scene.pendingCheck = null;
         if (!Array.isArray(scene.messages)) scene.messages = [];
         if (!Array.isArray(scene.lorebookEntries)) scene.lorebookEntries = [];
         if (!scene.playerStats) scene.playerStats = { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 };
@@ -129,7 +131,81 @@ const State = {
         }
         if (!scene.gameState) scene.gameState = 'playing';
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
+        if (!Array.isArray(scene.clocks)) scene.clocks = [];
+        if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
+        if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
+            scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        }
+        if (typeof scene.turnCount !== 'number') scene.turnCount = 0;
+        scene.inventory.forEach(item => {
+            if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(item);
+            else {
+                if (!Array.isArray(item.tags)) item.tags = [];
+                if (!Array.isArray(item.effects)) item.effects = [];
+            }
+        });
+        if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeScene(scene);
+        this.normalizeKnowledge(scene);
         return scene;
+    },
+
+    normalizeKnowledge(scene) {
+        if (!scene) return scene;
+        if (!scene.knowledge || typeof scene.knowledge !== 'object') scene.knowledge = {};
+        const knowledgeArrays = ['discoveries', 'suspicions', 'evidence', 'debts', 'leverage', 'unresolvedQuestions'];
+        knowledgeArrays.forEach(key => {
+            if (!Array.isArray(scene.knowledge[key])) scene.knowledge[key] = [];
+        });
+        if (!scene.discoveries || typeof scene.discoveries !== 'object') scene.discoveries = {};
+        if (!scene.discoveries.characters || typeof scene.discoveries.characters !== 'object') {
+            scene.discoveries.characters = {};
+        }
+
+        // 旧存档/旧模板中的 scene.intel 视为玩家已知情报，迁移到知识账本展示。
+        const existingLegacyIds = new Set(scene.knowledge.discoveries.map(d => d.legacyIntelId).filter(Boolean));
+        (scene.intel || []).forEach(intel => {
+            if (!intel || !intel.text) return;
+            const legacyIntelId = intel.id || intel.text;
+            if (existingLegacyIds.has(legacyIntelId)) return;
+            this.addKnowledgeDiscovery(scene, {
+                legacyIntelId,
+                subjectType: 'event',
+                level: intel.reliability === 'confirmed' ? 'evidence' : 'rumor',
+                title: intel.text,
+                text: intel.text,
+                source: intel.source || '未知来源',
+                reliability: intel.reliability === 'confirmed' ? 'confirmed' : (intel.reliability === 'false' ? 'false' : 'unverified'),
+                tags: Array.isArray(intel.tags) ? intel.tags : []
+            });
+            existingLegacyIds.add(legacyIntelId);
+        });
+        return scene;
+    },
+
+    addKnowledgeDiscovery(scene, data = {}) {
+        if (!scene) return null;
+        if (!scene.knowledge || !Array.isArray(scene.knowledge.discoveries)) {
+            if (!scene.knowledge || typeof scene.knowledge !== 'object') scene.knowledge = {};
+            scene.knowledge.discoveries = [];
+        }
+        const validLevels = ['hint', 'rumor', 'evidence', 'inference', 'truth'];
+        const validReliability = ['unverified', 'contested', 'confirmed', 'false'];
+        const entry = {
+            id: data.id || 'disc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            legacyIntelId: data.legacyIntelId,
+            subjectType: String(data.subjectType || 'event'),
+            subjectId: data.subjectId ? String(data.subjectId) : '',
+            level: validLevels.includes(data.level) ? data.level : 'hint',
+            title: String(data.title || data.text || '未命名线索').slice(0, 120),
+            text: String(data.text || data.title || '').slice(0, 1000),
+            source: String(data.source || '未知来源').slice(0, 120),
+            reliability: validReliability.includes(data.reliability) ? data.reliability : 'unverified',
+            tags: Array.isArray(data.tags) ? data.tags.map(String).slice(0, 12) : [],
+            evidenceIds: Array.isArray(data.evidenceIds) ? data.evidenceIds.map(String).slice(0, 20) : [],
+            discoveredAt: typeof data.discoveredAt === 'number' ? data.discoveredAt : Date.now()
+        };
+        scene.knowledge.discoveries.push(entry);
+        return entry;
     },
 
     async createScene(name = '新场景') {
@@ -159,14 +235,29 @@ const State = {
             playerMaxHp: 10,
             gameState: 'playing',
             storyArcs: [],
+            clocks: [],
+            counterStrategies: [],
+            currentSituation: { recentRisks: [], recommendedActions: [] },
+            turnCount: 0,
             summary: '',
             // 计策系统字段
             strategies: [],
             intel: [],
+            knowledge: {
+                discoveries: [],
+                suspicions: [],
+                evidence: [],
+                debts: [],
+                leverage: [],
+                unresolvedQuestions: []
+            },
+            discoveries: { characters: {} },
             factions: [],
             conflictSeeds: [],
             worldTension: 0,
             activeStrategyId: null,
+            pendingAction: null,
+            pendingCheck: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
             snapshots: []
@@ -221,7 +312,7 @@ const State = {
         this.currentSceneId = id;
         // 切换场景时重置模式切换
         this.isOOC = false;
-        this.inputMode = 'action';
+        this.inputMode = 'talk';
         this.emit('sceneChanged', this.scene);
     },
 

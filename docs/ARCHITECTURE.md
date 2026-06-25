@@ -59,6 +59,7 @@ ChatUI 收集输入
   -> GroupChat._processMarkers()
   -> 保存 assistant message
   -> Relationship 更新
+  -> WorldEngine.tickAfterPlayerTurn()（成功回复且无待掷检定时）
   -> State.saveCurrentSceneDebounced()
 ```
 
@@ -83,7 +84,8 @@ AI 回复文本
   -> GroupChat._extractStateUpdate()
   -> JSON.parse()
   -> StrategyManager.applyStateUpdate()
-  -> 白名单更新 strategies/intel/factions/relationships/scene/items/locations
+  -> 白名单更新 strategies/knowledge/factions/relationships/scene/items/locations/clocks/storyArcs/counterStrategies/agenda
+  -> WorldEngine 归一化时钟/反制/日程
   -> 右侧面板重渲染
 ```
 
@@ -120,6 +122,8 @@ AI 回复文本
 | 文件 | 职责 |
 |------|------|
 | `world-generator.js` | 预设世界、自定义世界生成提示词、模板应用到 scene/characters |
+| `world-engine.js` | 局势时钟、剧情弧推进、NPC 日程/离屏行动、反制、消息可见性、物品效果规则 |
+| `action-planner.js` | 本地行动意图分类、风险预览、建议检定估算 |
 | `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |
 | `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用 |
 | `relationship.js` | 好感/情绪规则更新和 LLM 分析更新 |
@@ -136,7 +140,7 @@ AI 回复文本
 | `renderer.js` | HTML/属性/URL 安全转义，RP 文本渲染，消息类型解析，剥离 state_update |
 | `chat.js` | 输入栏、消息渲染、流式消息 DOM、发送/停止按钮 |
 | `sidebar-left.js` | 左侧角色列表和角色选择 |
-| `sidebar-right.js` | 右侧世界书、地图、任务、背包、计策、详情面板 |
+| `sidebar-right.js` | 右侧计策、线索账本、世界书、地图、任务、背包、详情面板 |
 | `quest-tracker.js` | 任务渲染、目标勾选、奖励解析、升级 |
 | `map-view.js` | 地图节点渲染和移动校验 |
 | `action-bar.js` | 底部/快捷状态与操作栏 |
@@ -153,9 +157,12 @@ AI 回复文本
 
 - 角色身份、背景、性格、示例对话、额外设定。
 - 世界书、剧情摘要、关系状态。
-- NPC 谋略素材和信条。
+- NPC 私密设定（动机/恐惧/秘密/筹码，仅用于扮演，禁止直接透露）和信条。
+- NPC 个人日程（agenda）和消息可见性过滤后的历史。
+- 玩家已知情报（`scene.knowledge.discoveries`，兼容旧 `scene.intel`）。
 - 玩家属性、HP、金币、等级、任务、地图、物品。
-- 检定规则、生存系统、动态事件标记。
+- 当前局势、局势时钟、NPC/敌方反制。
+- 行动意图、检定规则、物品加成、生存系统、动态事件标记。
 - 合理性协议。
 - 剧情弧。
 - 计策主持人协议。
@@ -179,9 +186,11 @@ AI 回复文本
 `StrategyManager.applyStateUpdate()` 是状态补丁边界。允许：
 
 - 创建/更新计策。
-- 添加情报。
+- 添加玩家知识账本条目（兼容旧 `intelAdd`）。
+- 更新 NPC 档案解锁状态。
 - 更新势力。
 - 更新角色关系、警觉、心情、秘密。
+- 更新局势时钟、剧情弧、NPC 日程和反制计划。
 - 更新 `worldTensionDelta` 和 `activeStrategyId`。
 - 更新已有任务目标/状态。
 - 添加物品。
@@ -193,6 +202,38 @@ AI 回复文本
 - 任意覆盖玩家属性、HP、等级、金币。
 - 任意覆盖 scene 或 character。
 - 直接插入 DOM。
+
+线索账本 UI 位于右侧 `knowledge` tab，由 `SidebarRight.renderKnowledge()` 渲染。它只读取玩家已知的 `scene.knowledge.discoveries` 和已解锁的 `scene.discoveries.characters` 档案槽，不直接展示 NPC 私密设定。
+
+当前局势 UI 位于右侧 `situation` tab，由 `SidebarRight.renderSituation()` 渲染。它读取 `WorldEngine.getCurrentSituation(scene)`，展示当前位置、主线目标、公开时钟、隐藏压力提示、反制、最近风险、可用线索和可选行动。
+
+### WorldEngine 负责“世界如何自己动”
+
+`WorldEngine` 提供：
+
+- `normalizeScene()`：补齐 `clocks`、`counterStrategies`、`currentSituation`、`turnCount`。
+- `applyClockUpdate()` / `applyStoryArcUpdate()` / `applyCounterStrategyUpdate()` / `applyNpcAgendaUpdate()`：供 `StrategyManager` 白名单调用。
+- `tickAfterPlayerTurn()`：成功完成的玩家回合、休息、部分成功/失败后推进时钟并触发离屏行动；AI 回复失败/中断不推进，待掷检定会延后到掷骰结算后推进。
+- `filterMessagesForCharacter()`：按 `message.visibility` 过滤当前 NPC 可见历史。
+- `getCheckItemBonus()` / `getAvailableCheckItems()` / `consumeCheckItems()`：把自动物品修正和可用消耗品接入检定卡。
+
+### 行动预览流程
+
+```text
+玩家切换 /行动
+  -> 输入行动目标
+  -> ActionPlanner 生成 scene.pendingAction
+  -> 输入区显示风险卡
+  -> 玩家确认
+  -> ChatUI 写入 action_intent 用户消息
+  -> PromptBuilder 注入 [玩家行动意图]
+  -> AI 叙事 / 要求 [check:] / 产生状态变化
+  -> WorldEngine 根据成功完成的回合结果推进时钟/离屏行动
+```
+
+`[check:]` 会创建 `scene.pendingCheck` 并在输入区显示检定卡。玩家点击“掷骰”后，系统写入 `type: "check"` 的结果消息，再触发 DM 续写后果。
+检定卡会区分自动生效修正和可用但未自动消耗的消耗品；当前稳定版不会在掷骰时自动扣除消耗品。
+检定结果分为 `critical_success`、`success`、`partial`、`fail`、`critical_fail`；部分成功和失败会写入最近风险并可推进时钟。
 
 ## 五、安全约束
 

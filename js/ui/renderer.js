@@ -42,7 +42,21 @@ const Renderer = {
      */
     stripStateUpdate(text) {
         if (!text) return text;
-        return String(text).replace(/<state_update>[\s\S]*?<\/state_update>/gi, '').trim();
+        return String(text)
+            .replace(/<state_update>[\s\S]*?<\/state_update>/gi, '')
+            .replace(/<state_update>[\s\S]*$/i, '')
+            .trim();
+    },
+
+    /**
+     * 移除 AI 控制标记，避免流式阶段短暂显示给玩家
+     */
+    stripHiddenControls(text) {
+        if (!text) return text;
+        return this.stripStateUpdate(text)
+            .replace(/\[(?:new_char|char_exit|quest|quest_update|event|move|check|item_add|item_remove|item_equip|item_unequip|damage|heal|gold|exp):[^\]]+\]/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
     },
 
     /**

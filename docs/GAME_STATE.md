@@ -13,7 +13,7 @@
   selectedCharacterIds: [],
   isStreaming: false,
   isOOC: false,
-  inputMode: "action",       // action | strategy | ask | ooc
+  inputMode: "talk",         // talk | action | strategy | ask | ooc
   messageQueue: [],
   editingCharacterId: null,
   characters: [],
@@ -82,10 +82,22 @@
 
   strategies: [],
   intel: [],
+  knowledge: {
+    discoveries: [],
+    suspicions: [],
+    evidence: [],
+    debts: [],
+    leverage: [],
+    unresolvedQuestions: []
+  },
+  discoveries: {
+    characters: {}
+  },
   factions: [],
   conflictSeeds: [],
   worldTension: 0,
   activeStrategyId: null,
+  pendingAction: null,
 
   createdAt: 1710000000000,
   updatedAt: 1710000000000,
@@ -119,13 +131,21 @@
 | `playerHp` / `playerMaxHp` | number | 当前/最大生命值 |
 | `gameState` | string | `playing` / `defeated` / `victorious` |
 | `storyArcs` | StoryArc[] | 剧情弧 prompt 上下文 |
+| `clocks` | Clock[] | 局势时钟，支持 hidden/hinted/known 可见性 |
+| `counterStrategies` | CounterStrategy[] | NPC/敌方反制计划 |
+| `currentSituation` | object | 当前局势摘要：recentRisks/recommendedActions |
+| `turnCount` | number | 玩家回合计数，用于时钟和离屏行动 |
 | `summary` | string | 自动摘要后的先前剧情，prompt 注入上限约 1200 字 |
 | `strategies` | Strategy[] | 计策卡列表 |
-| `intel` | Intel[] | 已知情报 |
+| `intel` | Intel[] | 旧版已知情报，仍兼容；新逻辑会迁移到 `knowledge.discoveries` |
+| `knowledge` | object | 玩家知识账本，记录玩家已观察、听闻、推理或确认的信息 |
+| `discoveries` | object | 角色档案解锁状态，例如 `discoveries.characters[charId][factId]` |
 | `factions` | Faction[] | 势力态势 |
 | `conflictSeeds` | string[] | 世界矛盾种子 |
 | `worldTension` | number | 世界紧张度，prompt 以 `/100` 展示 |
 | `activeStrategyId` | string/null | 当前激活计策 |
+| `pendingAction` | PendingAction/null | 玩家已生成但尚未确认的行动风险预览 |
+| `pendingCheck` | PendingCheck/null | AI 已要求、等待玩家点击掷骰的检定卡 |
 | `createdAt` / `updatedAt` | number | 毫秒时间戳 |
 | `snapshots` | array | 存档快照预留字段 |
 
@@ -222,7 +242,12 @@
   description: "可用于栽赃的账本",
   type: "quest",             // weapon | armor | consumable | quest | misc
   quantity: 1,
-  equipped: false
+  equipped: false,
+  effects: [
+    { type: "check_bonus", stat: "dexterity", value: 2, when: "lockpick" }
+  ],
+  uses: 3,
+  tags: ["工具", "开锁"]
 }
 ```
 
@@ -253,6 +278,10 @@
   steps: [],
   resources: [],
   clues: [],
+  requiredIntel: ["disc_xxx"],
+  usedIntel: ["disc_xxx"],
+  exposure: 20,
+  counterplay: ["调查证人", "降低警觉"],
   stakes: "失败会暴露玩家身份",
   latestOutcome: "商会开始怀疑城卫",
   createdAt: 1710000000000,
@@ -260,7 +289,7 @@
 }
 ```
 
-`StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，并夹紧 `risk`/`progress` 到 0-100。
+`StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，并夹紧 `risk`/`progress`/`exposure` 到 0-100。
 
 ### Intel
 
@@ -271,6 +300,147 @@
   source: "机械仆从日志",
   reliability: "confirmed",  // rumor | confirmed | false
   tags: ["货舱", "遗物"],
+  discoveredAt: 1710000000000
+}
+```
+
+旧模板和旧存档中的 `intel` 会被 `State.normalizeKnowledge()` 视为玩家已知内容，迁移为 `knowledge.discoveries` 条目；字段仍保留用于兼容。
+
+### KnowledgeDiscovery
+
+```js
+{
+  id: "disc_...",
+  subjectType: "character",      // character | faction | location | item | event | strategy
+  subjectId: "char_...",
+  level: "hint",                 // hint | rumor | evidence | inference | truth
+  title: "机械义眼的异常延迟",
+  text: "审判官的机械义眼在提到货舱时短暂失焦。",
+  source: "观察",
+  reliability: "unverified",     // unverified | contested | confirmed | false
+  tags: ["审判官", "异常"],
+  evidenceIds: [],
+  discoveredAt: 1710000000000
+}
+```
+
+右侧“线索”tab 只展示 `knowledge.discoveries` 以及已解锁的角色档案槽。未解锁的 `character.profile.hiddenFacts` 不会出现在账本中。
+
+### PendingAction
+
+```js
+{
+  id: "action_...",
+  status: "preview",
+  type: "persuade",              // talk | observe | ask | probe | lie | threaten | persuade | investigate | sneak | force | combat | trade | use_item | rest
+  typeLabel: "说服",
+  intent: "说服审判官允许我查看货舱日志",
+  risk: 42,                      // 0-100，本地预估
+  riskLevel: "中",
+  suggestedCheck: {
+    stat: "charisma",
+    statName: "魅力",
+    dc: 14
+  },
+  modifiers: [
+    { source: "可用已确认线索", label: "风险 -6", riskDelta: -6, dcDelta: -1 }
+  ],
+  risks: ["对方提出条件", "需要交出筹码或人情"],
+  stakes: "失败可能导致：对方提出条件",
+  createdAt: 1710000000000
+}
+```
+
+`pendingAction` 由本地 `ActionPlanner` 生成，玩家点击“确认行动”后会被转写为一条 `type: "action_intent"` 的用户消息，并清空 `pendingAction`。
+
+### PendingCheck
+
+```js
+{
+  id: "check_...",
+  status: "pending",
+  statName: "魅力",
+  key: "charisma",
+  statValue: 14,
+  statMod: 2,
+  itemBonus: 1,
+  mod: 3,
+  dc: 15,
+  source: "AI 要求检定",
+  sourceMessageId: "msg_...",
+  actionType: "persuade",
+  intent: "说服审判官允许我查看货舱日志",
+  itemModifiers: [
+    { source: "审讯记录", label: "+1 检定", value: 1 }
+  ],
+  availableItemModifiers: [
+    { source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
+  ],
+  stakes: "失败可能导致：对方提出条件",
+  risks: ["对方提出条件", "需要交出筹码或人情"],
+  createdAt: 1710000000000
+}
+```
+
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 是当前可用但尚未自动消耗的物品。玩家点击“掷骰”后，系统生成 `type: "check"` 的结果消息并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
+
+### Clock
+
+```js
+{
+  id: "clock_main_pressure",
+  name: "主线压力",
+  tag: "main",
+  value: 2,
+  max: 6,
+  visibility: "hinted",       // hidden | hinted | known
+  description: "潜在危机正在酝酿",
+  trigger: { at: 4, event: "敌方开始公开行动" },
+  firedTriggers: [],
+  updatedAt: 1710000000000
+}
+```
+
+`WorldEngine.applyClockUpdate()` 支持 `value`、`delta`、`visibility`、`trigger`。跨过 `trigger.at` 时会插入公开或模糊系统事件。
+
+### CounterStrategy
+
+```js
+{
+  id: "counter_...",
+  title: "有人在调查你",
+  actorId: "char_xxx",
+  actorName: "审判官塞拉斯",
+  target: "追踪玩家接触过的证人",
+  status: "active",           // active | revealed | resolved
+  visibility: "hinted",       // hidden | hinted | known
+  progress: 30,
+  exposure: 20,
+  counterplay: ["反跟踪", "直接对质"],
+  hint: "你注意到证人变得紧张",
+  lastAction: "派人盘问证人"
+}
+```
+
+### MessageVisibility
+
+```js
+message.visibility = {
+  locationId: "bridge",
+  participants: ["char_a"],
+  overheardBy: [],
+  public: false
+}
+```
+
+`PromptBuilder` 会通过 `WorldEngine.filterMessagesForCharacter()` 只把当前 NPC 可见的历史注入 prompt。旧消息没有 `visibility` 时按可见处理，保证旧存档兼容。
+
+### CharacterDiscovery
+
+```js
+scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
+  state: "hinted",               // locked | hinted | suspected | confirmed
+  evidence: ["观察到义眼延迟"],
   discoveredAt: 1710000000000
 }
 ```
@@ -354,14 +524,31 @@
   leverage: ["处决权", "航行日志"],
   creed: "帝皇的意志高于一切。",
   redLines: ["绝不宽恕确认的异端"],
-  values: "职责 > 帝国的存亡 > 正义 > 仁慈"
+  values: "职责 > 帝国的存亡 > 正义 > 仁慈",
+  profile: {
+    public: {
+      title: "审判官",
+      firstImpression: "冷酷、权威、正在审视你"
+    },
+    hiddenFacts: [
+      {
+        id: "secret_0_abcd",
+        type: "secret",
+        title: "未公开秘密",
+        hint: "这个角色似乎隐瞒了某件重要的事。",
+        truth: "机械义眼记录到异常影像",
+        unlock: { trust: 30, check: { stat: "感知", dc: 16 } }
+      }
+    ]
+  }
 }
 ```
 
 关键规则：
 
 - `creed`、`redLines`、`values` 是人格锚点，`PromptBuilder.buildCreedBlock()` 会以高优先级注入。
-- `motives`、`fears`、`secrets`、`leverage` 用于计策和谈判，不应全部对玩家明示。
+- `motives`、`fears`、`secrets`、`leverage` 属于 NPC 私密设定，用于扮演和计策裁决，不等于玩家已知。
+- `profile.public` 是玩家初见可见档案；`profile.hiddenFacts` 需要通过 `knowledgeAdd` / `discoveryUpdate` 逐步解锁。
 - `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护。
 - 动态新角色由 `[new_char:...]` 创建，默认字段较少，不会自动生成信条和谋略素材。
 
@@ -391,7 +578,7 @@
 | `strategy` | `/strategy` 或 `（计策）` | 玩家计策意图，prompt 前缀为 `[玩家计策意图]` |
 | `ooc` | `/ooc` / `(OOC)` / `（OOC）` | 出戏说明 |
 | `narrate` | DM 旁白、地点描述、退场 | 第三人称叙事 |
-| `check` | `[check:]` 自动投骰 | 检定结果消息，带 `checkData` |
+| `check` | 玩家点击检定卡“掷骰” | 检定结果消息，带 `checkData` |
 | `system` | 关系/奖励/伤害等系统反馈 | UI 系统消息 |
 | `divider` | 世界初始化 | “故事开始”等分割线 |
 | `gameover` | HP 归零 | 失败结局 |
@@ -408,7 +595,13 @@
   total: 21,
   dc: 15,
   success: true,
-  crit: null                 // success | fail | null
+  crit: null,                 // success | fail | null
+  outcome: "success",         // critical_success | success | partial | fail | critical_fail
+  resultLabel: "成功",
+  consequenceHint: "目标按预期达成，后果与代价保持合理。",
+  consequenceOptions: ["目标按预期推进"],
+  stakes: "失败可能导致：对方提出条件",
+  risks: ["对方提出条件"]
 }
 ```
 

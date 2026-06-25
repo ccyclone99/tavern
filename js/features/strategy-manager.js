@@ -23,6 +23,10 @@ const StrategyManager = {
             steps: Array.isArray(data.steps) ? data.steps : [],
             resources: Array.isArray(data.resources) ? data.resources : [],
             clues: Array.isArray(data.clues) ? data.clues : [],
+            requiredIntel: Array.isArray(data.requiredIntel) ? data.requiredIntel : [],
+            usedIntel: Array.isArray(data.usedIntel) ? data.usedIntel : [],
+            exposure: typeof data.exposure === 'number' ? data.exposure : 0,
+            counterplay: Array.isArray(data.counterplay) ? data.counterplay : [],
             stakes: data.stakes || '',
             latestOutcome: data.latestOutcome || '',
             createdAt: now,
@@ -46,7 +50,7 @@ const StrategyManager = {
         const idx = scene.strategies.findIndex(s => s.id === id);
         if (idx === -1) return null;
 
-        const allowed = ['title', 'goal', 'status', 'phase', 'risk', 'progress', 'participants', 'steps', 'resources', 'clues', 'stakes', 'latestOutcome'];
+        const allowed = ['title', 'goal', 'status', 'phase', 'risk', 'progress', 'participants', 'steps', 'resources', 'clues', 'requiredIntel', 'usedIntel', 'exposure', 'counterplay', 'stakes', 'latestOutcome'];
         const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
         const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
         const strategy = scene.strategies[idx];
@@ -59,6 +63,7 @@ const StrategyManager = {
         if (strategy.phase && !validPhases.includes(strategy.phase)) strategy.phase = 'intel';
         if (typeof strategy.risk === 'number') strategy.risk = Math.min(100, Math.max(0, strategy.risk));
         if (typeof strategy.progress === 'number') strategy.progress = Math.min(100, Math.max(0, strategy.progress));
+        if (typeof strategy.exposure === 'number') strategy.exposure = Math.min(100, Math.max(0, strategy.exposure));
         strategy.updatedAt = Date.now();
         scene.strategies[idx] = this.normalizeStrategy(strategy);
         State.saveCurrentSceneDebounced();
@@ -113,7 +118,11 @@ const StrategyManager = {
             participants: [],
             steps: [],
             resources: [],
-            clues: []
+            clues: [],
+            requiredIntel: [],
+            usedIntel: [],
+            exposure: 0,
+            counterplay: []
         };
         const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
         const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
@@ -124,10 +133,14 @@ const StrategyManager = {
         if (!validPhases.includes(strategy.phase)) strategy.phase = 'intel';
         if (typeof strategy.risk === 'number') strategy.risk = Math.min(100, Math.max(0, strategy.risk));
         if (typeof strategy.progress === 'number') strategy.progress = Math.min(100, Math.max(0, strategy.progress));
+        if (typeof strategy.exposure === 'number') strategy.exposure = Math.min(100, Math.max(0, strategy.exposure));
         if (!Array.isArray(strategy.participants)) strategy.participants = [];
         if (!Array.isArray(strategy.steps)) strategy.steps = [];
         if (!Array.isArray(strategy.resources)) strategy.resources = [];
         if (!Array.isArray(strategy.clues)) strategy.clues = [];
+        if (!Array.isArray(strategy.requiredIntel)) strategy.requiredIntel = [];
+        if (!Array.isArray(strategy.usedIntel)) strategy.usedIntel = [];
+        if (!Array.isArray(strategy.counterplay)) strategy.counterplay = [];
         return strategy;
     },
 
@@ -146,6 +159,14 @@ const StrategyManager = {
         const MAX_ITEMS_PER_UPDATE = 50;
         const MAX_LOCATIONS_PER_UPDATE = 20;
         const MAX_TOTAL_INVENTORY = 200;
+        let knowledgeAdded = false;
+        let discoveryChanged = false;
+        let itemAdded = false;
+        let locAdded = false;
+        let clockChanged = false;
+        let storyChanged = false;
+        let counterChanged = false;
+        let agendaChanged = false;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -163,23 +184,82 @@ const StrategyManager = {
             }
         }
 
-        // 2. intelAdd
+        // 2. knowledgeAdd / intelAdd
+        if (Array.isArray(update.knowledgeAdd)) {
+            if (update.knowledgeAdd.length > MAX_INTEL_PER_UPDATE) {
+                console.warn(`[StrategyManager] knowledgeAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
+            }
+            for (const item of update.knowledgeAdd.slice(0, MAX_INTEL_PER_UPDATE)) {
+                if (!item || typeof item !== 'object') continue;
+                const added = State.addKnowledgeDiscovery(scene, item);
+                if (added) knowledgeAdded = true;
+            }
+        }
+
         if (Array.isArray(update.intelAdd)) {
             if (update.intelAdd.length > MAX_INTEL_PER_UPDATE) {
                 console.warn(`[StrategyManager] intelAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
             }
             for (const intel of update.intelAdd.slice(0, MAX_INTEL_PER_UPDATE)) {
                 if (intel && typeof intel === 'object') {
-                    scene.intel.push({
+                    const entry = {
                         id: 'intel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                         text: String(intel.text || ''),
                         source: String(intel.source || '未知来源'),
                         reliability: ['rumor', 'confirmed', 'false'].includes(intel.reliability) ? intel.reliability : 'rumor',
                         tags: Array.isArray(intel.tags) ? intel.tags.map(String) : [],
                         discoveredAt: Date.now()
+                    };
+                    scene.intel.push(entry);
+                    const added = State.addKnowledgeDiscovery(scene, {
+                        legacyIntelId: entry.id,
+                        subjectType: intel.subjectType || 'event',
+                        subjectId: intel.subjectId || '',
+                        level: entry.reliability === 'confirmed' ? 'evidence' : 'rumor',
+                        title: entry.text,
+                        text: entry.text,
+                        source: entry.source,
+                        reliability: entry.reliability === 'confirmed' ? 'confirmed' : (entry.reliability === 'false' ? 'false' : 'unverified'),
+                        tags: entry.tags
                     });
+                    if (added) knowledgeAdded = true;
                 }
             }
+        }
+
+        if (Array.isArray(update.discoveryUpdate)) {
+            const validStates = ['locked', 'hinted', 'suspected', 'confirmed'];
+            for (const item of update.discoveryUpdate.slice(0, MAX_INTEL_PER_UPDATE)) {
+                if (!item || typeof item !== 'object' || !item.characterId || !item.factId) continue;
+                if (!scene.discoveries) scene.discoveries = { characters: {} };
+                if (!scene.discoveries.characters) scene.discoveries.characters = {};
+                if (!scene.discoveries.characters[item.characterId]) scene.discoveries.characters[item.characterId] = {};
+                scene.discoveries.characters[item.characterId][item.factId] = {
+                    state: validStates.includes(item.state) ? item.state : 'hinted',
+                    evidence: Array.isArray(item.evidence) ? item.evidence.map(String).slice(0, 10) : [],
+                    discoveredAt: Date.now()
+                };
+                discoveryChanged = true;
+            }
+        }
+
+        // 2.5 clocks / story arcs / counter strategies / NPC agenda
+        if (Array.isArray(update.clockUpdate) && typeof WorldEngine !== 'undefined') {
+            const result = WorldEngine.applyClockUpdate(scene, update.clockUpdate);
+            clockChanged = !!result.changed;
+            if (result.triggered?.length) knowledgeAdded = true;
+        }
+
+        if (Array.isArray(update.storyArcUpdate) && typeof WorldEngine !== 'undefined') {
+            storyChanged = WorldEngine.applyStoryArcUpdate(scene, update.storyArcUpdate);
+        }
+
+        if (Array.isArray(update.counterStrategyUpdate) && typeof WorldEngine !== 'undefined') {
+            counterChanged = WorldEngine.applyCounterStrategyUpdate(scene, update.counterStrategyUpdate);
+        }
+
+        if (Array.isArray(update.npcAgendaUpdate) && typeof WorldEngine !== 'undefined') {
+            agendaChanged = WorldEngine.applyNpcAgendaUpdate(update.npcAgendaUpdate);
         }
 
         // 3. factionsUpdate
@@ -216,18 +296,32 @@ const StrategyManager = {
                 const userName = scene.userName || State.settings.userName || '旅人';
                 if (!char._relations) char._relations = {};
                 if (!char._relations[userName]) {
-                    char._relations[userName] = { affection: 0, trust: 0, suspicion: 0, mood: '平静', history: [] };
+                    char._relations[userName] = { affection: 0, trust: 0, suspicion: 0, fear: 0, debt: 0, leverage: [], mood: '平静', memories: [], history: [] };
                 }
                 const rel = char._relations[userName];
-                if (cu.affectionDelta !== undefined) {
-                    const base = Number.isFinite(Number(rel.affection)) ? Number(rel.affection) : 0;
-                    const delta = Number.isFinite(Number(cu.affectionDelta)) ? Number(cu.affectionDelta) : 0;
-                    rel.affection = Math.max(-100, Math.min(100, base + delta));
+                if (!Array.isArray(rel.leverage)) rel.leverage = [];
+                if (!Array.isArray(rel.memories)) rel.memories = [];
+                if (!Array.isArray(rel.history)) rel.history = [];
+                ['affection', 'trust', 'suspicion', 'fear', 'debt'].forEach(key => {
+                    const deltaKey = key + 'Delta';
+                    if (cu[deltaKey] === undefined) return;
+                    const base = Number.isFinite(Number(rel[key])) ? Number(rel[key]) : 0;
+                    const delta = Number.isFinite(Number(cu[deltaKey])) ? Number(cu[deltaKey]) : 0;
+                    rel[key] = Math.max(-100, Math.min(100, base + delta));
+                });
+                if (cu.leverageAdd !== undefined) {
+                    const list = Array.isArray(cu.leverageAdd) ? cu.leverageAdd : [cu.leverageAdd];
+                    list.map(String).filter(Boolean).forEach(item => {
+                        if (!rel.leverage.includes(item)) rel.leverage.push(item);
+                    });
+                    rel.leverage = rel.leverage.slice(-20);
                 }
-                if (cu.suspicionDelta !== undefined) {
-                    const base = Number.isFinite(Number(rel.suspicion)) ? Number(rel.suspicion) : 0;
-                    const delta = Number.isFinite(Number(cu.suspicionDelta)) ? Number(cu.suspicionDelta) : 0;
-                    rel.suspicion = Math.max(-100, Math.min(100, base + delta));
+                if (cu.memoryAdd !== undefined) {
+                    const list = Array.isArray(cu.memoryAdd) ? cu.memoryAdd : [cu.memoryAdd];
+                    list.map(String).filter(Boolean).forEach(item => {
+                        if (!rel.memories.includes(item)) rel.memories.push(item);
+                    });
+                    rel.memories = rel.memories.slice(-30);
                 }
                 if (cu.mood !== undefined) rel.mood = String(cu.mood);
                 if (cu.secret !== undefined) {
@@ -272,7 +366,6 @@ const StrategyManager = {
             }
         }
 
-        let itemAdded = false, locAdded = false;
         if (Array.isArray(update.itemAdd)) {
             if (update.itemAdd.length > MAX_ITEMS_PER_UPDATE) {
                 console.warn(`[StrategyManager] itemAdd 超过单条上限 ${MAX_ITEMS_PER_UPDATE}，已截断`);
@@ -284,6 +377,15 @@ const StrategyManager = {
                 const qty = Number.isFinite(qtyRaw) && qtyRaw >= 0 ? qtyRaw : 1;
                 if (existing) {
                     existing.quantity += qty;
+                    if (Array.isArray(it.tags)) existing.tags = [...new Set([...(existing.tags || []), ...it.tags.map(String)])].slice(0, 12);
+                    if (Array.isArray(it.effects) && typeof WorldEngine !== 'undefined') {
+                        existing.effects = [
+                            ...(existing.effects || []),
+                            ...it.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean)
+                        ].slice(0, 10);
+                    }
+                    if (it.uses !== undefined && Number.isFinite(Number(it.uses))) existing.uses = Math.max(0, Math.floor(Number(it.uses)));
+                    if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(existing);
                 } else if (qty <= 0) {
                     continue;
                 } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
@@ -293,8 +395,14 @@ const StrategyManager = {
                         description: String(it.description || ''),
                         type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
                         quantity: qty,
-                        equipped: false
+                        equipped: false,
+                        tags: Array.isArray(it.tags) ? it.tags.map(String).slice(0, 12) : [],
+                        effects: Array.isArray(it.effects) && typeof WorldEngine !== 'undefined'
+                            ? it.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean).slice(0, 10)
+                            : [],
+                        uses: it.uses !== undefined && Number.isFinite(Number(it.uses)) ? Math.max(0, Math.floor(Number(it.uses))) : undefined
                     });
+                    if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(scene.inventory[scene.inventory.length - 1]);
                 } else {
                     console.warn(`[StrategyManager] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
                     break;
@@ -329,12 +437,18 @@ const StrategyManager = {
 
         State.saveCurrentSceneDebounced();
         SidebarRight.renderStrategies();
+        SidebarRight.renderKnowledge();
+        SidebarRight.renderDetail();
         SidebarRight.renderInventory();
         SidebarRight.renderQuests();
         SidebarRight.renderMap();
+        SidebarRight.renderSituation?.();
         SidebarLeft.render();
         // 被动获得：标记角标
+        if (knowledgeAdded) SidebarRight.markTabNew('knowledge');
+        if (discoveryChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
+        if (clockChanged || storyChanged || counterChanged || agendaChanged) SidebarRight.markTabNew('situation');
     }
 };

@@ -9,7 +9,9 @@ const SidebarRight = {
         this.toggleBtn = document.getElementById('toggleRightSidebar');
         this.tabBtns = this.el.querySelectorAll('.tab-btn');
         this.tabContents = {
+            situation: document.getElementById('tabSituation'),
             strategies: document.getElementById('tabStrategies'),
+            knowledge: document.getElementById('tabKnowledge'),
             lorebook: document.getElementById('tabLorebook'),
             map: document.getElementById('tabMap'),
             quests: document.getElementById('tabQuests'),
@@ -20,6 +22,8 @@ const SidebarRight = {
         this.detailEl = document.getElementById('characterDetail');
         this.detailPlaceholder = this.tabContents.detail.querySelector('.detail-placeholder');
         this.strategiesEl = document.getElementById('strategiesList');
+        this.knowledgeEl = document.getElementById('knowledgeList');
+        this.situationEl = document.getElementById('situationPanel');
 
         this.toggleBtn.onclick = () => this.toggle();
         this.tabBtns.forEach(btn => {
@@ -31,6 +35,8 @@ const SidebarRight = {
         State.on('characterSelected', () => this.renderDetail());
         State.on('sceneChanged', () => {
             this.renderStrategies();
+            this.renderSituation();
+            this.renderKnowledge();
             this.renderLorebook();
             this.renderMap();
             this.renderQuests();
@@ -66,7 +72,9 @@ const SidebarRight = {
         if (tab === 'map') MapView.render();
         if (tab === 'quests') QuestTracker.render();
         if (tab === 'inventory') this.renderInventory();
+        if (tab === 'situation') this.renderSituation();
         if (tab === 'strategies') this.renderStrategies();
+        if (tab === 'knowledge') this.renderKnowledge();
         // 玩家查看该 tab，清除角标
         this.clearTabBadge(tab);
     },
@@ -109,6 +117,252 @@ const SidebarRight = {
 
     renderMap() { MapView.render(); },
     renderQuests() { QuestTracker.render(); },
+
+    renderSituation() {
+        if (!this.situationEl) return;
+        const scene = State.scene;
+        if (!scene) {
+            this.situationEl.innerHTML = '<p class="placeholder">暂无世界</p>';
+            return;
+        }
+        const situation = typeof WorldEngine !== 'undefined'
+            ? WorldEngine.getCurrentSituation(scene)
+            : null;
+        if (!situation) {
+            this.situationEl.innerHTML = '<p class="placeholder">暂无局势信息</p>';
+            return;
+        }
+
+        const locationName = situation.location?.name || '未知地点';
+        const locationDesc = situation.location?.description || '';
+        const quest = situation.activeQuest;
+        const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
+        const questHtml = quest ? `
+            <div class="situation-section">
+                <h4>主线目标</h4>
+                <div class="situation-main-goal">
+                    <strong>${Renderer.escapeHtml(quest.name)}</strong>
+                    <span>${Renderer.escapeHtml(objective?.text || quest.description || '等待下一步')}</span>
+                </div>
+            </div>
+        ` : '';
+
+        const clocksHtml = situation.clocks.length > 0
+            ? situation.clocks.map(clock => {
+                const pct = Math.min(100, Math.max(0, (clock.value / Math.max(1, clock.max)) * 100));
+                const cls = pct >= 75 ? 'danger' : pct >= 50 ? 'warn' : 'calm';
+                return `<div class="situation-clock situation-clock-${cls}">
+                    <div class="situation-row">
+                        <span>${Renderer.escapeHtml(clock.name)}</span>
+                        <strong>${clock.value}/${clock.max}</strong>
+                    </div>
+                    <div class="situation-bar"><div class="situation-bar-fill" style="width:${pct}%"></div></div>
+                    ${clock.description ? `<p>${Renderer.escapeHtml(clock.description)}</p>` : ''}
+                </div>`;
+            }).join('')
+            : '<p class="placeholder">暂无公开时钟</p>';
+        const hiddenHtml = situation.hiddenPressure > 0
+            ? `<div class="situation-hidden-pressure">有 ${situation.hiddenPressure} 股未公开压力正在暗处推进</div>`
+            : '';
+
+        const countersHtml = situation.counterStrategies.length > 0
+            ? situation.counterStrategies.slice(0, 5).map(counter => `<div class="situation-counter">
+                <div class="situation-row">
+                    <span>${Renderer.escapeHtml(counter.title)}</span>
+                    <strong>${counter.progress || 0}%</strong>
+                </div>
+                <p>${Renderer.escapeHtml(counter.hint || counter.lastAction || '对方正在准备反制')}</p>
+                ${(counter.counterplay || []).length > 0 ? `<div class="situation-tags">${counter.counterplay.slice(0, 3).map(t => `<span>${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>`).join('')
+            : '<p class="placeholder">暂无可见反制</p>';
+
+        const risksHtml = situation.recentRisks.length > 0
+            ? situation.recentRisks.slice(-5).reverse().map(r => `<li>${Renderer.escapeHtml(r)}</li>`).join('')
+            : '<li>局势暂未出现新的公开风险</li>';
+        const cluesHtml = situation.availableClues.length > 0
+            ? situation.availableClues.map(c => `<span>${Renderer.escapeHtml(c.title || c.text || '线索')}</span>`).join('')
+            : '<span>暂无可用线索</span>';
+        const actionsHtml = situation.recommendedActions.map(a => `<button class="situation-action" data-action="${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`).join('');
+
+        this.situationEl.innerHTML = `
+            <div class="situation-card situation-location">
+                <div class="situation-kicker">当前位置</div>
+                <h4>${Renderer.escapeHtml(locationName)}</h4>
+                ${locationDesc ? `<p>${Renderer.escapeHtml(locationDesc)}</p>` : ''}
+                <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
+            </div>
+            ${questHtml}
+            <div class="situation-section">
+                <h4>局势时钟</h4>
+                ${clocksHtml}
+                ${hiddenHtml}
+            </div>
+            <div class="situation-section">
+                <h4>反制与压力</h4>
+                ${countersHtml}
+            </div>
+            <div class="situation-section">
+                <h4>最近风险</h4>
+                <ul class="situation-risk-list">${risksHtml}</ul>
+            </div>
+            <div class="situation-section">
+                <h4>可用线索</h4>
+                <div class="situation-tags">${cluesHtml}</div>
+            </div>
+            <div class="situation-section">
+                <h4>可选行动</h4>
+                <div class="situation-actions">${actionsHtml}</div>
+            </div>
+        `;
+
+        this.situationEl.querySelectorAll('.situation-action').forEach(btn => {
+            btn.onclick = () => {
+                const input = document.getElementById('chatInput');
+                if (!input) return;
+                State.inputMode = 'action';
+                ChatUI._syncInputMode();
+                input.value = btn.dataset.action || '';
+                input.focus();
+            };
+        });
+    },
+
+    renderKnowledge() {
+        if (!this.knowledgeEl) return;
+        const scene = State.scene;
+        if (!scene) {
+            this.knowledgeEl.innerHTML = '<p class="placeholder">暂无世界</p>';
+            return;
+        }
+
+        const entries = [
+            ...((scene.knowledge?.discoveries || []).filter(Boolean)),
+            ...this._buildProfileKnowledgeEntries(scene)
+        ].sort((a, b) => (b.discoveredAt || 0) - (a.discoveredAt || 0));
+
+        if (entries.length === 0) {
+            this.knowledgeEl.innerHTML = '<p class="placeholder">暂无线索<br>通过观察、对话、检定或计策逐步解锁</p>';
+            return;
+        }
+
+        const levelLabels = {
+            hint: '观察',
+            rumor: '传闻',
+            evidence: '证据',
+            inference: '推论',
+            truth: '确认'
+        };
+        const reliabilityLabels = {
+            unverified: '未验证',
+            contested: '有争议',
+            confirmed: '已确认',
+            false: '虚假'
+        };
+        const subjectLabels = {
+            character: '角色',
+            faction: '势力',
+            location: '地点',
+            item: '物品',
+            event: '事件',
+            strategy: '计策'
+        };
+        const counts = entries.reduce((acc, item) => {
+            const level = levelLabels[item.level] ? item.level : 'hint';
+            acc[level] = (acc[level] || 0) + 1;
+            return acc;
+        }, {});
+        const summaryHtml = `
+            <div class="knowledge-summary">
+                <span class="knowledge-pill">全部 ${entries.length}</span>
+                <span class="knowledge-pill">观察 ${counts.hint || 0}</span>
+                <span class="knowledge-pill">传闻 ${counts.rumor || 0}</span>
+                <span class="knowledge-pill">证据 ${counts.evidence || 0}</span>
+                <span class="knowledge-pill">确认 ${counts.truth || 0}</span>
+            </div>
+        `;
+
+        const cardsHtml = entries.map(item => {
+            const level = levelLabels[item.level] ? item.level : 'hint';
+            const reliability = reliabilityLabels[item.reliability] ? item.reliability : 'unverified';
+            const subjectType = subjectLabels[item.subjectType] ? item.subjectType : 'event';
+            const subjectName = this._getKnowledgeSubjectName(scene, item);
+            const title = item.title || item.text || '未命名线索';
+            const text = item.text || item.title || '';
+            const source = item.source || '未知来源';
+            const timeText = item.discoveredAt ? new Date(item.discoveredAt).toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            }) : '';
+            const tagsHtml = Array.isArray(item.tags) && item.tags.length > 0
+                ? `<div class="knowledge-tags">${item.tags.slice(0, 6).map(tag => `<span class="knowledge-tag">${Renderer.escapeHtml(tag)}</span>`).join('')}</div>`
+                : '';
+            return `
+                <article class="knowledge-card knowledge-${Renderer.escapeAttr(reliability)}">
+                    <div class="knowledge-card-head">
+                        <span class="knowledge-badge knowledge-level-${Renderer.escapeAttr(level)}">${Renderer.escapeHtml(levelLabels[level])}</span>
+                        <span class="knowledge-title">${Renderer.escapeHtml(title)}</span>
+                    </div>
+                    <p class="knowledge-text">${Renderer.escapeHtml(text)}</p>
+                    <div class="knowledge-meta">
+                        <span>${Renderer.escapeHtml(subjectLabels[subjectType])}${subjectName ? ` · ${Renderer.escapeHtml(subjectName)}` : ''}</span>
+                        <span>${Renderer.escapeHtml(source)}</span>
+                        <span class="knowledge-reliability">${Renderer.escapeHtml(reliabilityLabels[reliability])}</span>
+                        ${timeText ? `<span>${Renderer.escapeHtml(timeText)}</span>` : ''}
+                    </div>
+                    ${tagsHtml}
+                </article>
+            `;
+        }).join('');
+
+        this.knowledgeEl.innerHTML = summaryHtml + cardsHtml;
+    },
+
+    _buildProfileKnowledgeEntries(scene) {
+        const sceneCharacterIds = new Set(scene.characters || []);
+        const characters = (State.characters || []).filter(c => sceneCharacterIds.has(c.id));
+        const entries = [];
+        characters.forEach(char => {
+            const discovered = scene.discoveries?.characters?.[char.id] || {};
+            const facts = Array.isArray(char.profile?.hiddenFacts) ? char.profile.hiddenFacts : [];
+            facts.forEach(fact => {
+                const state = discovered[fact.id]?.state || 'locked';
+                if (state === 'locked') return;
+                const confirmed = state === 'confirmed';
+                entries.push({
+                    id: `profile_${char.id}_${fact.id}`,
+                    subjectType: 'character',
+                    subjectId: char.id,
+                    level: confirmed ? 'truth' : (state === 'suspected' ? 'inference' : 'hint'),
+                    title: fact.title || `${char.name}的线索`,
+                    text: confirmed ? (fact.truth || fact.hint || fact.title) : (fact.hint || fact.title || '未知线索'),
+                    source: '角色档案',
+                    reliability: confirmed ? 'confirmed' : 'unverified',
+                    tags: [char.name, fact.type || '档案'],
+                    discoveredAt: discovered[fact.id]?.discoveredAt || 0
+                });
+            });
+        });
+        return entries;
+    },
+
+    _getKnowledgeSubjectName(scene, item) {
+        if (!item || !item.subjectId) return '';
+        if (item.subjectType === 'character') {
+            return State.characters.find(c => c.id === item.subjectId)?.name || item.subjectId;
+        }
+        if (item.subjectType === 'location') {
+            return (scene.locations || []).find(l => l.id === item.subjectId)?.name || item.subjectId;
+        }
+        if (item.subjectType === 'faction') {
+            return (scene.factions || []).find(f => f.id === item.subjectId || f.name === item.subjectId)?.name || item.subjectId;
+        }
+        if (item.subjectType === 'strategy') {
+            return (scene.strategies || []).find(s => s.id === item.subjectId)?.title || item.subjectId;
+        }
+        return item.subjectId;
+    },
 
     renderLorebook() {
         const scene = State.scene;
@@ -158,13 +412,26 @@ const SidebarRight = {
             listEl.innerHTML = '<p class="placeholder">暂无物品</p>';
         } else {
             listEl.innerHTML = inventory.map(item => {
+                if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(item);
                 const typeIcons = { weapon: '⚔', armor: '🛡', consumable: '🧪', quest: '📜', misc: '📦' };
                 const icon = typeIcons[item.type] || '📦';
+                const usesHtml = item.uses !== undefined ? `<span class="inv-effect-chip">剩余 ${Renderer.escapeHtml(item.uses)}</span>` : '';
+                const effectsHtml = (item.effects || []).slice(0, 3).map(effect => {
+                    const label = effect.type === 'check_bonus'
+                        ? `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stat ? ` ${effect.stat}` : ''}`
+                        : effect.type === 'risk_delta'
+                            ? `风险${effect.value >= 0 ? '+' : ''}${effect.value}`
+                            : effect.type;
+                    return `<span class="inv-effect-chip">${Renderer.escapeHtml(label)}</span>`;
+                }).join('');
+                const tagsHtml = (item.tags || []).slice(0, 4).map(tag => `<span class="inv-tag">${Renderer.escapeHtml(tag)}</span>`).join('');
                 return `<div class="inventory-item ${item.equipped ? 'equipped' : ''}">
                     <span class="inv-icon">${icon}</span>
                     <div class="inv-info">
                         <span class="inv-name">${Renderer.escapeHtml(item.name)}</span>
                         <span class="inv-desc">${Renderer.escapeHtml(item.description || '')}</span>
+                        ${usesHtml || effectsHtml ? `<span class="inv-effects">${usesHtml}${effectsHtml}</span>` : ''}
+                        ${tagsHtml ? `<span class="inv-tags">${tagsHtml}</span>` : ''}
                     </div>
                     <span class="inv-qty">${item.quantity > 1 ? 'x' + item.quantity : ''}</span>
                     ${item.equipped
@@ -316,17 +583,73 @@ const SidebarRight = {
 
         const relation = char._relations?.[State.scene?.userName || '旅人'];
         const affection = relation ? relation.affection : 0;
+        const trust = relation?.trust || 0;
+        const suspicion = relation?.suspicion || 0;
+        const fear = relation?.fear || 0;
+        const debt = relation?.debt || 0;
+        const profile = char.profile || {};
+        const publicProfile = profile.public || {};
+        const hiddenFacts = Array.isArray(profile.hiddenFacts) ? profile.hiddenFacts : [];
+        const characterDiscovery = State.scene?.discoveries?.characters?.[char.id] || {};
+        const knowledgeItems = (State.scene?.knowledge?.discoveries || [])
+            .filter(item => item.subjectType === 'character' && item.subjectId === char.id)
+            .slice(-8);
+        const levelLabels = { hint: '观察', rumor: '传闻', evidence: '证据', inference: '推论', truth: '确认' };
+        const title = publicProfile.title || char.tags?.[0] || '身份未明';
+        const firstImpression = publicProfile.firstImpression || (char.description || '').split(/[。.!！?？]/).find(Boolean) || '暂无公开印象';
+        const relationTags = [
+            `好感:${affection}`,
+            trust ? `信任:${trust}` : '',
+            suspicion ? `警觉:${suspicion}` : '',
+            fear ? `畏惧:${fear}` : '',
+            debt ? `人情:${debt}` : ''
+        ].filter(Boolean);
+        const knowledgeHtml = knowledgeItems.length > 0
+            ? knowledgeItems.map(item => `<div class="st-clue st-clue-${item.reliability || 'unverified'}">
+                <span class="st-clue-badge">${levelLabels[item.level] || '线索'}</span>
+                <span class="st-clue-text">${Renderer.escapeHtml(item.text || item.title)}</span>
+            </div>`).join('')
+            : '<p class="placeholder">尚未掌握关于此人的可靠线索</p>';
+        const hiddenFactsHtml = hiddenFacts.length > 0
+            ? hiddenFacts.map(fact => {
+                const state = characterDiscovery[fact.id]?.state || 'locked';
+                const isConfirmed = state === 'confirmed';
+                const isKnown = state === 'hinted' || state === 'suspected' || isConfirmed;
+                const text = isConfirmed ? fact.truth : (isKnown ? fact.hint : '???');
+                const unlock = fact.unlock?.trust
+                    ? `需要信任 ${fact.unlock.trust}+ 或相关调查`
+                    : '需要调查或对话解锁';
+                return `<div class="st-step st-step-${isConfirmed ? 'done' : (isKnown ? 'active' : 'pending')}">
+                    <span class="st-step-idx">${isConfirmed ? '✓' : '?'}</span>
+                    <span class="st-step-text">${Renderer.escapeHtml(text)}</span>
+                    <span class="st-step-status">${isKnown ? Renderer.escapeHtml(state) : Renderer.escapeHtml(unlock)}</span>
+                </div>`;
+            }).join('')
+            : '<p class="placeholder">暂无可解锁档案槽</p>';
 
         this.detailEl.innerHTML = `
             ${avatarHtml}
             <div class="detail-name">${Renderer.escapeHtml(char.name)}</div>
             <div class="detail-tags">
                 ${char.tags?.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('') || ''}
-                ${relation ? `<span class="detail-tag">好感:${affection}</span>` : ''}
+                ${relationTags.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('')}
                 ${relation?.mood ? `<span class="detail-tag">${Renderer.escapeHtml(relation.mood)}</span>` : ''}
             </div>
+            <div class="detail-section">
+                <h4>公开档案</h4>
+                <p><strong>${Renderer.escapeHtml(title)}</strong></p>
+                <p>${Renderer.escapeHtml(firstImpression)}</p>
+            </div>
+            <div class="detail-section">
+                <h4>已知线索</h4>
+                ${knowledgeHtml}
+            </div>
+            <div class="detail-section">
+                <h4>未解锁信息</h4>
+                <div class="st-steps">${hiddenFactsHtml}</div>
+            </div>
             <details class="detail-spoiler">
-                <summary>查看角色卡 <span class="spoiler-warn">(剧透)</span></summary>
+                <summary>作者/调试：完整角色卡 <span class="spoiler-warn">(剧透)</span></summary>
                 <div class="spoiler-content">
                     <div class="detail-section">
                         <h4>背景</h4>
@@ -368,6 +691,7 @@ const SidebarRight = {
 
         const riskPct = Math.min(100, Math.max(0, active.risk || 0));
         const progressPct = Math.min(100, Math.max(0, active.progress || 0));
+        const exposurePct = Math.min(100, Math.max(0, active.exposure || 0));
         const tension = scene.worldTension || 0;
 
         const statusLabels = {
@@ -408,6 +732,13 @@ const SidebarRight = {
                 <span class="st-clue-text">${Renderer.escapeHtml(c.text)}</span>
             </div>`;
         }).join('');
+        const intelHtml = [
+            ...(active.requiredIntel || []).map(x => ({ type: '需要', text: x })),
+            ...(active.usedIntel || []).map(x => ({ type: '已用', text: x }))
+        ].map(item => `<span class="st-intel-chip st-intel-${item.type === '已用' ? 'used' : 'required'}">${Renderer.escapeHtml(item.type)}：${Renderer.escapeHtml(item.text)}</span>`).join('');
+        const counterplayHtml = (active.counterplay || []).map(item =>
+            `<span class="st-intel-chip st-intel-counter">${Renderer.escapeHtml(item)}</span>`
+        ).join('');
 
         const othersHtml = others.length > 0
             ? `<div class="st-others"><h4>其他计策</h4>${others.map(s =>
@@ -430,9 +761,12 @@ const SidebarRight = {
                 <div class="st-bars">
                     <div class="st-bar-row"><span>风险</span><div class="st-bar"><div class="st-bar-fill st-risk" style="width:${riskPct}%"></div></div><span>${riskPct}%</span></div>
                     <div class="st-bar-row"><span>进度</span><div class="st-bar"><div class="st-bar-fill st-progress" style="width:${progressPct}%"></div></div><span>${progressPct}%</span></div>
+                    <div class="st-bar-row"><span>暴露</span><div class="st-bar"><div class="st-bar-fill st-exposure" style="width:${exposurePct}%"></div></div><span>${exposurePct}%</span></div>
                     <div class="st-bar-row"><span>世界紧张度</span><div class="st-bar"><div class="st-bar-fill st-tension" style="width:${Math.min(100, Math.max(0, tension))}%"></div></div><span>${tension}</span></div>
                 </div>
                 ${active.stakes ? `<div class="st-stakes"><strong>赌注：</strong>${Renderer.escapeHtml(active.stakes)}</div>` : ''}
+                ${intelHtml ? `<div class="st-section"><h4>情报资源</h4><div class="st-intel-list">${intelHtml}</div></div>` : ''}
+                ${counterplayHtml ? `<div class="st-section"><h4>反制解法</h4><div class="st-intel-list">${counterplayHtml}</div></div>` : ''}
                 ${stepsHtml ? `<div class="st-section"><h4>步骤</h4><div class="st-steps">${stepsHtml}</div></div>` : ''}
                 ${participantsHtml ? `<div class="st-section"><h4>参与 NPC</h4><div class="st-participants">${participantsHtml}</div></div>` : ''}
                 ${cluesHtml ? `<div class="st-section"><h4>情报</h4><div class="st-clues">${cluesHtml}</div></div>` : ''}

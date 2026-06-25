@@ -6,6 +6,8 @@ const ActionBar = {
         this.el = document.getElementById('actionBar');
         if (!this.el) return;
         this.renderStatsDisplay();
+        this.renderPendingAction();
+        this.renderPendingCheck();
     },
 
     renderStatsDisplay() {
@@ -27,6 +29,8 @@ const ActionBar = {
             `<span class="stat-chip" title="${Renderer.escapeAttr(statLabels[s.key] + ' ' + s.val)}">${Icons.get(s.icon, { size: 13 })}${s.val}(${m(s.val)})</span>`
         ).join('');
         this.renderVitaDisplay();
+        this.renderPendingAction();
+        this.renderPendingCheck();
     },
 
     /** 渲染 HP/金币/等级经验速览 */
@@ -51,5 +55,125 @@ const ActionBar = {
             <span class="vita-chip" title="金币">💰 ${gold}</span>
             <span class="vita-chip" title="等级 ${level}，经验 ${exp}/${expNeed}">Lv.${level} <span class="exp-mini">${exp}/${expNeed}</span></span>
         `;
+    },
+
+    renderPendingAction() {
+        const el = document.getElementById('pendingActionPreview');
+        if (!el) return;
+        const action = State.scene?.pendingAction;
+        if (!action) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+
+        const risk = Math.max(0, Math.min(100, Number(action.risk || 0)));
+        const riskClass = risk >= 75 ? 'extreme' : risk >= 55 ? 'high' : risk >= 35 ? 'mid' : 'low';
+        const checkHtml = action.suggestedCheck
+            ? `${Renderer.escapeHtml(action.suggestedCheck.statName)} DC${Renderer.escapeHtml(action.suggestedCheck.dc)}`
+            : '通常无需检定';
+        const modifiersHtml = (action.modifiers || []).slice(0, 5).map(m =>
+            `<span class="pending-action-factor">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
+        ).join('');
+        const risksHtml = (action.risks || []).slice(0, 3).map(r =>
+            `<li>${Renderer.escapeHtml(r)}</li>`
+        ).join('');
+
+        el.classList.remove('hidden');
+        el.innerHTML = `
+            <div class="pending-action-head">
+                <div>
+                    <div class="pending-action-kicker">行动预览</div>
+                    <div class="pending-action-title">${Renderer.escapeHtml(action.intent)}</div>
+                </div>
+                <span class="pending-action-type">${Renderer.escapeHtml(action.typeLabel || action.type || '行动')}</span>
+            </div>
+            <div class="pending-action-grid">
+                <div class="pending-action-metric">
+                    <span>建议检定</span>
+                    <strong>${checkHtml}</strong>
+                </div>
+                <div class="pending-action-metric">
+                    <span>风险</span>
+                    <strong>${risk}% · ${Renderer.escapeHtml(action.riskLevel || '')}</strong>
+                    <div class="pending-risk-bar"><div class="pending-risk-fill ${riskClass}" style="width:${risk}%"></div></div>
+                </div>
+            </div>
+            ${modifiersHtml ? `<div class="pending-action-factors">${modifiersHtml}</div>` : ''}
+            ${risksHtml ? `<ul class="pending-action-risks">${risksHtml}</ul>` : ''}
+            <div class="pending-action-actions">
+                <button class="btn btn-primary" id="confirmPendingActionBtn">确认行动</button>
+                <button class="btn btn-secondary" id="cancelPendingActionBtn">取消</button>
+            </div>
+        `;
+
+        document.getElementById('confirmPendingActionBtn').onclick = () => ChatUI.confirmPendingAction();
+        document.getElementById('cancelPendingActionBtn').onclick = () => ChatUI.cancelPendingAction();
+    },
+
+    renderPendingCheck() {
+        const el = document.getElementById('pendingCheckPreview');
+        if (!el) return;
+        const check = State.scene?.pendingCheck;
+        if (!check) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+
+        const mod = Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0;
+        const dc = Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15;
+        const sign = mod >= 0 ? `+${mod}` : String(mod);
+        const statMod = Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod;
+        const itemBonus = Number(check.itemBonus || 0);
+        const itemModsHtml = (check.itemModifiers || []).slice(0, 4).map(m =>
+            `<span class="pending-action-factor">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
+        ).join('');
+        const availableItemsHtml = (check.availableItemModifiers || []).slice(0, 4).map(m =>
+            `<span class="pending-action-factor pending-action-factor-available">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
+        ).join('');
+        const statIcons = {
+            strength: 'str',
+            dexterity: 'dex',
+            constitution: 'con',
+            intelligence: 'int',
+            wisdom: 'wis',
+            charisma: 'cha'
+        };
+        const iconHtml = Icons.get(statIcons[check.key] || 'int', { size: 18 });
+        const risksHtml = (check.risks || []).slice(0, 3).map(r =>
+            `<li>${Renderer.escapeHtml(r)}</li>`
+        ).join('');
+
+        el.classList.remove('hidden');
+        el.innerHTML = `
+            <div class="pending-check-head">
+                <div>
+                    <div class="pending-action-kicker">检定</div>
+                    <div class="pending-check-title">${iconHtml}<span>${Renderer.escapeHtml(check.statName || '属性')}检定</span></div>
+                </div>
+                <span class="pending-check-dc">DC ${dc}</span>
+            </div>
+            <div class="pending-check-equation">
+                <span>D20</span>
+                <span>${Renderer.escapeHtml(sign)}</span>
+                <span>vs</span>
+                <strong>${dc}</strong>
+            </div>
+            <div class="pending-check-breakdown">
+                属性 ${statMod >= 0 ? '+' + statMod : statMod}${itemBonus ? ` · 物品 ${itemBonus >= 0 ? '+' + itemBonus : itemBonus}` : ''}
+            </div>
+            ${itemModsHtml ? `<div class="pending-action-factors">${itemModsHtml}</div>` : ''}
+            ${availableItemsHtml ? `<div class="pending-action-factors pending-check-available"><span class="pending-action-factor-label">可用但未自动消耗</span>${availableItemsHtml}</div>` : ''}
+            ${check.stakes ? `<p class="pending-check-stakes">${Renderer.escapeHtml(check.stakes)}</p>` : ''}
+            ${risksHtml ? `<ul class="pending-action-risks pending-check-risks">${risksHtml}</ul>` : ''}
+            <div class="pending-action-actions">
+                <button class="btn btn-primary" id="rollPendingCheckBtn">掷骰</button>
+                <button class="btn btn-secondary" id="cancelPendingCheckBtn">取消</button>
+            </div>
+        `;
+
+        document.getElementById('rollPendingCheckBtn').onclick = () => GroupChat.rollPendingCheck();
+        document.getElementById('cancelPendingCheckBtn').onclick = () => GroupChat.cancelPendingCheck();
     }
 };

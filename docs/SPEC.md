@@ -1,0 +1,673 @@
+# Tavern SPEC
+
+本文档定义 Tavern 从“AI 角色扮演聊天器”升级为“可博弈的叙事 RPG”的核心规格，并记录当前实现边界。
+
+## 1. 目标
+
+Tavern 的核心循环应从：
+
+```text
+玩家输入 -> AI 回复 -> 状态轻量更新
+```
+
+升级为：
+
+```text
+探索信息 -> 验证线索 -> 建立筹码 -> 制定行动/计策 -> 承担后果 -> 解锁更深信息
+```
+
+系统必须保证：
+
+- 玩家不知道的内容不能在 UI 中直接公开。
+- NPC 不应天然知道所有对话和玩家秘密。
+- 世界会在玩家行动之外继续变化。
+- 检定、物品、情报、关系和场合共同影响结果。
+- 失败会推进剧情，而不是只阻断玩家。
+
+## 2. 非目标
+
+当前阶段不做：
+
+- 大型战斗系统。
+- 联机多人。
+- 完整职业/技能树。
+- 重写 IndexedDB 架构到后端服务。
+- 引入 React/Vue/构建系统。
+
+如需新增字段，必须继续遵守现有静态应用约束：更新 `State.createScene()`、`State.normalizeScene()`、相关 prompt、UI 和文档。
+
+## 3. 核心原则
+
+### 3.1 玩家知识边界
+
+系统知道的信息、NPC 知道的信息、玩家知道的信息必须分开。
+
+```text
+GM 私密事实 != NPC 个人认知 != 玩家已知情报 != UI 可见信息
+```
+
+任何角色的真实动机、秘密、恐惧、筹码、底线，不应默认展示给玩家。它们只能通过观察、调查、对话、关系门槛、检定、物品证据或剧情事件逐步解锁。
+
+### 3.2 失败推进剧情
+
+检定失败不能只输出“你失败了”。失败必须生成至少一种后果：
+
+- 暴露风险。
+- 关系变化。
+- 时钟推进。
+- 资源损失。
+- 获得不完整或错误线索。
+- 被迫进入新场景。
+- 新增债务、人情、把柄或反制。
+
+### 3.3 NPC 是行动者
+
+NPC 不是等待玩家点击的对话对象。每个重要 NPC 都应有目标、计划、资源、时限和反应策略。
+
+### 3.4 可解释裁决
+
+玩家应该能理解一次行动为什么成功、失败或付出代价。系统可默认收起裁决依据，但必须能解释：
+
+- 使用了哪个属性。
+- DC 为什么是这个值。
+- 哪个物品、情报或关系产生修正。
+- 失败风险是什么。
+- 后果影响了哪些状态。
+
+## 4. 系统模块
+
+### 4.1 玩家知识账本
+
+新增玩家视角的知识账本，用来记录玩家真正掌握的信息。
+
+建议字段：
+
+```js
+scene.knowledge = {
+  discoveries: [],
+  suspicions: [],
+  evidence: [],
+  debts: [],
+  leverage: [],
+  unresolvedQuestions: []
+}
+```
+
+知识条目结构：
+
+```js
+{
+  id: "disc_...",
+  subjectType: "character",      // character | faction | location | item | event | strategy
+  subjectId: "char_...",
+  level: "hint",                 // hint | rumor | evidence | inference | truth
+  title: "机械义眼的异常延迟",
+  text: "审判官的机械义眼在提到货舱时短暂失焦。",
+  source: "观察",
+  reliability: "unverified",     // unverified | contested | confirmed | false
+  tags: ["审判官", "异常", "可验证"],
+  evidenceIds: [],
+  discoveredAt: 1710000000000
+}
+```
+
+要求：
+
+- `scene.intel` 逐步迁移为玩家已知情报，不再承载隐藏真相。
+- 未公开的秘密放入隐藏池，不直接进入玩家知识账本。
+- UI 只展示 `scene.knowledge` 和已解锁档案。
+
+### 4.2 NPC 档案与信息解锁
+
+角色信息拆为五层：
+
+| 层级 | 玩家可见性 | 示例 |
+|---|---|---|
+| public | 初见可见 | 姓名、外貌、身份、第一印象 |
+| observed | 观察后可见 | 口癖、情绪、行为模式 |
+| rumored | 听闻后可见 | 传言、未确认关系、可疑事件 |
+| confirmed | 证实后可见 | 证据、确定动机、真实立场 |
+| private | 永不直接公开 | 真实秘密、内心恐惧、隐藏计划 |
+
+建议角色结构：
+
+```js
+character.profile = {
+  public: {
+    title: "审判官",
+    firstImpression: "冷酷、权威、正在审视你"
+  },
+  hiddenFacts: [
+    {
+      id: "silas_eye_recording",
+      type: "secret",
+      title: "机械义眼的异常记录",
+      hint: "他的机械义眼偶尔会出现不自然延迟。",
+      truth: "机械义眼曾记录到一段无法解释的影像。",
+      unlock: {
+        trust: 25,
+        suspicionBelow: 40,
+        check: { stat: "感知", dc: 15 },
+        locations: ["interrogation", "bridge"],
+        evidenceItem: "审讯影像备份"
+      }
+    }
+  ]
+}
+```
+
+玩家解锁状态：
+
+```js
+scene.discoveries = {
+  characters: {
+    "char_xxx": {
+      "silas_eye_recording": {
+        state: "hinted",          // locked | hinted | suspected | confirmed
+        evidence: ["观察到义眼延迟"],
+        discoveredAt: 1710000000000
+      }
+    }
+  }
+}
+```
+
+UI 要求：
+
+- 角色详情页改为“档案页”。
+- 未解锁字段显示为 `???` 或不显示。
+- 可显示解锁提示，例如“需要更多信任”“需要调查舰桥”“需要感知检定”。
+- 移除普通玩家流程里的完整剧透角色卡；编辑入口保留为作者/调试功能。
+
+### 4.3 NPC 知识边界
+
+每条消息必须逐步支持可见性。NPC prompt 不应默认看到所有历史。
+
+建议消息字段：
+
+```js
+message.visibility = {
+  locationId: "bridge",
+  participants: ["char_a", "char_b"],
+  overheardBy: [],
+  public: false
+}
+```
+
+Prompt 构建规则：
+
+- 当前 NPC 可见：自己参与的消息。
+- 当前 NPC 可见：公开场合消息。
+- 当前 NPC 可见：通过 `overheardBy`、被告知、谣言传播获得的消息。
+- 当前 NPC 不可见：其他地点的私密对话。
+
+最低实现可以先做：
+
+- 消息新增 `participants`。
+- 玩家选择当前对话对象时，将该 NPC 写入 user message。
+- `PromptBuilder` 对当前 NPC 只注入相关历史。
+
+### 4.4 NPC 日程与离屏行动
+
+重要 NPC 应有行动计划。
+
+```js
+character.agenda = {
+  goal: "找出船上的混沌源头",
+  currentPlan: "秘密监控灵能者隔离舱",
+  resources: ["审讯权", "侍僧小队"],
+  deadlineTurn: 8,
+  lastActionTurn: 3,
+  riskTolerance: 60
+}
+```
+
+系统每隔若干轮或关键事件后推进 NPC 离屏行动：
+
+- NPC 获取新情报。
+- NPC 对玩家产生怀疑。
+- NPC 主动联系玩家。
+- NPC 设伏、跟踪、交易或背叛。
+- NPC 之间形成冲突。
+
+离屏行动应通过系统消息、事件、知识条目或时钟体现，而不是只藏在 prompt 里。
+
+### 4.5 局势时钟
+
+世界紧张度应升级为多个具体时钟。
+
+```js
+scene.clocks = [
+  {
+    id: "clock_corruption",
+    name: "黑船混沌腐蚀",
+    value: 2,
+    max: 6,
+    visibility: "known",         // hidden | hinted | known
+    triggers: [
+      { at: 3, event: "低语扩散到牢房区" },
+      { at: 6, event: "亚空间实体显现" }
+    ]
+  }
+]
+```
+
+推进来源：
+
+- 玩家拖延。
+- 地图移动。
+- 休息。
+- 检定失败。
+- 计策暴露。
+- NPC 离屏行动。
+- 使用错误情报。
+
+UI 要求：
+
+- 已知时钟显示名称和格数。
+- 隐藏时钟只显示模糊压力，例如“船上有事正在恶化”。
+- 时钟触发时必须产生具体事件。
+
+### 4.6 行动意图与结算
+
+玩家输入应识别为行动意图，而不只是聊天文本。
+
+行动类型：
+
+- talk：闲聊。
+- observe：观察。
+- ask：询问。
+- probe：试探。
+- lie：欺骗。
+- threaten：威胁。
+- persuade：说服。
+- investigate：调查。
+- sneak：潜行。
+- trade：交易。
+- use_item：使用物品。
+- strategy：计策。
+- rest：休息。
+
+建议行动上下文：
+
+```js
+scene.pendingAction = {
+  type: "threaten",
+  targetCharacterId: "char_xxx",
+  intent: "逼他说出货舱钥匙在哪",
+  risks: ["怀疑上升", "守卫介入"],
+  suggestedCheck: { stat: "魅力", dc: 16 },
+  modifiers: [
+    { source: "把柄：走私记录", value: -3 },
+    { source: "对方信条抵触", value: +4 }
+  ]
+}
+```
+
+高风险行动建议先展示风险卡，玩家确认后再结算。
+
+当前基础实现：
+
+- `/行动` 模式会用本地 `ActionPlanner` 生成 `scene.pendingAction`。
+- 输入区显示行动类型、建议检定、风险百分比、风险来源和失败推进。
+- 玩家确认后写入 `type: "action_intent"` 的用户消息，并由 PromptBuilder 注入 `[玩家行动意图]`。
+- AI 输出 `[check:]` 时会创建 `scene.pendingCheck`，输入区显示检定卡，玩家点击“掷骰”后再生成结果。
+
+### 4.7 检定卡
+
+`[check:]` 现在会生成交互式检定卡：
+
+1. AI 或规则提出检定。
+2. UI 显示属性、DC、风险、自动加成和可用但未自动消耗的物品。
+3. 玩家点击“掷骰”。
+4. 系统生成结果。
+5. AI 根据结果进行 fail-forward 叙事。
+
+结果分层：
+
+- critical_success：大成功，额外收益。
+- success：成功。
+- partial：部分成功，达成目标但付出代价。
+- fail：失败但推进剧情。
+- critical_fail：大失败，触发严重后果。
+
+当前基础实现中，非自然 1/20 时，`total >= DC` 为成功，`total >= DC - 3` 为部分成功，其余为失败推进。结果会写入 `checkData.outcome`、`resultLabel`、`consequenceHint` 和 `consequenceOptions`，供检定卡和 DM 续写使用。
+
+检定物品语义：
+
+- 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
+- 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，在检定卡中提示“可用但未自动消耗”。
+- 当前稳定版点击“掷骰”不会自动扣除消耗品；后续若增加显式选择，再由玩家确认消耗。
+
+### 4.8 计策与情报资源
+
+计策必须依赖情报和筹码。
+
+计策风险计算应考虑：
+
+- 是否有确认情报。
+- 是否只有传闻。
+- 是否掌握把柄。
+- 目标 NPC 的信任、怀疑、畏惧。
+- 当前地点是否公开。
+- 相关时钟压力。
+- 是否有合适物品。
+
+计策字段建议扩展：
+
+```js
+strategy.requiredIntel = ["disc_xxx"];
+strategy.usedIntel = ["disc_xxx"];
+strategy.exposure = 20;
+strategy.counterplay = [];
+```
+
+当玩家用假情报推进计策时，应提高暴露风险或触发 NPC 反制。
+
+### 4.9 NPC 反制
+
+NPC 可以创建反制卡，但玩家不一定知道详情。
+
+```js
+scene.counterStrategies = [
+  {
+    id: "counter_...",
+    ownerCharacterId: "char_xxx",
+    visibility: "hinted",
+    title: "有人在调查你",
+    hiddenTitle: "审判官追踪玩家接触过的证人",
+    progress: 30,
+    riskToPlayer: 45
+  }
+]
+```
+
+玩家可通过观察、调查、反跟踪来揭示反制来源。
+
+### 4.10 关系维度
+
+关系不应只有好感。
+
+```js
+relation = {
+  affection: 0,
+  trust: 0,
+  suspicion: 0,
+  fear: 0,
+  debt: 0,
+  leverage: [],
+  mood: "平静",
+  memories: []
+}
+```
+
+用途：
+
+- trust 解锁秘密和合作。
+- suspicion 提高隐瞒和反制概率。
+- fear 影响威胁成功率，但可能导致背叛。
+- debt 表示人情债，可用于请求帮助。
+- leverage 表示把柄，可用于计策。
+
+### 4.11 物品与装备效果
+
+物品必须参与行动结算。
+
+```js
+item.effects = [
+  { type: "check_bonus", stat: "dexterity", value: 2, when: "lockpick" },
+  { type: "clock_resist", clockTag: "radiation", value: -1 },
+  { type: "strategy_leverage", tag: "forgery" }
+]
+item.uses = 3;
+item.tags = ["工具", "伪造", "可疑"];
+```
+
+UI 要求：
+
+- 检定卡展示自动生效物品，以及可用但未自动消耗的消耗品。
+- 消耗品必须经过玩家显式选择后才扣除；当前稳定版只展示可用项，不自动使用。
+- 计策面板展示可用于当前计策的物品。
+
+### 4.12 剧情弧推进
+
+`storyArcs.currentBeat` 已支持通过 `storyArcUpdate` 半自动推进；时钟和离屏行动由 `WorldEngine` 在玩家回合、休息和失败/部分成功后推进。
+
+可选协议：
+
+```json
+{
+  "storyArcUpdate": [
+    {
+      "title": "混沌渗透之谜",
+      "advance": true,
+      "phase": "twist",
+      "reason": "玩家确认货舱遗物异常"
+    }
+  ]
+}
+```
+
+要求：
+
+- 一个 beat 推进必须有原因。
+- 推进时可生成系统摘要、知识条目或当前局势变化。
+- 不允许 AI 一次跳过多个 beat，除非明确结局。
+
+## 5. Prompt 规格
+
+Prompt 必须区分以下块：
+
+```text
+【玩家已知】
+只包含玩家知识账本中已解锁内容。
+
+【当前 NPC 个人认知】
+只包含该 NPC 合理知道的信息。
+
+【NPC 私密设定，仅用于扮演，禁止直接透露】
+动机、恐惧、秘密、隐藏筹码、反制计划。
+
+【裁决规则】
+行动意图、检定、物品、关系、场合、时钟如何影响结果。
+
+【输出协议】
+正文 + 可选状态补丁，隐藏补丁必须合法 JSON。
+```
+
+禁止：
+
+- 直接把 `secrets` 作为对话告诉玩家。
+- 让不在场 NPC 知道私密对话。
+- 把隐藏时钟具体名称暴露给玩家。
+- 用系统私密事实替代玩家调查。
+
+## 6. 状态补丁协议扩展
+
+目标 `<state_update>` 白名单增加：
+
+```json
+{
+  "knowledgeAdd": [],
+  "discoveryUpdate": [],
+  "clockUpdate": [],
+  "relationshipUpdate": [],
+  "storyArcUpdate": [],
+  "counterStrategyUpdate": [],
+  "npcAgendaUpdate": []
+}
+```
+
+每类补丁必须：
+
+- 限制单次数量。
+- 字段白名单。
+- 字符串长度限制。
+- 不允许写入 settings/apiKey。
+- 不允许直接覆盖完整 scene/character。
+
+## 7. UI 规格
+
+### 7.1 角色档案
+
+替换“查看角色卡（剧透）”为玩家档案：
+
+- 基础身份。
+- 当前关系维度。
+- 已观察特征。
+- 已知传闻。
+- 已确认情报。
+- 欠债/把柄。
+- 未解锁槽位。
+
+作者调试入口可保留，但应明显标记为“编辑/剧透”。
+
+### 7.2 玩家知识账本
+
+新增右侧 tab 或并入世界书。当前基础实现采用右侧“线索”tab：
+
+- 线索。
+- 证据。
+- 推论。
+- 已确认真相。
+- 未解决问题。
+
+基础版展示总览、来源、主体、可信度、标签，以及已解锁角色档案槽。后续应支持按角色、地点、势力、计策过滤。
+
+### 7.3 当前局势
+
+玩家回到游戏时应看到：
+
+- 当前地点。
+- 当前主目标。
+- 最近风险。
+- 活跃时钟。
+- 可用线索。
+- 推荐行动。
+
+当前实现采用右侧“局势”tab，展示当前位置、主线目标、公开时钟、模糊隐藏压力、可见反制、最近风险、可用线索和可选行动。
+
+### 7.4 检定卡
+
+检定卡显示：
+
+- 行动意图。
+- 属性和 DC。
+- 加成/惩罚来源。
+- 成功收益。
+- 失败风险。
+- 可用物品。
+- 掷骰按钮。
+
+## 8. 实施阶段
+
+### Phase 1: 信息边界基础
+
+- 新增 `scene.knowledge`。
+- 新增角色档案可见层。
+- 将角色详情页从剧透卡改为玩家档案。
+- 新增右侧“线索”知识账本基础 UI。
+- Prompt 区分玩家已知和 NPC 私密设定。
+- `intelAdd` 迁移/兼容到 `knowledgeAdd`。
+
+验收：
+
+- 新玩家无法直接看到 NPC 秘密。
+- 解锁后知识条目出现在档案或知识账本。
+- AI 不把私密设定直接说出。
+
+### Phase 2: 行动与检定
+
+- 增加行动意图识别。
+- 增加 pending action / risk card。
+- 检定改为玩家点击掷骰。
+- 支持 partial success 和 fail-forward。
+
+当前实现已完成行动意图识别、pending action / risk card、pending check / 点击掷骰、partial success、fail-forward 后果提示、非消耗物品自动加成展示，以及可用消耗品的展示。
+
+验收：
+
+- 高风险行动先展示风险。
+- 检定结果能解释 DC、加成和后果。
+- 失败能产生新剧情或新状态。
+
+### Phase 3: 时钟与剧情弧
+
+- 新增 `scene.clocks`。
+- 新增 `storyArcUpdate`。
+- 时钟触发具体事件。
+- 当前局势面板展示时钟和下一步。
+- `WorldEngine.tickAfterPlayerTurn()` 根据成功完成的玩家回合、休息、部分成功/失败推进时钟；AI 回复失败/中断不推进，等待检定时延后到检定结算后推进。
+
+验收：
+
+- 拖延或失败会推进时钟。
+- story arc beat 能自动推进并持久化。
+- 玩家隔天回来能理解当前局势。
+
+当前实现状态：已完成基础版。
+
+### Phase 4: NPC 主动性
+
+- 新增 NPC agenda。
+- 新增 NPC 离屏行动。
+- 新增 counter strategies。
+- 消息可见性初步生效。
+- `PromptBuilder` 会按当前 NPC 可见性过滤历史。
+
+验收：
+
+- NPC 会在玩家不互动时推进自己的目标。
+- 不在场 NPC 不会无故知道私聊内容。
+- 玩家能发现并反制 NPC 的反制。
+
+当前实现状态：已完成基础版。
+
+### Phase 5: 物品、关系、计策闭环
+
+- 物品 effects/uses/tags。
+- 多维关系进入计策风险。
+- 情报作为计策资源。
+- 装备和非消耗任务物品进入检定修正；消耗品先在检定卡展示为可用项。
+- 计策支持 `requiredIntel`、`usedIntel`、`exposure`、`counterplay`。
+
+验收：
+
+- 同一行动在不同情报/物品/关系下风险不同。
+- 计策成功或失败会具体改变知识、关系、时钟或资源。
+- 装备不只是展示，而能改变判定。
+
+当前实现状态：已完成基础版。
+
+## 9. 迁移策略
+
+旧存档兼容：
+
+- `scene.intel` 保留读取，视为已知情报。
+- 没有 `scene.knowledge` 时自动创建。
+- 没有角色 `profile` 时由现有 `description/personality/tags` 生成 public 档案。
+- 现有 `secrets/leverage/fears/motives` 暂时继续作为 NPC 私密设定。
+- 没有 `clocks`、`discoveries`、`counterStrategies`、`agenda` 时默认空数组/空对象。
+
+## 10. 验收清单
+
+- [x] 新建预设世界后，玩家不能看到 NPC 的 `secrets`。
+- [x] 通过观察或调查可解锁一条 NPC hint。
+- [x] 通过证据可把 rumor 升级为 confirmed。
+- [x] 私聊内容不会自动进入其他 NPC prompt。
+- [x] 检定前能看到风险和加成。
+- [x] 检定失败至少产生一个推进型后果。
+- [x] 时钟推进到阈值会触发事件。
+- [x] story arc beat 可持久化推进。
+- [x] 计策风险受情报、关系、物品和场合影响。
+- [x] 装备或工具能改变检定。
+- [x] 删除/读取存档后知识账本、时钟、档案解锁状态一致。
+
+## 11. 待决问题
+
+- 玩家是否允许手动编辑知识账本，还是只能由系统/AI 写入？
+- 高风险行动是否必须二次确认，还是只在特定 DC 以上确认？
+- 隐藏时钟是否应完全不可见，还是以模糊提示显示？
+- AI 关系分析是否继续每轮调用，还是改为事件触发？
+- 调试模式如何开启完整角色卡和隐藏状态？
+- 发布版是否替换第三方 IP 风格预设为原创世界？

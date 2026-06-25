@@ -57,7 +57,7 @@
             <button class="icon-btn" id="quickQuestBtn" title="任务面板">📋</button>
             <button class="icon-btn" id="toggleRightSidebar" title="右侧面板">📖</button>
             <button class="icon-btn" id="settingsBtn" title="设置">⚙️</button>
-            <a href="../deepseek-chat/index.html" class="icon-btn" title="返回对话模式">💬</a>
+            <a href="../../archive/deepseek-chat/index.html" class="icon-btn" title="返回对话模式">💬</a>
         </div>
     </header>
 
@@ -105,8 +105,11 @@
                         <button class="toolbar-btn" id="snapshotBtn" title="存档">💾</button>
                         <button class="toolbar-btn" id="loadSnapshotBtn" title="读档">📂</button>
                         <button class="toolbar-btn" id="oocBtn" title="OOC模式">/ooc</button>
+                        <button class="toolbar-btn" id="actionBtn" title="行动预览">/行动</button>
                         <button class="toolbar-btn" id="strategyBtn" title="计策模式">/计策</button>
                     </div>
+                    <div class="pending-action-preview hidden" id="pendingActionPreview"></div>
+                    <div class="pending-check-preview hidden" id="pendingCheckPreview"></div>
                     <div class="input-box">
                         <textarea id="chatInput" rows="1" placeholder="输入消息..."></textarea>
                         <button class="send-btn" id="sendBtn">发送</button>
@@ -119,12 +122,22 @@
         <!-- 右侧边栏：世界书 / 角色详情 -->
         <aside class="sidebar sidebar-right" id="rightSidebar">
             <div class="sidebar-tabs">
+                <button class="tab-btn" data-tab="situation">局势</button>
                 <button class="tab-btn" data-tab="strategies">计策</button>
+                <button class="tab-btn" data-tab="knowledge">线索</button>
                 <button class="tab-btn" data-tab="lorebook">世界书</button>
                 <button class="tab-btn" data-tab="map">地图</button>
                 <button class="tab-btn active" data-tab="quests">任务</button>
                 <button class="tab-btn" data-tab="inventory">背包</button>
                 <button class="tab-btn" data-tab="detail">详情</button>
+            </div>
+            <div class="tab-content hidden" id="tabSituation">
+                <div class="lorebook-header">
+                    <h3>当前局势</h3>
+                </div>
+                <div class="situation-panel" id="situationPanel">
+                    <p class="placeholder">暂无局势信息</p>
+                </div>
             </div>
             <div class="tab-content hidden" id="tabStrategies">
                 <div class="lorebook-header">
@@ -132,6 +145,14 @@
                 </div>
                 <div class="strategies-list" id="strategiesList">
                     <p class="placeholder">暂无计策</p>
+                </div>
+            </div>
+            <div class="tab-content hidden" id="tabKnowledge">
+                <div class="lorebook-header">
+                    <h3>知识账本</h3>
+                </div>
+                <div class="knowledge-list" id="knowledgeList">
+                    <p class="placeholder">暂无线索</p>
                 </div>
             </div>
             <div class="tab-content hidden" id="tabLorebook">
@@ -236,6 +257,8 @@
     <script src="js/core/prompt-builder.js"></script>
     <script src="js/ui/renderer.js"></script>
     <script src="js/ui/icons.js"></script>
+    <script src="js/features/world-engine.js"></script>
+    <script src="js/features/action-planner.js"></script>
     <script src="js/ui/chat.js"></script>
     <script src="js/ui/sidebar-left.js"></script>
     <script src="js/ui/sidebar-right.js"></script>
