@@ -97,6 +97,9 @@ const GroupChat = {
 
             // 解析所有 AI 动态事件标记
             const { cleanedContent, markers } = this._parseMarkers(contentForUpdate);
+            const safeMarkers = typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeMarkers
+                ? PromptGuard.sanitizeMarkers(markers, scene)
+                : markers;
 
             // 提取情绪标签
             const parsed = Renderer.parseMessageType(cleanedContent);
@@ -122,8 +125,8 @@ const GroupChat = {
             ChatUI.finalizeStreamingMessage(cleanedContent, emotion);
 
             // 处理非检定标记（检定标记在检查后统一处理）
-            const nonCheckMarkers = markers.filter(m => m.type !== 'check');
-            const checkMarkers = markers.filter(m => m.type === 'check');
+            const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
+            const checkMarkers = safeMarkers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
 
             // 处理检定标记：生成交互式检定卡，等待玩家点击或输入“掷骰”
@@ -183,6 +186,9 @@ const GroupChat = {
             const rawJson = match[1].trim();
             try {
                 update = JSON.parse(rawJson);
+                if (typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeStateUpdate) {
+                    update = PromptGuard.sanitizeStateUpdate(update);
+                }
             } catch (err) {
                 console.warn('AI 状态补丁 JSON 解析失败（非致命）:', err.message || err);
             }
@@ -246,7 +252,10 @@ const GroupChat = {
      * 处理所有解析出的标记事件
      */
     async _processMarkers(markers) {
-        for (const marker of markers) {
+        const safeMarkers = typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeMarkers
+            ? PromptGuard.sanitizeMarkers(markers, State.scene)
+            : markers;
+        for (const marker of safeMarkers) {
             switch (marker.type) {
                 case 'new_char':
                     setTimeout(() => {
@@ -365,7 +374,8 @@ const GroupChat = {
 
     _parseDc(value, fallback = 15) {
         const match = String(value ?? '').match(/\d+/);
-        return match ? parseInt(match[0], 10) : fallback;
+        const dc = match ? parseInt(match[0], 10) : fallback;
+        return Math.max(5, Math.min(30, dc));
     },
 
     _buildParsedCheck(statName, dc) {
@@ -665,9 +675,10 @@ const GroupChat = {
         const MAX_TOTAL_INVENTORY = 200;
         const parts = raw.split('|');
         const name = (parts[0] || '未知物品').trim();
-        const description = (parts[1] || '').trim();
-        const type = (parts[2] || 'misc').trim();
-        const quantity = parseInt(parts[3]) || 1;
+        const description = (parts[1] || '').trim().slice(0, 160);
+        const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
+        const type = validTypes.includes((parts[2] || '').trim()) ? parts[2].trim() : 'misc';
+        const quantity = Math.max(1, Math.min(20, parseInt(parts[3]) || 1));
 
         const existing = scene.inventory.find(item => item.name === name);
         if (existing) {
@@ -762,7 +773,7 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return;
         const parts = raw.split('|');
-        const amount = Math.max(1, parseInt(parts[0]) || 1);
+        const amount = Math.max(1, Math.min(scene.playerMaxHp || 30, parseInt(parts[0]) || 1));
         const reason = (parts[1] || '').trim();
         scene.playerHp = Math.max(0, (scene.playerHp || 0) - amount);
         const msg = {
@@ -788,7 +799,7 @@ const GroupChat = {
     _handleHealMarker(raw) {
         const scene = State.scene;
         if (!scene) return;
-        const amount = Math.max(1, parseInt(raw.split('|')[0]) || 1);
+        const amount = Math.max(1, Math.min(scene.playerMaxHp || 30, parseInt(raw.split('|')[0]) || 1));
         scene.playerHp = Math.min(scene.playerMaxHp || 20, (scene.playerHp || 0) + amount);
         const msg = {
             id: 'msg_' + Date.now() + '_heal',
@@ -811,7 +822,7 @@ const GroupChat = {
     _handleGoldMarker(raw) {
         const scene = State.scene;
         if (!scene) return;
-        const amount = parseInt(raw.split('|')[0]) || 0;
+        const amount = Math.max(-500, Math.min(500, parseInt(raw.split('|')[0]) || 0));
         scene.gold = Math.max(0, (scene.gold || 0) + amount);
         const msg = {
             id: 'msg_' + Date.now() + '_gold',
@@ -834,7 +845,7 @@ const GroupChat = {
     _handleExpMarker(raw) {
         const scene = State.scene;
         if (!scene) return;
-        const amount = Math.max(1, parseInt(raw.split('|')[0]) || 1);
+        const amount = Math.max(1, Math.min(200, parseInt(raw.split('|')[0]) || 1));
         if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
             QuestTracker._addExp(amount);
         } else {

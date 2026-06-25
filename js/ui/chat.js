@@ -559,6 +559,16 @@ const ChatUI = {
             ? IntentRouter.route(text, scene)
             : { kind: State.isOOC ? 'ooc' : 'talk', text };
 
+        if (!State.isOOC && route.kind !== 'ooc' && typeof PromptGuard !== 'undefined' && PromptGuard.inspectUserInput) {
+            const guard = PromptGuard.inspectUserInput(text);
+            if (guard.blocked) {
+                this._clearInput();
+                this._appendLocalSystemMessage(PromptGuard.buildBlockedMessage(guard));
+                this._syncInputMode();
+                return;
+            }
+        }
+
         if (!State.isOOC && await this._handleRoutedInput(route, text, scene)) return;
 
         const isActionIntent = State.inputMode === 'action' && !State.isOOC && route.kind === 'talk';
