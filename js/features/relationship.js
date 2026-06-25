@@ -95,7 +95,10 @@ ${recent}
                     const moodTxt = data.mood ? ` · ${data.mood}` : '';
                     const reasonTxt = data.reason ? `（${data.reason}）` : '';
                     const scene = State.scene;
-                    if (scene) {
+                    const latestUser = [...(scene?.messages || [])].reverse().find(m => m.role === 'user');
+                    const isKeyTurn = latestUser && ['action_intent', 'check', 'strategy'].includes(latestUser.type);
+                    const shouldShow = Math.abs(delta) >= 3 || isKeyTurn;
+                    if (scene && shouldShow) {
                         const msg = {
                             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                             role: 'assistant',
@@ -107,7 +110,7 @@ ${recent}
                         if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
                         State.saveCurrentSceneDebounced().catch(e => console.warn('关系消息保存失败:', e));
                     }
-                    showToast(`${char.name} 好感${arrow}${delta > 0 ? '+' : ''}${delta}`);
+                    if (shouldShow) showToast(`${char.name} 好感${arrow}${delta > 0 ? '+' : ''}${delta}`);
                 }
             }
         } catch (e) {
