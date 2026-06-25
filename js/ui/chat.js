@@ -93,6 +93,7 @@ const ChatUI = {
         this.actionBtn = document.getElementById('actionBtn');
         this.strategyBtn = document.getElementById('strategyBtn');
         this.modeHintEl = document.getElementById('inputModeHint');
+        this.suggestionChipsEl = document.getElementById('inputSuggestionChips');
 
         this.sendBtn.onclick = async () => {
             try { await this.onSend(); }
@@ -111,6 +112,16 @@ const ChatUI = {
             }
         });
         this.inputEl.addEventListener('input', () => this.autoResize());
+        if (this.suggestionChipsEl) {
+            this.suggestionChipsEl.addEventListener('click', e => {
+                const btn = e.target.closest('.input-chip');
+                if (!btn) return;
+                this._onSuggestionChipClick(btn).catch(err => {
+                    console.error('suggestion chip failed:', err);
+                    showToast('建议操作失败，请重试');
+                });
+            });
+        }
         if (this.talkBtn) this.talkBtn.onclick = () => this.setInputMode('talk');
         this.oocBtn.onclick = () => this.setInputMode('ooc');
         if (this.actionBtn) this.actionBtn.onclick = () => this.toggleAction();
@@ -147,6 +158,7 @@ const ChatUI = {
         State.isStreaming = true;
         if (this.sendBtn) this.sendBtn.style.display = 'none';
         if (this.stopBtn) this.stopBtn.style.display = 'block';
+        this._renderSuggestionChips();
     },
 
     /** 结束流式状态：恢复发送、隐藏停止 */
@@ -215,6 +227,80 @@ const ChatUI = {
         if (scene?.inputContext) {
             scene.inputContext.state = scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle');
             scene.inputContext.prompt = current.placeholder;
+        }
+        this._renderSuggestionChips();
+    },
+
+    _renderSuggestionChips() {
+        if (!this.suggestionChipsEl) return;
+        const chips = this._buildSuggestionChips(State.scene);
+        this.suggestionChipsEl.innerHTML = chips.map(chip => {
+            const cls = chip.primary ? 'input-chip primary' : 'input-chip';
+            const behavior = chip.behavior || 'fill';
+            return `<button class="${cls}" type="button" data-chip-text="${Renderer.escapeAttr(chip.text)}" data-chip-behavior="${Renderer.escapeAttr(behavior)}" title="${Renderer.escapeAttr(chip.text)}">${Renderer.escapeHtml(chip.label)}</button>`;
+        }).join('');
+    },
+
+    _buildSuggestionChips(scene) {
+        if (State.isStreaming) return [];
+        if (scene?.pendingCheck) {
+            return [
+                { label: '掷骰', text: '掷骰', behavior: 'send', primary: true },
+                { label: '取消检定', text: '取消', behavior: 'send' },
+                { label: '解释检定', text: '这是什么检定？', behavior: 'send' }
+            ];
+        }
+        if (scene?.pendingAction) {
+            return [
+                { label: '执行', text: '执行', behavior: 'send', primary: true },
+                { label: '取消', text: '取消', behavior: 'send' },
+                { label: '说明风险', text: '为什么这么高风险？', behavior: 'send' },
+                { label: '改写行动', text: '改成', behavior: 'fill' }
+            ];
+        }
+
+        const chips = [];
+        const add = chip => {
+            if (!chip?.text) return;
+            const key = chip.text.trim();
+            if (!key || chips.some(c => c.text === key)) return;
+            chips.push(chip);
+        };
+        const recommended = Array.isArray(scene?.currentSituation?.recommendedActions)
+            ? scene.currentSituation.recommendedActions
+            : [];
+        recommended.slice(0, 2).forEach(action => {
+            const text = String(action || '').trim();
+            if (text) add({ label: this._shortChipLabel(text), text, behavior: 'fill', primary: chips.length === 0 });
+        });
+
+        const currentChar = State.currentCharacterId
+            ? State.characters.find(c => c.id === State.currentCharacterId)
+            : null;
+        add({ label: '观察四周', text: '我观察当前地点有什么异常。', behavior: 'fill' });
+        add({
+            label: currentChar ? `询问${currentChar.name}` : '询问在场的人',
+            text: currentChar ? `@${currentChar.name} 我想问问现在该注意什么。` : '我询问在场的人最近发生了什么。',
+            behavior: 'fill'
+        });
+        add({ label: '制定计划', text: '我想制定一个计划：', behavior: 'fill' });
+        add({ label: '我该做什么', text: '我现在该干什么？', behavior: 'send' });
+        return chips.slice(0, 4);
+    },
+
+    _shortChipLabel(text) {
+        const clean = String(text || '').replace(/[。！？!?]+$/g, '').trim();
+        return clean.length > 8 ? clean.slice(0, 8) + '...' : clean;
+    },
+
+    async _onSuggestionChipClick(btn) {
+        const text = btn.dataset.chipText || '';
+        if (!text) return;
+        this.inputEl.value = text;
+        this.autoResize();
+        this.inputEl.focus();
+        if (btn.dataset.chipBehavior === 'send') {
+            await this.onSend();
         }
     },
 
