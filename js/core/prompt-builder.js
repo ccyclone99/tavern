@@ -284,6 +284,9 @@ const PromptBuilder = {
             parts.push(`【世界矛盾种子】\n${scene.conflictSeeds.map((c, i) => `${i + 1}. ${c}`).join('\n')}`);
         }
 
+        const flowBlock = this.buildFlowGuideContext(scene);
+        if (flowBlock) parts.push(flowBlock);
+
         const pressureBlock = this.buildWorldPressureContext(scene);
         if (pressureBlock) parts.push(pressureBlock);
 
@@ -343,6 +346,24 @@ const PromptBuilder = {
 
         if (lines.length === 0) return '';
         return `【玩家已知情报】\n以下内容是玩家已经观察、听闻、推理或确认的信息。不要把未解锁的 NPC 私密设定当作玩家已知。\n${lines.join('\n')}`;
+    },
+
+    buildFlowGuideContext(scene) {
+        const guide = scene?.flowGuide;
+        if (!guide || typeof guide !== 'object') return '';
+        const buildList = (label, values) => {
+            if (!Array.isArray(values) || values.length === 0) return '';
+            const lines = values.slice(0, 6).map(v => `- ${String(v || '').trim()}`).filter(line => line !== '- ');
+            return lines.length > 0 ? `${label}：\n${lines.join('\n')}` : '';
+        };
+        const blocks = [
+            buildList('开局可推动行动', guide.openingMoves),
+            buildList('本次阶段目标', guide.sessionGoals),
+            buildList('玩家卡住时提示', guide.stalledPrompts),
+            buildList('失败推进方向', guide.failForward)
+        ].filter(Boolean);
+        if (blocks.length === 0) return '';
+        return `【剧本流程指南】\n${blocks.join('\n')}\n\n规则：\n- 用这些内容保持节奏，但不要替玩家做选择。\n- 建议应包装成 NPC 提问、环境线索或可选行动。\n- 玩家失败或部分成功时，参考失败推进方向制造代价、新线索、时钟推进或关系变化。\n- 不要直接泄露未解锁的 NPC 秘密或剧情真相。`;
     },
 
     /**

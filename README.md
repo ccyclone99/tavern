@@ -14,6 +14,7 @@
 - [docs/SPEC.md](docs/SPEC.md)：下一阶段叙事 RPG 系统规格（知识边界、信息解锁、时钟、检定、计策闭环）
 - [docs/UIUX_SPEC.md](docs/UIUX_SPEC.md)：下一阶段前端 UI/UX 优化规格（信息架构、自然输入、响应式、可访问性）
 - [docs/INPUT_FLOW_SPEC.md](docs/INPUT_FLOW_SPEC.md)：下一阶段单输入框自然输入规格（自动意图识别、被动检定、pending 状态）
+- [docs/SCENARIO_FLOW_SPEC.md](docs/SCENARIO_FLOW_SPEC.md)：下一阶段剧本与游戏流程强化规格（开局引导、阶段目标、卡住提示、失败推进）
 
 ## 核心体验
 

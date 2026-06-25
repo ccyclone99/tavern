@@ -10,6 +10,7 @@ const WorldEngine = {
         if (!scene) return scene;
         if (!Array.isArray(scene.clocks)) scene.clocks = [];
         if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
+        scene.flowGuide = this.normalizeFlowGuide(scene.flowGuide);
         if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
             scene.currentSituation = { recentRisks: [], recommendedActions: [] };
         }
@@ -21,6 +22,20 @@ const WorldEngine = {
         scene.counterStrategies = scene.counterStrategies.map(c => this.normalizeCounterStrategy(c)).filter(Boolean).slice(0, 20);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
+    },
+
+    normalizeFlowGuide(flowGuide = {}) {
+        const guide = flowGuide && typeof flowGuide === 'object' ? flowGuide : {};
+        const list = (key, limit, itemLimit = 140) => (
+            Array.isArray(guide[key]) ? guide[key] : []
+        ).map(s => String(s || '').trim()).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
+        return {
+            openingMoves: list('openingMoves', 8),
+            sessionGoals: list('sessionGoals', 8),
+            stalledPrompts: list('stalledPrompts', 8),
+            failForward: list('failForward', 8, 220),
+            completedMoves: list('completedMoves', 20)
+        };
     },
 
     normalizeClock(clock = {}) {
@@ -454,15 +469,19 @@ const WorldEngine = {
         ].slice(-6);
         const availableClues = (scene.knowledge?.discoveries || []).slice(-5);
         const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure });
+        scene.currentSituation.recommendedActions = recommendedActions;
         return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions };
     },
 
     _buildRecommendedActions(scene, data) {
         const actions = [];
+        this._buildFlowActions(scene).forEach(a => actions.push(a));
         if (data.activeQuest) {
             const objective = (data.activeQuest.objectives || []).find(o => !o.completed);
-            if (objective) actions.push(`推进任务：${objective.text}`);
+            if (objective) actions.push(`围绕「${objective.text}」采取下一步`);
         }
+        const arcAction = this._buildStoryArcAction(scene);
+        if (arcAction) actions.push(arcAction);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
         if (urgentClock) actions.push(`处理时钟：${urgentClock.name}`);
         const counter = data.counterStrategies[0];
@@ -471,6 +490,40 @@ const WorldEngine = {
         if (clue) actions.push(`利用线索：${clue.title || clue.text}`);
         if (actions.length === 0) actions.push('观察当前地点', '询问在场 NPC', '提出一个具体行动');
         return [...new Set(actions)].slice(0, 4);
+    },
+
+    _buildFlowActions(scene) {
+        const guide = this.normalizeFlowGuide(scene?.flowGuide);
+        const completed = new Set(guide.completedMoves);
+        const availableOpenings = guide.openingMoves.filter(a => !completed.has(a));
+        const turn = Number(scene?.turnCount || 0);
+        const actions = [];
+        if (turn <= 3 && availableOpenings.length > 0) {
+            actions.push(...availableOpenings.slice(0, 2));
+        } else if (availableOpenings.length > 0) {
+            actions.push(availableOpenings[0]);
+        }
+        if (actions.length < 2 && guide.sessionGoals.length > 0) {
+            actions.push(`推进目标：${guide.sessionGoals[0]}`);
+        }
+        if (actions.length === 0 && guide.stalledPrompts.length > 0) {
+            actions.push(guide.stalledPrompts[turn % guide.stalledPrompts.length]);
+        }
+        return actions;
+    },
+
+    _buildStoryArcAction(scene) {
+        const arc = (scene?.storyArcs || []).find(a => {
+            const beats = Array.isArray(a?.beats) ? a.beats : [];
+            const beatIdx = Math.max(0, Number(a?.currentBeat || 0));
+            return beats.length > 0 && beatIdx < beats.length;
+        });
+        if (!arc) return '';
+        const beatIdx = Math.max(0, Number(arc.currentBeat || 0));
+        const beat = arc.beats[beatIdx];
+        const condition = String(beat?.condition || '').trim();
+        if (!condition) return '';
+        return `追查剧情线索：${condition}`;
     },
 
     _selectClockForTick(scene, reason) {

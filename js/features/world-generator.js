@@ -126,7 +126,32 @@ const WorldGenerator = {
                     ],
                     currentBeat: 0
                 }
-            ]
+            ],
+            flowGuide: {
+                openingMoves: [
+                    '向审判官塞拉斯解释你在污染星球上的经历',
+                    '请技术神甫克拉克斯检查你的血样或随身物品',
+                    '设法接触灵能者艾拉，询问她梦里的第三道影子',
+                    '申请前往下层货舱检查异形遗物'
+                ],
+                sessionGoals: [
+                    '获得审判庭最低限度信任',
+                    '确认异形遗物和引擎异常是否有关',
+                    '把艾拉的梦境转化为可验证线索'
+                ],
+                stalledPrompts: [
+                    '询问塞拉斯目前最怀疑谁',
+                    '观察审讯室有没有遗漏的记录或仪器',
+                    '请求克拉克斯调取最近的货舱日志',
+                    '想一个计划：在不激怒审判庭的情况下接近艾拉'
+                ],
+                failForward: [
+                    '审判庭怀疑上升，但必须给出一个更明确的审讯问题',
+                    '货舱遗物低语增强，主线压力时钟推进',
+                    '克拉克斯或艾拉给出片面线索，让玩家有下一步可查',
+                    '玩家失去一次自由行动机会，但换来进入新地点或见到新 NPC 的机会'
+                ]
+            }
         },
         {
             id: 'template_cyber_xianxia',
@@ -249,7 +274,32 @@ const WorldGenerator = {
                     ],
                     currentBeat: 0
                 }
-            ]
+            ],
+            flowGuide: {
+                openingMoves: [
+                    '接受器灵长老的本命法器适配测试',
+                    '询问师姐冷凝御剑飞行考核的标准',
+                    '和杂役小七谈谈 heart.exe 是什么',
+                    '前往演武场做一次低风险练习'
+                ],
+                sessionGoals: [
+                    '完成机械筑基的第一项认可',
+                    '判断小七的情感模块会不会触发安全协议',
+                    '找到玩家神经接口异常兼容性的来源'
+                ],
+                stalledPrompts: [
+                    '请器灵长老解释本命法器适配结果',
+                    '观察机械寺大殿的全息符文是否异常',
+                    '向冷凝证明你不是来混日子的',
+                    '制定计划：保护小七但不立刻暴露 heart.exe'
+                ],
+                failForward: [
+                    '考核失败会降低评分，但暴露神经接口异常线索',
+                    '小七被安全协议盯上，迫使玩家做选择',
+                    '冷凝提出更严苛但具体的训练条件',
+                    '天庭网络出现短暂 404，把原始灵气线索显露出来'
+                ]
+            }
         },
         {
             id: 'template_post_apocalypse',
@@ -372,7 +422,32 @@ const WorldGenerator = {
                     ],
                     currentBeat: 0
                 }
-            ]
+            ],
+            flowGuide: {
+                openingMoves: [
+                    '向老王说明你最近在地表看到的真实情况',
+                    '接受医生苏珊的基础体检和辐射扫描',
+                    '听阿杰展示旧全息投影仪里的影像',
+                    '查看旧商场深处的地图和补给路线'
+                ],
+                sessionGoals: [
+                    '获得委员会对地表行动的初步授权',
+                    '确认玩家适应性变异是否能保护避难所',
+                    '找到一个比等待配给耗尽更好的生存方案'
+                ],
+                stalledPrompts: [
+                    '询问老王委员会现在最担心什么',
+                    '让苏珊说明体检结果意味着什么',
+                    '请阿杰指出全息投影里的可疑坐标',
+                    '制定计划：先探索旧商场深处再上地表'
+                ],
+                failForward: [
+                    '委员会信任下降，但会给玩家一个试探性任务',
+                    '物资时钟推进，配给更紧张',
+                    '苏珊发现变异线索但引发伦理争议',
+                    '旧商场出现辐射兽痕迹，迫使玩家准备或改道'
+                ]
+            }
         }
     ],
 
@@ -397,6 +472,7 @@ const WorldGenerator = {
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
 - storyArcs: 1个主线剧情弧数组，每个含 { title, phase:"intro", synopsis(梗概), beats:[{condition(触发条件),action(触发事件)}]数组(4-6个节拍，按顺序推进，reveal=揭示真相/twist=剧情转折/climax=高潮/resolution=结局), currentBeat:0 }
 - clocks: 1-3个局势时钟数组，每个含 { id, name, tag, value:0, max:4-8, visibility("known"/"hinted"/"hidden"), description, trigger:{ at, event } }，代表会随玩家拖延或失败恶化的威胁
+- flowGuide: 剧本流程指南 { openingMoves:[开局3-5个玩家可直接输入的自然行动], sessionGoals:[本次游玩的阶段目标], stalledPrompts:[玩家卡住时的建议], failForward:[失败或部分成功时的推进型后果] }
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
 
@@ -462,6 +538,7 @@ const WorldGenerator = {
         scene.factions = Array.isArray(data.factions) ? data.factions : [];
         scene.intel = Array.isArray(data.intel) ? data.intel : [];
         scene.storyArcs = Array.isArray(data.storyArcs) ? data.storyArcs : [];
+        scene.flowGuide = this._normalizeFlowGuide(data.flowGuide || this._buildDefaultFlowGuide(data));
         scene.clocks = Array.isArray(data.clocks) && data.clocks.length > 0
             ? data.clocks.map(c => WorldEngine.normalizeClock(c)).filter(Boolean)
             : this._buildDefaultClocks(data);
@@ -599,5 +676,48 @@ const WorldGenerator = {
             description: String(firstSeed).slice(0, 240),
             trigger: { at: 4, event: String(event).slice(0, 240) }
         })].filter(Boolean);
+    },
+
+    _normalizeFlowGuide(flowGuide = {}) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.normalizeFlowGuide) {
+            return WorldEngine.normalizeFlowGuide(flowGuide);
+        }
+        const guide = flowGuide && typeof flowGuide === 'object' ? flowGuide : {};
+        const list = key => (Array.isArray(guide[key]) ? guide[key] : [])
+            .map(s => String(s || '').trim())
+            .filter(Boolean)
+            .slice(0, 8);
+        return {
+            openingMoves: list('openingMoves'),
+            sessionGoals: list('sessionGoals'),
+            stalledPrompts: list('stalledPrompts'),
+            failForward: list('failForward'),
+            completedMoves: list('completedMoves')
+        };
+    },
+
+    _buildDefaultFlowGuide(data = {}) {
+        const quests = Array.isArray(data.quests) ? data.quests : [];
+        const mainQuest = quests.find(q => q.type === 'main') || quests[0];
+        const objectives = Array.isArray(mainQuest?.objectives) ? mainQuest.objectives : [];
+        const openingMoves = objectives.slice(0, 4).map(o => `围绕「${o.text || o}」采取下一步`);
+        const seeds = Array.isArray(data.conflictSeeds) ? data.conflictSeeds : [];
+        seeds.slice(0, 2).forEach(seed => openingMoves.push(`调查：${seed}`));
+        const firstNpc = Array.isArray(data.characters) ? data.characters[0] : null;
+        if (firstNpc?.name) openingMoves.push(`询问${firstNpc.name}当前最紧急的问题`);
+        return this._normalizeFlowGuide({
+            openingMoves,
+            sessionGoals: objectives.slice(0, 3).map(o => o.text || String(o)),
+            stalledPrompts: [
+                '观察当前地点有没有异常',
+                firstNpc?.name ? `询问${firstNpc.name}下一步该做什么` : '询问在场 NPC 下一步该做什么',
+                '制定一个计划，先收集情报再行动'
+            ],
+            failForward: [
+                '失败时推进局势时钟，但给出一个更清晰的新线索',
+                '部分成功时让目标达成一半，并引入代价或新压力',
+                '拖延时让 NPC 或敌对势力采取离屏行动'
+            ]
+        });
     }
 };

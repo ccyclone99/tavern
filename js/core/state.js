@@ -137,6 +137,9 @@ const State = {
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
         if (!Array.isArray(scene.clocks)) scene.clocks = [];
         if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
+        if (!scene.flowGuide || typeof scene.flowGuide !== 'object') {
+            scene.flowGuide = { openingMoves: [], sessionGoals: [], stalledPrompts: [], failForward: [], completedMoves: [] };
+        }
         if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
             scene.currentSituation = { recentRisks: [], recommendedActions: [] };
         }
@@ -241,6 +244,7 @@ const State = {
             storyArcs: [],
             clocks: [],
             counterStrategies: [],
+            flowGuide: { openingMoves: [], sessionGoals: [], stalledPrompts: [], failForward: [], completedMoves: [] },
             currentSituation: { recentRisks: [], recommendedActions: [] },
             turnCount: 0,
             summary: '',

@@ -266,9 +266,12 @@ const ChatUI = {
             if (!key || chips.some(c => c.text === key)) return;
             chips.push(chip);
         };
-        const recommended = Array.isArray(scene?.currentSituation?.recommendedActions)
-            ? scene.currentSituation.recommendedActions
-            : [];
+        const situation = scene && typeof WorldEngine !== 'undefined' && WorldEngine.getCurrentSituation
+            ? WorldEngine.getCurrentSituation(scene)
+            : null;
+        const recommended = Array.isArray(situation?.recommendedActions)
+            ? situation.recommendedActions
+            : (Array.isArray(scene?.currentSituation?.recommendedActions) ? scene.currentSituation.recommendedActions : []);
         recommended.slice(0, 2).forEach(action => {
             const text = String(action || '').trim();
             if (text) add({ label: this._shortChipLabel(text), text, behavior: 'fill', primary: chips.length === 0 });

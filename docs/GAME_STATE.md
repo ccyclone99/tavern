@@ -140,6 +140,7 @@
 | `storyArcs` | StoryArc[] | 剧情弧 prompt 上下文 |
 | `clocks` | Clock[] | 局势时钟，支持 hidden/hinted/known 可见性 |
 | `counterStrategies` | CounterStrategy[] | NPC/敌方反制计划 |
+| `flowGuide` | object | 剧本流程指南：openingMoves/sessionGoals/stalledPrompts/failForward/completedMoves |
 | `currentSituation` | object | 当前局势摘要：recentRisks/recommendedActions |
 | `turnCount` | number | 玩家回合计数，用于时钟和离屏行动 |
 | `summary` | string | 自动摘要后的先前剧情，prompt 注入上限约 1200 字 |
