@@ -3519,7 +3519,16 @@ const WorldEngine = {
     canUseInventoryItem(item) {
         if (!item || typeof item !== 'object') return false;
         this.normalizeItem(item);
-        return this._directItemEffects(item).length > 0 || this._fallbackDirectUse(item) !== null;
+        return this._directItemEffects(item).length > 0 && this._canConsumeDirectUseItem(item) ||
+            this._fallbackDirectUse(item) !== null;
+    },
+
+    _canConsumeDirectUseItem(item) {
+        if (!item) return false;
+        const effects = Array.isArray(item.effects) ? item.effects : [];
+        return item.type === 'consumable' ||
+            item.uses !== undefined ||
+            effects.some(effect => effect?.consume === true);
     },
 
     canEquipInventoryItem(item) {
@@ -3590,6 +3599,9 @@ const WorldEngine = {
         const fallback = effects.length === 0 ? this._fallbackDirectUse(item) : null;
         if (effects.length === 0 && !fallback) {
             return { ok: false, message: `${item.name} 主要在检定卡中作为资源使用。` };
+        }
+        if (effects.length > 0 && !this._canConsumeDirectUseItem(item)) {
+            return { ok: false, message: `${item.name} 不是可消耗物品，不能直接反复使用。` };
         }
 
         const applied = [];
