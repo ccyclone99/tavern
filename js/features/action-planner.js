@@ -245,10 +245,52 @@ ${risks}
                 }
             });
 
+            const availableItems = WorldEngine.getAvailableCheckItems(scene, {
+                key: profile.stat,
+                stat: profile.stat,
+                actionType: profile.type,
+                intent
+            });
+            const availableCompanions = WorldEngine.getAvailableCompanionResources
+                ? WorldEngine.getAvailableCompanionResources(scene, {
+                    key: profile.stat,
+                    stat: profile.stat,
+                    actionType: profile.type,
+                    intent
+                })
+                : [];
+            const prepNames = [...availableItems, ...availableCompanions]
+                .map(m => m.source)
+                .filter(Boolean)
+                .slice(0, 3);
+            if (prepNames.length > 0) {
+                modifiers.push({
+                    source: '可投入资源',
+                    label: `${prepNames.join('、')} 可在检定卡选择`,
+                    riskDelta: 0,
+                    dcDelta: 0
+                });
+            }
+
             const counters = (scene?.counterStrategies || []).filter(c => c.status === 'active');
             if (counters.length > 0 && ['sneak', 'lie', 'threaten', 'persuade', 'probe', 'investigate'].includes(profile.type)) {
                 const pressure = Math.min(14, counters.length * 4 + Math.ceil((counters[0].progress || 0) / 25));
                 modifiers.push({ source: '敌方反制', label: `风险 +${pressure}`, riskDelta: pressure, dcDelta: pressure >= 10 ? 1 : 0 });
+            }
+            if (WorldEngine.getConsequenceRiskModifier) {
+                const consequence = WorldEngine.getConsequenceRiskModifier(scene, {
+                    actionType: profile.type,
+                    stat: profile.stat,
+                    intent
+                });
+                if (consequence) {
+                    modifiers.push({
+                        source: '未解决后果',
+                        label: `${consequence.sources.join('、')} · 风险 +${consequence.riskDelta}${consequence.dcDelta ? '，DC +1' : ''}`,
+                        riskDelta: consequence.riskDelta,
+                        dcDelta: consequence.dcDelta
+                    });
+                }
             }
         }
 

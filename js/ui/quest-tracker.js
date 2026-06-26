@@ -88,6 +88,15 @@ const QuestTracker = {
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+                WorldEngine.recordEvent(scene, {
+                    category: 'quest',
+                    title: '任务完成',
+                    text: `任务完成：${quest.name}`,
+                    messageId: msg.id,
+                    timestamp: msg.timestamp
+                });
+            }
             ChatUI.onMessageAdded(msg);
         }
 
@@ -140,6 +149,15 @@ const QuestTracker = {
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+                WorldEngine.recordEvent(scene, {
+                    category: 'quest',
+                    title: '获得奖励',
+                    text: msg.content,
+                    messageId: msg.id,
+                    timestamp: msg.timestamp
+                });
+            }
             ChatUI.onMessageAdded(msg);
             if (typeof SidebarRight !== 'undefined') {
                 if (SidebarRight.renderInventory) SidebarRight.renderInventory();
@@ -162,8 +180,9 @@ const QuestTracker = {
             scene.level = (scene.level || 1) + 1;
             scene.attrPoints = (scene.attrPoints || 0) + 2;
             // 升级回满血
-            const con = (scene.playerStats && scene.playerStats.constitution) || 10;
-            scene.playerMaxHp = 10 + Math.floor((con - 10) / 2) * 4 + (scene.level - 1) * 4;
+            scene.playerMaxHp = typeof WorldEngine !== 'undefined' && WorldEngine.calculatePlayerMaxHp
+                ? WorldEngine.calculatePlayerMaxHp(scene)
+                : 10 + Math.floor((((scene.playerStats && scene.playerStats.constitution) || 10) - 10) / 2) * 4 + (scene.level - 1) * 4;
             scene.playerHp = scene.playerMaxHp;
             showToast(`🎉 升级！现在是 ${scene.level} 级，获得 2 属性点`);
             const msg = {
@@ -174,6 +193,15 @@ const QuestTracker = {
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+                WorldEngine.recordEvent(scene, {
+                    category: 'level',
+                    title: '升级',
+                    text: msg.content,
+                    messageId: msg.id,
+                    timestamp: msg.timestamp
+                });
+            }
             ChatUI.onMessageAdded(msg);
         }
     },
@@ -182,6 +210,12 @@ const QuestTracker = {
     _addItem(name, qty) {
         const scene = State.scene;
         if (!scene.inventory) scene.inventory = [];
+        if (typeof WorldEngine !== 'undefined' &&
+            WorldEngine.createInventoryItemFromReward &&
+            WorldEngine.addOrMergeInventoryItem) {
+            const item = WorldEngine.createInventoryItemFromReward(name, qty);
+            if (WorldEngine.addOrMergeInventoryItem(scene, item)) return;
+        }
         const MAX_TOTAL_INVENTORY = 200;
         const existing = scene.inventory.find(i => i.name === name);
         if (existing) {

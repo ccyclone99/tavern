@@ -138,13 +138,18 @@ const State = {
         if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
         if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
         if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
+        if (!Array.isArray(scene.eventLog)) scene.eventLog = [];
         if (!Array.isArray(scene.failureStates)) scene.failureStates = [];
         if (!Array.isArray(scene.runHistory)) scene.runHistory = [];
         if (!Array.isArray(scene.sceneChallenges)) scene.sceneChallenges = [];
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
+        if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         if (!scene.gameplayProfile || typeof scene.gameplayProfile !== 'object') scene.gameplayProfile = {};
+        if (!scene.storyTexture || typeof scene.storyTexture !== 'object') {
+            scene.storyTexture = { tone: '', sensory: [], motifs: [], dramaticQuestions: [], npcBeats: [], sceneRules: [] };
+        }
         if (!scene.questProgressGuards || typeof scene.questProgressGuards !== 'object') {
             scene.questProgressGuards = { autoAdvanceStreak: 0, lastAdvancedAt: 0 };
         }
@@ -259,12 +264,15 @@ const State = {
             storyPhases: [],
             clueGraph: [],
             consequenceLedger: [],
+            eventLog: [],
             failureStates: [],
             gameplayProfile: {},
+            storyTexture: { tone: '', sensory: [], motifs: [], dramaticQuestions: [], npcBeats: [], sceneRules: [] },
             flowGraph: { nodes: [], revelations: [] },
             sceneChallenges: [],
             evidenceLedger: [],
             companionResources: [],
+            explorationRewardLog: [],
             questProgressGuards: { autoAdvanceStreak: 0, lastAdvancedAt: 0 },
             runRecord: null,
             runHistory: [],

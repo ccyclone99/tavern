@@ -92,8 +92,10 @@ const SceneManager = {
                         storyPhases: JSON.parse(JSON.stringify(scene.storyPhases || [])),
                         clueGraph: JSON.parse(JSON.stringify(scene.clueGraph || [])),
                         consequenceLedger: JSON.parse(JSON.stringify(scene.consequenceLedger || [])),
+                        eventLog: JSON.parse(JSON.stringify(scene.eventLog || [])),
                         failureStates: JSON.parse(JSON.stringify(scene.failureStates || [])),
                         gameplayProfile: JSON.parse(JSON.stringify(scene.gameplayProfile || {})),
+                        storyTexture: JSON.parse(JSON.stringify(scene.storyTexture || {})),
                         flowGraph: JSON.parse(JSON.stringify(scene.flowGraph || { nodes: [], revelations: [] })),
                         sceneChallenges: JSON.parse(JSON.stringify(scene.sceneChallenges || [])),
                         evidenceLedger: JSON.parse(JSON.stringify(scene.evidenceLedger || [])),
@@ -195,9 +197,9 @@ const SceneManager = {
         // 完整字段恢复（新快照）
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
          'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs',
-         'storyPhases', 'clueGraph', 'consequenceLedger', 'failureStates', 'runRecord', 'runHistory', 'clocks', 'counterStrategies', 'flowGuide',
+         'storyPhases', 'clueGraph', 'consequenceLedger', 'eventLog', 'failureStates', 'runRecord', 'runHistory', 'clocks', 'counterStrategies', 'flowGuide',
          'currentSituation', 'pendingAction', 'pendingCheck', 'summary',
-         'gameplayProfile', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'questProgressGuards'].forEach(f => {
+         'gameplayProfile', 'storyTexture', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'questProgressGuards'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',

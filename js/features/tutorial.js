@@ -2,7 +2,7 @@
  * 新手教程系统
  * - 独立教学世界（新手酒馆）
  * - 教学状态机（localStorage 持久化）
- * - 5 步教学剧本（行为驱动推进）
+ * - 5 步教学剧本（自然输入驱动推进）
  * - 复用 DM 叙事通道（_dmNarrate + buildTutorialNarration）
  *
  * 守卫：所有教学逻辑都通过 TutorialWorld.isCurrentScene() 限定在教学世界内，
@@ -79,7 +79,7 @@ const TutorialState = {
 };
 
 // ============================================================
-// 2. 教学剧本（5 步，完整覆盖核心玩法）
+// 2. 教学剧本（5 步，围绕单输入框完成核心玩法）
 // ============================================================
 const TutorialScript = {
     /**
@@ -89,39 +89,39 @@ const TutorialScript = {
     STEPS: [
         {
             id: 0,
-            title: '基础对话',
-            goal: '让玩家学会直接打字与角色对话',
-            cue: '欢迎玩家来到新手酒馆。用亲切幽默的语气打破第四面墙，告诉玩家：「你现在可以像聊天一样，直接在下面输入框打字，然后按发送，跟我说话试试看。」语气要轻松，像老朋友。',
+            title: '直接说话',
+            goal: '让玩家学会直接在输入框里说话',
+            cue: '欢迎玩家来到新手酒馆。打破第四面墙，明确告诉玩家：「你只需要在下面输入框里写你想说的话或想做的事，再按发送。」给一个短例子，例如“你好，莫里斯”。不要提模式按钮。',
         },
         {
             id: 1,
-            title: '群聊指定角色',
-            goal: '让玩家学会点击右侧角色头像，指定回复对象',
-            cue: '夸奖玩家发消息成功。然后说：「这个酒馆里还有别人哦——看看右边（或左边）的角色列表，点击某个角色的头像或名字，就可以专门跟他/她说话了。试试点击艾莉，再跟她聊一句。」',
+            title: '指定对象',
+            goal: '让玩家学会用 @角色名 指定想对谁说话',
+            cue: '夸奖玩家已经会发消息。然后说：「多人在场时，你可以直接在输入框里写 @角色名。比如输入：@艾莉 你能教我怎么冒险吗？这样就不用找按钮。」只教这一个动作。',
         },
         {
             id: 2,
-            title: '制定计划',
-            goal: '让玩家用自然语言提出一个计划',
-            cue: '引导玩家：「想让莫里斯给你打折？你不用找按钮，直接在输入框写‘我想制定一个计划：让莫里斯多给我一块苹果派’就行。计划可以很简单，先说目标，我会帮你拆步骤。」',
+            title: '描述行动',
+            goal: '让玩家学会直接描述有风险的动作并看到行动预览',
+            cue: '引导玩家做一个安全的教学练习：「现在试试描述一个有点风险的小动作，比如：我趁莫里斯转身时，悄悄把苹果派藏进袖子里。」强调这只是练习，系统会先给风险预览，确认前不会真的发生。',
         },
         {
             id: 3,
-            title: 'D20 检定',
-            goal: '让玩家经历一次检定并看懂结果',
-            cue: '引导玩家描述一个有风险的小动作，例如“我趁莫里斯转身时悄悄拿走苹果派”。强调：玩家只要描述动作，系统会在需要时要求掷骰；检定不是玩家主动打开的功能。当系统检测到检定发生并叙述完结果后，本步自动完成。',
+            title: '确认与掷骰',
+            goal: '让玩家理解风险行动需要先确认，检定由系统触发',
+            cue: '解释当前状态：「你已经看到行动预览了。想继续就输入或点击‘执行’；如果系统随后要求检定，再输入或点击‘掷骰’。」强调检定不是玩家主动打开的功能，而是有风险行动被确认后才出现。',
         },
         {
             id: 4,
-            title: '地图移动',
-            goal: '让玩家打开地图并移动到新地点',
-            cue: '引导玩家：「最后教你看地图——点击右侧 🗺 地图标签，你会看到酒馆的几个房间。点击『后院』，你的角色就会走过去。试试看！」',
+            title: '自然移动',
+            goal: '让玩家学会用文字移动到相邻地点',
+            cue: '引导玩家：「最后试试移动。你不用先找地图按钮，直接输入：我去后院。系统会把你移动到那里，并让 DM 描述新地点。」',
         },
         {
             id: 5,
             title: '毕业',
             goal: '恭喜玩家出师，引导其回大厅开始真正的冒险',
-            cue: '热烈祝贺玩家完成所有教学。告诉他：「你已经掌握了对话、指定角色、计策、检定、地图——这套功夫足够你在任何世界冒险了。想开始真正的旅程，随时点左上角回大厅，选一个你喜欢的世界。如果你想留在这儿再练练手，也完全没问题。」',
+            cue: '热烈祝贺玩家完成所有教学。告诉他：「你已经掌握了直接说话、@对象、描述行动、确认风险、掷骰和移动。想开始真正的旅程，随时回大厅选一个世界；想留在这儿再练也可以。」',
         }
     ],
 
@@ -135,7 +135,7 @@ const TutorialWorld = {
     id: 'tutorial_newbie_tavern',
     name: '新手酒馆',
     cover: '📖',
-    description: '专为新手准备的 5 分钟教程。一位亲切的老酒馆老板会手把手教你：对话、群聊、计策、检定、地图——玩完这关，你就能在任何世界冒险了。',
+    description: '专为新手准备的 5 分钟教程。一位亲切的老酒馆老板会手把手教你：直接输入、@对象、描述行动、确认风险、掷骰和移动。',
     background: 'linear-gradient(180deg, #1a1410 0%, #2a1f15 50%, #1a1208 100%)',
     isTutorial: true,
 
@@ -159,7 +159,7 @@ const TutorialWorld = {
             cover: this.cover,
             description: this.description,
             background: this.background,
-            scenario: '故事发生在一座温馨的新手酒馆「橡木桶」。这里没有危险、没有战斗，只有一位热情好客的老酒馆老板莫里斯，以及几位来帮忙教学的角色。玩家刚踏入酒馆，准备学习冒险的基本功。',
+            scenario: '故事发生在一座温馨的新手酒馆「橡木桶」。这里没有真正危险、没有严肃战斗，只有一位热情好客的老酒馆老板莫里斯，以及几位来帮忙教学的角色。玩家刚踏入酒馆，准备学习如何用一个输入框完成冒险的基本动作。',
             userName: '新人',
             playerStats: { strength: 10, dexterity: 12, constitution: 11, intelligence: 14, wisdom: 12, charisma: 13 },
             locations: [
@@ -173,13 +173,13 @@ const TutorialWorld = {
                     id: 'q_tutorial',
                     name: '学会冒险的基本功',
                     type: 'main',
-                    description: '在老酒馆老板莫里斯的指导下，学会对话、群聊、计策、检定、地图这五项基本功。',
+                    description: '在老酒馆老板莫里斯的指导下，学会直接说话、指定对象、描述行动、确认风险、掷骰和移动。',
                     objectives: [
-                        { text: '学会与角色对话', completed: false },
-                        { text: '学会指定角色回复', completed: false },
-                        { text: '制定一个计策', completed: false },
-                        { text: '经历一次检定', completed: false },
-                        { text: '使用地图移动', completed: false }
+                        { text: '直接输入一句话', completed: false },
+                        { text: '用 @ 指定对话对象', completed: false },
+                        { text: '描述一次有风险的行动', completed: false },
+                        { text: '确认行动并完成检定', completed: false },
+                        { text: '用文字移动到后院', completed: false }
                     ],
                     status: 'active',
                     giver: '莫里斯',
@@ -226,10 +226,10 @@ const TutorialWorld = {
                 {
                     name: '罗盘向导',
                     avatar: '🧭',
-                    description: '住在阁楼的古怪老头，收藏着成堆的旧地图。他负责教玩家使用"地图移动"功能。',
+                    description: '住在阁楼的古怪老头，收藏着成堆的旧地图。他负责教玩家用自然语言或地图面板移动。',
                     personality: '絮叨、念旧、爱讲冷知识。一开口就停不下来，但讲地图时格外认真。',
-                    first_mes: '*阁楼的门吱呀一开，扑面而来的是旧羊皮纸的味道。一个戴着单片眼镜的老头正趴在地图堆里，闻声抬起头* "哦？有人来了？我是罗盘向导，专门研究地图的。年轻人，你知道这个世界其实有好几个地方可以走吗？点开地图，想去哪儿就去哪儿——这可是冒险的基本功啊！"',
-                    mes_example: '<START>\n{{user}}: 地图怎么用？\n{{char}}: *罗盘向导激动地展开一张酒馆平面图* "看！这就是『橡木桶』的地图。你现在的位置会有个标记。点别的房间名，你的角色就会走过去——就这么简单。试试点『后院』？"',
+                    first_mes: '*阁楼的门吱呀一开，扑面而来的是旧羊皮纸的味道。一个戴着单片眼镜的老头正趴在地图堆里，闻声抬起头* "哦？有人来了？我是罗盘向导，专门研究地图的。年轻人，你可以直接说‘我去后院’，也可以打开地图点地点——这都是冒险的基本功啊！"',
+                    mes_example: '<START>\n{{user}}: 地图怎么用？\n{{char}}: *罗盘向导激动地展开一张酒馆平面图* "看！这就是『橡木桶』的地图。你现在的位置会有个标记。最简单的办法是直接输入‘我去后院’，系统会帮你移动过去。"',
                     tags: ['地图教学', '絮叨', '念旧'],
                     _emotionTags: ['兴奋', '专注', '絮叨'],
                     _talkativeness: 0.5,
@@ -301,6 +301,7 @@ const Tutorial = {
 
     /**
      * 玩家进入计策快捷模式后的兼容钩子（旧流程）。
+     * 新教程不再要求切换计策模式，但保留旧存档/旧操作兜底。
      */
     async afterStrategyMode() {
         if (!TutorialWorld.isCurrentScene()) return;
@@ -314,6 +315,17 @@ const Tutorial = {
      * 玩家用自然语言提出计策后的钩子（用于 step2）。
      */
     async afterStrategyIntent() {
+        if (!TutorialWorld.isCurrentScene()) return;
+        if (this._isBusy()) return;
+        if (TutorialState.getStep() === 2) {
+            await this._advanceStep(2);
+        }
+    },
+
+    /**
+     * 行动预览出现后的钩子（用于 step2）。
+     */
+    async afterActionPreviewCreated() {
         if (!TutorialWorld.isCurrentScene()) return;
         if (this._isBusy()) return;
         if (TutorialState.getStep() === 2) {
@@ -353,12 +365,11 @@ const Tutorial = {
                 // step0 完成条件：玩家发了至少 1 条 user 消息
                 return scene.messages.some(m => m.role === 'user');
             case 1:
-                // step1 完成条件：玩家主动切换过角色（由 afterCharacterSwitch 钩子推进，此处仅作兜底）
-                // 兜底：检测最近 4 条消息里是否出现了对非默认角色的 user 对话
+                // step1 完成条件：玩家用 @ 或角色选择指定了非默认角色
                 return this._playerTalkedToNonDefaultChar();
             case 2:
-                // step2 可由自然计策输入或旧快捷模式推进
-                return scene.messages.some(m => m.role === 'user' && m.type === 'strategy') || State.inputMode === 'strategy';
+                // step2 由行动预览出现推进；这里保留刷新后的兜底
+                return !!scene.pendingAction || scene.messages.some(m => m.role === 'user' && m.type === 'action_intent');
             case 3:
                 // step3 由 afterCheckResolved 推进
                 return false;

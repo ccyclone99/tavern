@@ -471,6 +471,15 @@ const GroupChat = {
                 stakes: latestAction?.actionData?.stakes || ''
             })
             : [];
+        const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
+            ? WorldEngine.getAvailableCompanionResources(scene, {
+                key: parsed.key,
+                stat: parsed.key,
+                actionType: latestAction?.actionData?.type || '',
+                intent: latestAction?.actionData?.intent || '',
+                stakes: latestAction?.actionData?.stakes || ''
+            })
+            : [];
         const totalMod = parsed.mod + Number(itemBonus.bonus || 0);
         scene.pendingCheck = {
             id: 'check_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -493,6 +502,9 @@ const GroupChat = {
             adjudicationSource: parsed.adjudicationSource || (actionParsed ? 'local' : 'ai'),
             itemModifiers: itemBonus.modifiers || [],
             availableItemModifiers: availableItems,
+            availableCompanionModifiers: availableCompanions,
+            selectedItemModifierIds: [],
+            selectedCompanionResourceIds: [],
             stakes: latestAction?.actionData?.stakes || '',
             risks: latestAction?.actionData?.risks || [],
             createdAt: Date.now()
@@ -510,8 +522,22 @@ const GroupChat = {
         if (!scene || !check || State.isStreaming || scene.gameState !== 'playing') return;
 
         const roll = Math.floor(Math.random() * 20) + 1;
-        const mod = Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0;
-        const dc = Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15;
+        const totals = typeof WorldEngine !== 'undefined' && WorldEngine.getCheckTotals
+            ? WorldEngine.getCheckTotals(scene, check)
+            : {
+                mod: Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0,
+                dc: Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15,
+                baseDc: Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15,
+                statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : 0,
+                itemBonus: Number(check.itemBonus || 0),
+                itemModifiers: [],
+                companionModifiers: [],
+                modifiers: [],
+                bonus: 0,
+                dcDelta: 0
+            };
+        const mod = totals.mod;
+        const dc = totals.dc;
         const total = roll + mod;
         const outcomeInfo = this._classifyCheckOutcome(roll, total, dc);
         const consequenceOptions = this._buildCheckConsequences(outcomeInfo.outcome, check);
@@ -527,8 +553,11 @@ const GroupChat = {
         const consequenceText = consequenceOptions.length > 0
             ? `\n【后果提示：${consequenceOptions.join('；')}】`
             : '';
+        const resourceText = (totals.modifiers || []).length > 0
+            ? `\n【投入资源：${totals.modifiers.map(m => `${m.source}（${m.label}）`).join('；')}】`
+            : '';
         // AI 收到的文本结果（保持兼容）
-        const resultText = `【${check.statName}检定：D20=${roll} ${sign} = ${total} vs DC${dc} → ${outcomeInfo.label}】${consequenceText}`;
+        const resultText = `【${check.statName}检定：D20=${roll} ${sign} = ${total} vs DC${dc} → ${outcomeInfo.label}】${resourceText}${consequenceText}`;
 
         const msg = {
             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -557,10 +586,18 @@ const GroupChat = {
                 challengeContext: check.challengeContext
                     ? JSON.parse(JSON.stringify(check.challengeContext))
                     : null,
-                statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod,
+                statMod: totals.statMod,
                 itemBonus: Number(check.itemBonus || 0),
-                itemModifiers: Array.isArray(check.itemModifiers) ? check.itemModifiers : [],
-                availableItemModifiers: Array.isArray(check.availableItemModifiers) ? check.availableItemModifiers : []
+                selectedBonus: Number(totals.bonus || 0),
+                dcDelta: Number(totals.dcDelta || 0),
+                baseDc: totals.baseDc,
+                itemModifiers: [
+                    ...(Array.isArray(check.itemModifiers) ? check.itemModifiers : []),
+                    ...(Array.isArray(totals.itemModifiers) ? totals.itemModifiers : [])
+                ],
+                availableItemModifiers: Array.isArray(check.availableItemModifiers) ? check.availableItemModifiers : [],
+                companionModifiers: Array.isArray(totals.companionModifiers) ? totals.companionModifiers : [],
+                resourceModifiers: Array.isArray(totals.modifiers) ? totals.modifiers : []
             },
             visibility: typeof WorldEngine !== 'undefined'
                 ? WorldEngine.createVisibility({ public: true })
@@ -571,7 +608,30 @@ const GroupChat = {
         scene.messages.push(msg);
         ChatUI.onMessageAdded(msg);
         if (typeof WorldEngine !== 'undefined') {
-            WorldEngine.consumeCheckItems(scene, check.itemModifiers || []);
+            if (WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+                category: 'check',
+                title: `${check.statName || '属性'}检定：${outcomeInfo.label}`,
+                text: resultText,
+                messageId: msg.id,
+                timestamp: msg.timestamp
+            });
+            if (WorldEngine.recordConsequence && ['partial', 'fail', 'critical_fail'].includes(outcomeInfo.outcome)) {
+                const severity = outcomeInfo.outcome === 'critical_fail'
+                    ? 'critical'
+                    : (outcomeInfo.outcome === 'fail' ? 'high' : 'medium');
+                WorldEngine.recordConsequence(scene, {
+                    title: `${check.statName || '属性'}检定${outcomeInfo.label}`,
+                    cause: check.intent || check.source || `${check.statName || '属性'}检定`,
+                    effect: consequenceOptions[0] || outcomeInfo.hint,
+                    severity,
+                    category: check.actionType || 'check',
+                    tags: [check.actionType, check.key, check.challengeContext?.challengeTitle].filter(Boolean),
+                    turn: scene.turnCount || 0,
+                    createdAt: msg.timestamp
+                });
+            }
+            WorldEngine.consumeCheckItems(scene, totals.itemModifiers || []);
+            WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
         }
         ActionBar.renderPendingCheck();
@@ -671,7 +731,10 @@ const GroupChat = {
 
     _buildCheckNarrationFocus(data) {
         const consequences = (data.consequenceOptions || []).join('；') || data.consequenceHint || '';
-        return `检定结果：${data.resultLabel || '未知'}。${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+        const resources = Array.isArray(data.resourceModifiers) && data.resourceModifiers.length > 0
+            ? ` 玩家投入资源：${data.resourceModifiers.map(m => `${m.source}（${m.label}）`).join('；')}。`
+            : '';
+        return `检定结果：${data.resultLabel || '未知'}。${resources}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
     },
 
     async cancelPendingCheck() {
@@ -711,6 +774,26 @@ const GroupChat = {
         const type = validTypes.includes((parts[2] || '').trim()) ? parts[2].trim() : 'misc';
         const quantity = Math.max(1, Math.min(20, parseInt(parts[3]) || 1));
 
+        if (typeof WorldEngine !== 'undefined' &&
+            WorldEngine.createInventoryItemFromReward &&
+            WorldEngine.addOrMergeInventoryItem) {
+            const item = WorldEngine.createInventoryItemFromReward(name, quantity, { description, type });
+            if (!WorldEngine.addOrMergeInventoryItem(scene, item)) {
+                console.warn(`[GroupChat] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
+                return;
+            }
+            showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
+            if (WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+                category: 'inventory',
+                title: '获得物品',
+                text: `获得 ${name}${quantity > 1 ? ' x' + quantity : ''}`
+            });
+            State.saveCurrentSceneDebounced();
+            SidebarRight.renderInventory();
+            SidebarRight.markTabNew('inventory');
+            return;
+        }
+
         const existing = scene.inventory.find(item => item.name === name);
         if (existing) {
             existing.quantity += quantity;
@@ -724,6 +807,11 @@ const GroupChat = {
             return;
         }
         showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'inventory',
+            title: '获得物品',
+            text: `获得 ${name}${quantity > 1 ? ' x' + quantity : ''}`
+        });
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
         SidebarRight.markTabNew('inventory');
@@ -753,6 +841,11 @@ const GroupChat = {
             scene.inventory.splice(idx, 1);
         }
         showToast(`失去物品：${name}`);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'inventory',
+            title: '失去物品',
+            text: `失去 ${name}`
+        });
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
     },
@@ -779,6 +872,11 @@ const GroupChat = {
         item.equipped = true;
         scene.equipment[slot] = item.name;
         showToast(`装备了：${name}`);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'inventory',
+            title: '装备物品',
+            text: `装备 ${name}`
+        });
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
     },
@@ -795,6 +893,11 @@ const GroupChat = {
         const slot = slotMap[item.type] || 'accessory';
         if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
         showToast(`卸下了：${name}`);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'inventory',
+            title: '卸下物品',
+            text: `卸下 ${name}`
+        });
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
     },
@@ -818,6 +921,13 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'survival',
+            title: '受到伤害',
+            text: msg.content,
+            messageId: msg.id,
+            timestamp: msg.timestamp
+        });
         ChatUI.onMessageAdded(msg);
         State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
@@ -843,6 +953,13 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'survival',
+            title: '恢复生命',
+            text: msg.content,
+            messageId: msg.id,
+            timestamp: msg.timestamp
+        });
         ChatUI.onMessageAdded(msg);
         State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
@@ -866,6 +983,13 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
+            category: 'economy',
+            title: amount >= 0 ? '获得金币' : '花费金币',
+            text: msg.content,
+            messageId: msg.id,
+            timestamp: msg.timestamp
+        });
         ChatUI.onMessageAdded(msg);
         State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();

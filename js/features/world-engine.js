@@ -16,13 +16,16 @@ const WorldEngine = {
         if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
         if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
         if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
+        if (!Array.isArray(scene.eventLog)) scene.eventLog = [];
         if (!Array.isArray(scene.failureStates)) scene.failureStates = [];
         if (!Array.isArray(scene.runHistory)) scene.runHistory = [];
         if (!Array.isArray(scene.sceneChallenges)) scene.sceneChallenges = [];
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
+        if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         scene.gameplayProfile = this.normalizeGameplayProfile(scene.gameplayProfile);
+        scene.storyTexture = this.normalizeStoryTexture(scene.storyTexture);
         if (!scene.questProgressGuards || typeof scene.questProgressGuards !== 'object') {
             scene.questProgressGuards = { autoAdvanceStreak: 0, lastAdvancedAt: 0 };
         }
@@ -45,13 +48,30 @@ const WorldEngine = {
         scene.storyPhases = scene.storyPhases.map((p, idx) => this.normalizeStoryPhase(p, idx)).filter(Boolean).slice(0, 12);
         scene.clueGraph = scene.clueGraph.map(c => this.normalizeCluePath(c)).filter(Boolean).slice(0, 40);
         scene.consequenceLedger = scene.consequenceLedger.map(c => this.normalizeConsequence(c)).filter(Boolean).slice(-60);
+        scene.eventLog = scene.eventLog.map(e => this.normalizeEventLogEntry(e)).filter(Boolean).slice(-120);
         scene.failureStates = scene.failureStates.map((f, idx) => this.normalizeFailureState(f, idx)).filter(Boolean).slice(0, 24);
         scene.flowGraph = this.normalizeFlowGraph(scene.flowGraph);
         scene.sceneChallenges = scene.sceneChallenges.map((c, idx) => this.normalizeSceneChallenge(c, idx)).filter(Boolean).slice(0, 24);
         scene.evidenceLedger = scene.evidenceLedger.map(e => this.normalizeEvidence(e)).filter(Boolean).slice(-120);
         scene.companionResources = scene.companionResources.map(r => this.normalizeCompanionResource(r)).filter(Boolean).slice(0, 24);
+        scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
+    },
+
+    normalizeStoryTexture(texture = {}) {
+        const src = texture && typeof texture === 'object' ? texture : {};
+        const list = (key, limit, itemLimit = 160) => (
+            Array.isArray(src[key]) ? src[key] : []
+        ).map(s => String(s || '').trim()).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
+        return {
+            tone: String(src.tone || '').slice(0, 220),
+            sensory: list('sensory', 8),
+            motifs: list('motifs', 8),
+            dramaticQuestions: list('dramaticQuestions', 8, 220),
+            npcBeats: list('npcBeats', 8, 220),
+            sceneRules: list('sceneRules', 8, 220)
+        };
     },
 
     normalizeGameplayProfile(profile = {}) {
@@ -195,6 +215,8 @@ const WorldEngine = {
             optionalRewards: list('optionalRewards', 8),
             failForward: list('failForward', 8, 220),
             supports: list('supports', 12),
+            expReward: Number.isFinite(Number(data.expReward)) ? this._clamp(Number(data.expReward), 0, 200) : 0,
+            rewardGranted: data.rewardGranted === true,
             lastReason: String(data.lastReason || '').slice(0, 240),
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now()
         };
@@ -243,9 +265,31 @@ const WorldEngine = {
         };
     },
 
+    normalizeEventLogEntry(data = {}) {
+        if (!data || typeof data !== 'object') return null;
+        const validCategories = [
+            'system', 'check', 'quest', 'inventory', 'resource', 'exploration',
+            'challenge', 'progress', 'survival', 'economy', 'level', 'movement', 'failure', 'victory'
+        ];
+        const category = validCategories.includes(data.category) ? data.category : this._eventCategoryFromText(data.title || data.text || '');
+        return {
+            id: String(data.id || 'evlog_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
+            category,
+            title: String(data.title || '事件').slice(0, 120),
+            text: String(data.text || data.title || '').slice(0, 360),
+            turn: Number.isFinite(Number(data.turn)) ? Number(data.turn) : 0,
+            timestamp: Number.isFinite(Number(data.timestamp)) ? Number(data.timestamp) : Date.now(),
+            messageId: String(data.messageId || '').slice(0, 100),
+            refId: String(data.refId || '').slice(0, 100)
+        };
+    },
+
     normalizeCompanionResource(data = {}) {
         if (!data || typeof data !== 'object') return null;
         const obj = key => (data[key] && typeof data[key] === 'object') ? data[key] : {};
+        const list = (key, limit, itemLimit = 80) => (
+            Array.isArray(data[key]) ? data[key] : []
+        ).map(String).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
         return {
             id: String(data.id || 'ally_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
             characterId: String(data.characterId || '').slice(0, 100),
@@ -253,8 +297,35 @@ const WorldEngine = {
             unlock: obj('unlock'),
             uses: this._clamp(Number(data.uses ?? 1), 0, 10),
             cost: obj('cost'),
-            effect: obj('effect'),
+            effect: this.normalizeCompanionEffect(obj('effect')),
+            tags: list('tags', 10),
             risk: String(data.risk || '').slice(0, 220)
+        };
+    },
+
+    normalizeCompanionEffect(effect = {}) {
+        const statMap = {
+            '力量': 'strength',
+            '敏捷': 'dexterity',
+            '体质': 'constitution',
+            '智力': 'intelligence',
+            '感知': 'wisdom',
+            '魅力': 'charisma'
+        };
+        const stat = effect.stat ? String(effect.stat) : '';
+        const num = (key, fallback = 0) => {
+            const n = Number(effect[key]);
+            return Number.isFinite(n) ? n : fallback;
+        };
+        const fallbackBonus = Number.isFinite(Number(effect.value)) ? Number(effect.value) : 0;
+        return {
+            checkBonus: num('checkBonus', fallbackBonus),
+            dcDelta: num('dcDelta', 0),
+            riskDelta: num('riskDelta', 0),
+            clockDelta: num('clockDelta', 0),
+            stat: statMap[stat] || stat,
+            actionType: effect.actionType ? String(effect.actionType).slice(0, 40) : '',
+            when: effect.when ? String(effect.when).slice(0, 120) : ''
         };
     },
 
@@ -324,13 +395,22 @@ const WorldEngine = {
 
     normalizeConsequence(data = {}) {
         if (!data || typeof data !== 'object') return null;
+        const severities = ['low', 'medium', 'high', 'critical'];
+        const statuses = ['active', 'resolved', 'expired'];
+        const list = (key, limit, itemLimit = 80) => (
+            Array.isArray(data[key]) ? data[key] : []
+        ).map(String).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
         return {
             id: String(data.id || 'cons_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
             title: String(data.title || '后果').slice(0, 120),
             cause: String(data.cause || '').slice(0, 260),
             effect: String(data.effect || '').slice(0, 260),
-            severity: String(data.severity || 'low').slice(0, 40),
+            severity: severities.includes(data.severity) ? data.severity : 'low',
+            status: statuses.includes(data.status) ? data.status : 'active',
+            category: String(data.category || 'general').slice(0, 60),
+            tags: list('tags', 10),
             turn: Number.isFinite(Number(data.turn)) ? Number(data.turn) : 0,
+            resolvedAt: Number.isFinite(Number(data.resolvedAt)) ? Number(data.resolvedAt) : 0,
             createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now()
         };
     },
@@ -466,6 +546,112 @@ const WorldEngine = {
             when: effect.when ? String(effect.when).slice(0, 120) : '',
             consume: effect.consume === true
         };
+    },
+
+    createInventoryItemFromReward(name, quantity = 1, options = {}) {
+        const cleanName = String(name || '未知物品').trim().slice(0, 80) || '未知物品';
+        const desc = String(options.description || '').trim().slice(0, 180);
+        const qty = this._clamp(Number(quantity || 1), 1, 20);
+        const text = `${cleanName} ${desc}`.toLowerCase();
+        const has = (...words) => words.some(word => text.includes(String(word).toLowerCase()));
+        const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
+        const requestedType = validTypes.includes(options.type) ? options.type : '';
+        const item = {
+            id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            name: cleanName,
+            description: desc,
+            type: requestedType || 'misc',
+            quantity: qty,
+            equipped: false,
+            tags: [],
+            effects: []
+        };
+
+        if (has('医疗', '治疗', '急救', '药', '血清', '绷带', 'medical', 'heal', 'serum', 'potion')) {
+            item.type = 'consumable';
+            item.quantity = 1;
+            item.uses = qty;
+            item.tags = ['医疗', '治疗'];
+            item.description = desc || '可直接恢复生命的消耗品。';
+            item.effects = [{ type: 'heal', value: has('高级', '强效') ? 6 : 4, consume: true }];
+        } else if (has('补给', '口粮', '食物', '饮水', 'ration', 'supply')) {
+            item.type = 'consumable';
+            item.quantity = 1;
+            item.uses = qty;
+            item.tags = ['补给', '探索'];
+            item.description = desc || '可恢复少量生命，也能在合适检定中作为准备资源。';
+            item.effects = [
+                { type: 'heal', value: 2, consume: true },
+                { type: 'check_bonus', value: 2, consume: true }
+            ];
+        } else if (has('零件', '备件', '维修包', 'repair kit', 'parts')) {
+            item.type = 'consumable';
+            item.quantity = 1;
+            item.uses = qty;
+            item.tags = ['零件', '修复', '设备'];
+            item.description = desc || '可辅助一次修复、破解或设备操作。';
+            item.effects = [{ type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 2, consume: true }];
+        } else if (requestedType === 'weapon' || has('剑', '刀', '枪', '弓', '斧', '锤', 'weapon', 'blade', 'rifle', 'pistol')) {
+            item.type = 'weapon';
+            item.tags = ['武器'];
+            item.description = desc || '装备后可降低战斗行动风险。';
+            item.effects = [{ type: 'check_bonus', actionType: 'combat', value: 1, consume: false }];
+        } else if (requestedType === 'armor' || has('甲', '护甲', '盾', '防具', 'armor', 'shield')) {
+            item.type = 'armor';
+            item.tags = ['防具'];
+            item.description = desc || '装备后可降低战斗或强行突破的风险。';
+            item.effects = [{ type: 'check_bonus', stat: 'constitution', actionType: 'force', value: 1, consume: false }];
+        } else if (requestedType === 'quest' || has('钥匙', '地图', '账本', '档案', '徽章', '许可', '证据', '情报', '线索', 'key', 'map', 'ledger', 'evidence')) {
+            item.type = 'quest';
+            item.tags = ['线索', '任务'];
+            item.description = desc || '关键线索或任务物品，可在调查、观察或交涉时作为依据。';
+            item.effects = [{ type: 'check_bonus', actionType: 'investigate', value: 1, consume: false }];
+        } else if (has('工具', '探测器', '扫描仪', 'kit', 'tool', 'scanner')) {
+            item.type = requestedType || 'misc';
+            item.tags = ['工具'];
+            item.description = desc || '可在合适的调查或操作中提供轻微优势。';
+            item.effects = [{ type: 'check_bonus', actionType: 'investigate', value: 1, consume: false }];
+        }
+        return this.normalizeItem(item);
+    },
+
+    addOrMergeInventoryItem(scene, item) {
+        return this._addOrMergeInventoryItem(scene, item);
+    },
+
+    calculatePlayerMaxHp(scene) {
+        const con = Number(scene?.playerStats?.constitution ?? 10);
+        const level = Number(scene?.level || 1);
+        return Math.max(1, 10 + Math.floor((con - 10) / 2) * 4 + (level - 1) * 4);
+    },
+
+    allocateStatPoint(scene, key) {
+        const statLabels = { strength: '力量', dexterity: '敏捷', constitution: '体质', intelligence: '智力', wisdom: '感知', charisma: '魅力' };
+        if (!scene || !statLabels[key]) return { ok: false, message: '未知属性。' };
+        this.normalizeScene(scene);
+        if (Number(scene.attrPoints || 0) <= 0) return { ok: false, message: '没有可分配属性点。' };
+        const before = this._clamp(Number(scene.playerStats[key] || 10), 1, 30);
+        if (before >= 20) return { ok: false, message: `${statLabels[key]} 已达到当前上限。` };
+        const oldMaxHp = Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene));
+        scene.playerStats[key] = before + 1;
+        scene.attrPoints = Math.max(0, Number(scene.attrPoints || 0) - 1);
+        if (key === 'constitution') {
+            const newMaxHp = this.calculatePlayerMaxHp(scene);
+            const diff = newMaxHp - oldMaxHp;
+            scene.playerMaxHp = newMaxHp;
+            scene.playerHp = Math.min(scene.playerMaxHp, Number(scene.playerHp || 0) + Math.max(0, diff));
+        }
+        this.recordEvent(scene, {
+            category: 'level',
+            title: '分配属性点',
+            text: `${statLabels[key]} +1，剩余属性点 ${scene.attrPoints}`
+        });
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+        }
+        return { ok: true, stat: key, label: statLabels[key], value: scene.playerStats[key], attrPoints: scene.attrPoints };
     },
 
     applyClockUpdate(scene, updates) {
@@ -763,6 +949,8 @@ const WorldEngine = {
             const ev = this.normalizeEvidence(item);
             if (!ev) return;
             const existing = scene.evidenceLedger.find(e => e.id === ev.id || (e.title === ev.title && e.sourceNodeId === ev.sourceNodeId));
+            const isNew = !existing;
+            let targetEvidence = ev;
             if (existing) {
                 existing.reliability = ev.reliability;
                 existing.visible = ev.visible;
@@ -770,20 +958,31 @@ const WorldEngine = {
                 existing.supports = [...new Set([...(existing.supports || []), ...ev.supports])].slice(0, 16);
                 existing.text = ev.text || existing.text;
                 existing.obtainedBy = ev.obtainedBy || existing.obtainedBy;
+                targetEvidence = existing;
             } else {
                 scene.evidenceLedger.push(ev);
             }
-            if (ev.visible !== false && typeof State !== 'undefined' && State.addKnowledgeDiscovery) {
+            this._linkEvidenceToClues(scene, targetEvidence);
+            this._grantExplorationReward(scene, targetEvidence, { isNew });
+            if (isNew && targetEvidence.visible !== false) {
+                this.recordEvent(scene, {
+                    category: 'exploration',
+                    title: '取得证据',
+                    text: `${targetEvidence.title}${targetEvidence.reliability ? `（${targetEvidence.reliability}）` : ''}`,
+                    refId: targetEvidence.id
+                });
+            }
+            if (targetEvidence.visible !== false && typeof State !== 'undefined' && State.addKnowledgeDiscovery) {
                 State.addKnowledgeDiscovery(scene, {
-                    id: 'disc_' + ev.id,
+                    id: 'disc_' + targetEvidence.id,
                     subjectType: 'evidence',
-                    level: ev.reliability === 'confirmed' ? 'evidence' : 'hint',
-                    title: ev.title,
-                    text: ev.text || ev.title,
-                    source: ev.obtainedBy || ev.sourceNodeId || '证据账本',
-                    reliability: ev.reliability === 'confirmed' ? 'confirmed' : (ev.reliability === 'contested' ? 'contested' : 'unverified'),
-                    tags: ev.tags,
-                    evidenceIds: [ev.id]
+                    level: targetEvidence.reliability === 'confirmed' ? 'evidence' : 'hint',
+                    title: targetEvidence.title,
+                    text: targetEvidence.text || targetEvidence.title,
+                    source: targetEvidence.obtainedBy || targetEvidence.sourceNodeId || '证据账本',
+                    reliability: targetEvidence.reliability === 'confirmed' ? 'confirmed' : (targetEvidence.reliability === 'contested' ? 'contested' : 'unverified'),
+                    tags: targetEvidence.tags,
+                    evidenceIds: [targetEvidence.id]
                 });
             }
             changed = true;
@@ -793,6 +992,212 @@ const WorldEngine = {
             this._refreshRevelationsFromEvidence(scene);
         }
         return changed;
+    },
+
+    _linkEvidenceToClues(scene, evidence) {
+        if (!scene || !evidence || evidence.visible === false || !Array.isArray(scene.clueGraph)) return false;
+        const supports = new Set([...(evidence.supports || []), ...(evidence.tags || [])].map(String).filter(Boolean));
+        const linkedClueIds = new Set();
+        (scene.flowGraph?.revelations || []).forEach(rev => {
+            if (!rev || !supports.has(rev.id)) return;
+            (rev.clueIds || []).forEach(id => linkedClueIds.add(id));
+        });
+
+        let changed = false;
+        scene.clueGraph.forEach(clue => {
+            if (!clue) return;
+            const clueTags = [clue.id, clue.title, clue.subjectName, clue.subjectType].map(String).filter(Boolean);
+            const directMatch = clueTags.some(tag => supports.has(tag)) || linkedClueIds.has(clue.id);
+            const tagMatch = (evidence.tags || []).some(tag =>
+                String(tag).length >= 3 &&
+                clueTags.some(item => String(item).includes(String(tag)) || String(tag).includes(String(item)))
+            );
+            if (!directMatch && !tagMatch) return;
+            if (!Array.isArray(clue.evidence)) clue.evidence = [];
+            if (!clue.evidence.includes(evidence.id)) {
+                clue.evidence.push(evidence.id);
+                clue.evidence = clue.evidence.slice(-20);
+                changed = true;
+            }
+            const stages = Array.isArray(clue.stages) ? clue.stages : [];
+            const maxStage = Math.max(0, stages.length - 1);
+            if (evidence.reliability === 'confirmed') {
+                const oldStage = Number(clue.currentStage || 0);
+                clue.currentStage = this._clamp(oldStage + 1, 0, maxStage);
+                clue.status = clue.currentStage >= maxStage ? 'confirmed' : 'suspected';
+                changed = true;
+            } else if (clue.status === 'hidden' || clue.status === 'hinted') {
+                clue.status = 'suspected';
+                changed = true;
+            }
+            clue.lastReason = `证据：${evidence.title}`;
+            clue.updatedAt = Date.now();
+        });
+        return changed;
+    },
+
+    _grantExplorationReward(scene, evidence, options = {}) {
+        if (!scene || !evidence || evidence.visible === false || options.isNew !== true) return false;
+        if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
+        const key = `evidence:${evidence.id}`;
+        if (scene.explorationRewardLog.includes(key)) return false;
+        scene.explorationRewardLog.push(key);
+        scene.explorationRewardLog = scene.explorationRewardLog.slice(-200);
+
+        const exp = evidence.reliability === 'confirmed' ? 8 : 4;
+        if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
+            QuestTracker._addExp(exp);
+        } else {
+            scene.exp = Number(scene.exp || 0) + exp;
+        }
+
+        const item = this._buildExplorationRewardItem(evidence);
+        const itemAdded = item ? this._addOrMergeInventoryItem(scene, item) : false;
+        this.addSystemMessage(
+            scene,
+            `【探索收获：${evidence.title}】经验 +${exp}${itemAdded ? `，获得 ${item.name}` : ''}`,
+            'system'
+        );
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (itemAdded && typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        if (typeof SidebarRight !== 'undefined') SidebarRight.markTabNew?.('knowledge');
+        return true;
+    },
+
+    _buildExplorationRewardItem(evidence) {
+        const tags = new Set([...(evidence.tags || []), ...(evidence.supports || [])].map(s => String(s || '').toLowerCase()));
+        const has = (...items) => items.some(item => tags.has(item) || [...tags].some(tag => tag.includes(item)));
+        if (has('medical', 'mutation_sample', 'no_contagion', 'plant')) {
+            return {
+                id: `reward_${evidence.id}_medical`,
+                name: '应急医疗包',
+                description: '从探索和检测中整理出的可用医疗材料，可在一次体质或治疗相关检定中投入。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['医疗', '样本', '应急'],
+                effects: [
+                    { type: 'heal', value: 4, consume: true },
+                    { type: 'check_bonus', stat: 'constitution', value: 2, consume: true }
+                ]
+            };
+        }
+        if (has('terminal', 'repair', 'water', 'supply', 'old_device', 'hologram', 'log')) {
+            return {
+                id: `reward_${evidence.id}_parts`,
+                name: '备用零件包',
+                description: '从旧设备或终端中拆出的可用零件，可辅助一次修复、破解或设备操作。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['零件', '修复', '设备'],
+                effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }]
+            };
+        }
+        if (has('route', 'radiation', 'storm', 'old_mall', 'new_home', 'capacity', 'air', 'energy_key')) {
+            return {
+                id: `reward_${evidence.id}_field`,
+                name: '探索补给包',
+                description: '路线踏勘中整理出的备用补给，可辅助一次观察、穿越或野外判断。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['探索', '路线', '补给'],
+                effects: [
+                    { type: 'heal', value: 2, consume: true },
+                    { type: 'check_bonus', value: 2, consume: true }
+                ]
+            };
+        }
+        if (has('relic', 'warp', 'seal', 'psyker', 'shadow')) {
+            return {
+                id: `reward_${evidence.id}_ward`,
+                name: '净化盐包',
+                description: '用于压制污染、低语或仪式干扰的一次性材料。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['净化', '封印', '污染'],
+                effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'use_item', value: 2, consume: true }]
+            };
+        }
+        if (has('protocol', 'heart', 'xiaoqi', 'trial', 'qi', 'aura')) {
+            return {
+                id: `reward_${evidence.id}_debug`,
+                name: '调试符片',
+                description: '一次性稳定协议、灵气或法器同步的辅助材料。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['协议', '调试', '法器'],
+                effects: [{ type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 2, consume: true }]
+            };
+        }
+        return null;
+    },
+
+    _addOrMergeInventoryItem(scene, item) {
+        if (!scene || !item) return false;
+        if (!Array.isArray(scene.inventory)) scene.inventory = [];
+        const normalized = this.normalizeItem({ ...item });
+        const existing = scene.inventory.find(i => (normalized.id && i.id === normalized.id) || i.name === normalized.name);
+        if (existing) {
+            if (normalized.uses !== undefined || existing.uses !== undefined) {
+                existing.uses = Number(existing.uses || 0) + Number(normalized.uses || 0);
+                existing.quantity = 1;
+            } else {
+                existing.quantity = Number(existing.quantity || 1) + Number(normalized.quantity || 1);
+            }
+            existing.tags = [...new Set([...(existing.tags || []), ...(normalized.tags || [])])].slice(0, 12);
+            const seenEffects = new Set();
+            existing.effects = [...(existing.effects || []), ...(normalized.effects || [])]
+                .filter(effect => {
+                    const key = JSON.stringify(effect || {});
+                    if (seenEffects.has(key)) return false;
+                    seenEffects.add(key);
+                    return true;
+                })
+                .slice(0, 10);
+            this.normalizeItem(existing);
+            return true;
+        }
+        if (scene.inventory.length >= 200) return false;
+        scene.inventory.push(normalized);
+        return true;
+    },
+
+    _directItemEffects(item) {
+        if (!item || !Array.isArray(item.effects)) return [];
+        const directTypes = new Set(['heal', 'gold', 'exp', 'clock_delta', 'world_tension']);
+        return item.effects.filter(effect => directTypes.has(effect.type));
+    },
+
+    _fallbackDirectUse(item) {
+        if (!item) return null;
+        const text = `${item.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
+        if (/(医疗|治疗|急救|药|血清|绷带|medical|heal|serum)/i.test(text)) return { heal: 3 };
+        if (/(食物|饮水|补给|口粮|supply|ration)/i.test(text)) return { heal: 2 };
+        return null;
+    },
+
+    _consumeInventoryItem(scene, item) {
+        if (!scene || !item || !Array.isArray(scene.inventory)) return false;
+        const idx = scene.inventory.findIndex(i => i === item || (item.id && i.id === item.id) || i.name === item.name);
+        if (idx < 0) return false;
+        const target = scene.inventory[idx];
+        if (target.uses !== undefined) {
+            target.uses = Math.max(0, Number(target.uses || 0) - 1);
+            return true;
+        }
+        if (Number(target.quantity || 1) > 1) {
+            target.quantity = Number(target.quantity || 1) - 1;
+            return true;
+        }
+        scene.inventory.splice(idx, 1);
+        return true;
     },
 
     applyRevelationUpdate(scene, updates) {
@@ -1034,6 +1439,11 @@ const WorldEngine = {
             (scene.flowGraph?.revelations || []).length > 0;
         if (!structured) return true;
 
+        const type = quest.type || 'side';
+        if (type !== 'main') {
+            return this._sideObjectiveHasExplicitSupport(scene, quest, objective, idx);
+        }
+
         if ((quest.type || 'side') === 'main' && this._objectiveHasIncompleteLinkedChallenge(scene, quest, objective, idx)) {
             return false;
         }
@@ -1041,9 +1451,6 @@ const WorldEngine = {
         if (this._objectiveSupportedByEvidence(scene, quest, objective, idx)) return true;
         if (this._objectiveSupportedByRevelation(scene, quest, objective, idx)) return true;
         if (this._objectiveSupportedByChallenge(scene, quest, objective, idx)) return true;
-
-        const type = quest.type || 'side';
-        if (type !== 'main') return false;
 
         const maxAuto = Number(scene.gameplayProfile?.checkDensity?.maxAutoQuestAdvances ?? 2);
         const streak = Number(scene.questProgressGuards?.autoAdvanceStreak || 0);
@@ -1065,6 +1472,51 @@ const WorldEngine = {
 
         // Structured main quests may still advance from a strong DM narration, but only while the auto streak is below cap.
         return true;
+    },
+
+    _sideObjectiveHasExplicitSupport(scene, quest, objective, idx) {
+        const targets = this._objectiveExactSupportTargets(quest, objective, idx);
+        if (targets.size === 0) return false;
+        const hasSupport = supports => this._supportsAnyExactTarget(supports, targets);
+
+        const evidenceOk = (scene.evidenceLedger || []).some(ev => {
+            if (ev.visible === false) return false;
+            if (!['confirmed', 'partial'].includes(ev.reliability)) return false;
+            return hasSupport(ev.supports || []);
+        });
+        if (evidenceOk) return true;
+
+        const revelationOk = (scene.flowGraph?.revelations || []).some(rev => {
+            if (rev.status !== 'confirmed') return false;
+            return hasSupport(rev.requiredFor || []);
+        });
+        if (revelationOk) return true;
+
+        return (scene.sceneChallenges || []).some(challenge => {
+            if (challenge.status !== 'completed') return false;
+            return hasSupport(challenge.supports || []);
+        });
+    },
+
+    _objectiveExactSupportTargets(quest, objective, idx) {
+        const questId = String(quest?.id || '').trim();
+        const targets = [
+            questId ? `${questId}:${idx + 1}` : '',
+            objective?.id && questId ? `${questId}:${objective.id}` : '',
+            this._normalizeQuestText(objective?.text || '')
+        ].filter(Boolean);
+        const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
+        if (objectives.length === 1 && questId) targets.push(questId);
+        return new Set(targets);
+    },
+
+    _supportsAnyExactTarget(supports, targets) {
+        if (!Array.isArray(supports) || !targets || targets.size === 0) return false;
+        return supports.some(item => {
+            const raw = String(item || '').trim();
+            if (!raw) return false;
+            return targets.has(raw) || targets.has(this._normalizeQuestText(raw));
+        });
     },
 
     _objectiveHasIncompleteLinkedChallenge(scene, quest, objective, idx) {
@@ -1259,6 +1711,158 @@ const WorldEngine = {
         return out;
     },
 
+    recordEvent(scene, data = {}) {
+        if (!scene || !data) return null;
+        if (!Array.isArray(scene.eventLog)) scene.eventLog = [];
+        const text = String(data.text || data.content || data.title || '').trim();
+        const title = String(data.title || this._eventTitleFromText(text) || '事件').trim();
+        if (!title && !text) return null;
+        const entry = this.normalizeEventLogEntry({
+            ...data,
+            title,
+            text: text || title,
+            turn: data.turn ?? scene.turnCount ?? 0,
+            timestamp: data.timestamp || Date.now()
+        });
+        if (!entry) return null;
+        const duplicateKey = `${entry.category}|${entry.title}|${entry.text}`.slice(0, 260);
+        const last = scene.eventLog[scene.eventLog.length - 1];
+        const lastKey = last ? `${last.category}|${last.title}|${last.text}`.slice(0, 260) : '';
+        if (duplicateKey === lastKey) return last;
+        scene.eventLog.push(entry);
+        scene.eventLog = scene.eventLog.slice(-120);
+        return entry;
+    },
+
+    recordConsequence(scene, data = {}) {
+        if (!scene || !data) return null;
+        if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
+        const title = String(data.title || this._eventTitleFromText(data.effect || data.cause || '') || '后果').trim();
+        const effect = String(data.effect || data.text || title).trim();
+        if (!title && !effect) return null;
+        const entry = this.normalizeConsequence({
+            ...data,
+            title,
+            effect,
+            turn: data.turn ?? scene.turnCount ?? 0,
+            createdAt: data.createdAt || Date.now()
+        });
+        if (!entry) return null;
+        const duplicateKey = `${entry.status}|${entry.title}|${entry.cause}|${entry.effect}`.slice(0, 320);
+        const last = scene.consequenceLedger[scene.consequenceLedger.length - 1];
+        const lastKey = last ? `${last.status}|${last.title}|${last.cause}|${last.effect}`.slice(0, 320) : '';
+        if (duplicateKey === lastKey) return last;
+        scene.consequenceLedger.push(entry);
+        scene.consequenceLedger = scene.consequenceLedger.slice(-60);
+        this.recordEvent(scene, {
+            category: entry.category === 'survival' ? 'survival' : 'progress',
+            title: `后果：${entry.title}`,
+            text: entry.effect || entry.cause,
+            refId: entry.id,
+            timestamp: entry.createdAt
+        });
+        return entry;
+    },
+
+    getActiveConsequences(scene, options = {}) {
+        if (!scene) return [];
+        const includeResolved = options.includeResolved === true;
+        const limit = Math.max(1, Number(options.limit || 8));
+        return (scene.consequenceLedger || [])
+            .map(item => this.normalizeConsequence(item))
+            .filter(Boolean)
+            .filter(item => includeResolved || item.status === 'active')
+            .sort((a, b) => {
+                const sev = { critical: 4, high: 3, medium: 2, low: 1 };
+                const sa = sev[a.severity] || 1;
+                const sb = sev[b.severity] || 1;
+                return sb - sa || Number(b.createdAt || 0) - Number(a.createdAt || 0);
+            })
+            .slice(0, limit);
+    },
+
+    getConsequenceRiskModifier(scene, context = {}) {
+        const active = this.getActiveConsequences(scene, { limit: 6 });
+        if (active.length === 0) return null;
+        const actionType = String(context.actionType || '');
+        const intent = String(context.intent || '').toLowerCase();
+        const severityRisk = { low: 2, medium: 5, high: 9, critical: 14 };
+        const matched = active.filter(item => {
+            const haystack = `${item.category} ${(item.tags || []).join(' ')} ${item.title} ${item.effect}`.toLowerCase();
+            if (!actionType && !intent) return true;
+            if (actionType && haystack.includes(actionType.toLowerCase())) return true;
+            if (intent && (item.tags || []).some(tag => intent.includes(String(tag).toLowerCase()))) return true;
+            return ['critical', 'high'].includes(item.severity);
+        });
+        if (matched.length === 0) return null;
+        const risk = Math.min(16, matched.reduce((sum, item) => sum + (severityRisk[item.severity] || 2), 0));
+        const dc = risk >= 9 ? 1 : 0;
+        return {
+            riskDelta: risk,
+            dcDelta: dc,
+            sources: matched.map(item => item.title).slice(0, 3)
+        };
+    },
+
+    getEventLog(scene, limit = 12) {
+        if (!scene) return [];
+        this.normalizeScene(scene);
+        const stored = (scene.eventLog || []).map(e => this.normalizeEventLogEntry(e)).filter(Boolean);
+        const derived = stored.length > 0 ? [] : this._deriveEventLogFromMessages(scene);
+        return [...stored, ...derived]
+            .filter(Boolean)
+            .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
+            .slice(0, Math.max(1, Number(limit || 12)));
+    },
+
+    _deriveEventLogFromMessages(scene) {
+        const interesting = new Set(['check', 'system', 'event', 'gameover', 'victory']);
+        return (scene.messages || [])
+            .filter(msg => interesting.has(msg.type))
+            .slice(-30)
+            .map(msg => this.normalizeEventLogEntry({
+                id: `derived:${msg.id || msg.timestamp || Math.random()}`,
+                category: msg.type === 'check' ? 'check' : this._eventCategoryFromText(msg.content || ''),
+                title: msg.type === 'check' && msg.checkData
+                    ? `${msg.checkData.statName || '属性'}检定：${msg.checkData.resultLabel || msg.checkData.outcome || '结果'}`
+                    : this._eventTitleFromText(msg.content || ''),
+                text: String(msg.content || '').replace(/\n+/g, ' ').slice(0, 360),
+                turn: scene.turnCount || 0,
+                timestamp: msg.timestamp || 0,
+                messageId: msg.id || ''
+            }))
+            .filter(Boolean);
+    },
+
+    _eventTitleFromText(text) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        const bracket = clean.match(/^【([^】]{1,40})】/);
+        if (bracket) return bracket[1];
+        if (clean.includes('检定')) return '检定结果';
+        if (clean.includes('获得奖励')) return '获得奖励';
+        if (clean.includes('升级到')) return '升级';
+        if (clean.includes('受到') && clean.includes('伤害')) return '受伤';
+        if (clean.includes('恢复') && clean.includes('生命')) return '恢复生命';
+        return clean.slice(0, 32) || '事件';
+    },
+
+    _eventCategoryFromText(text) {
+        const clean = String(text || '');
+        if (/检定|D20|掷骰/.test(clean)) return 'check';
+        if (/任务|主线|支线/.test(clean)) return 'quest';
+        if (/挑战|阶段推进|里程碑/.test(clean)) return 'challenge';
+        if (/线索|证据|探索收获|知识/.test(clean)) return 'exploration';
+        if (/资源消耗|同伴协助|投入资源/.test(clean)) return 'resource';
+        if (/购买|交易|金币|花费/.test(clean)) return 'economy';
+        if (/物品|背包|使用物品|获得 .+包|获得 .+药|装备|卸下/.test(clean)) return 'inventory';
+        if (/生命|伤害|休息|恢复/.test(clean)) return 'survival';
+        if (/升级|经验|属性点/.test(clean)) return 'level';
+        if (/移动|前往|地点|地图/.test(clean)) return 'movement';
+        if (/失败|倒下|死亡|Game Over/.test(clean)) return 'failure';
+        if (/通关|胜利|完成冒险/.test(clean)) return 'victory';
+        return 'system';
+    },
+
     addSystemMessage(scene, content, type = 'system') {
         if (!scene || !content) return null;
         const msg = {
@@ -1270,6 +1874,13 @@ const WorldEngine = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        this.recordEvent(scene, {
+            category: this._eventCategoryFromText(content),
+            title: this._eventTitleFromText(content),
+            text: String(content),
+            messageId: msg.id,
+            timestamp: msg.timestamp
+        });
         if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
         return msg;
     },
@@ -1351,24 +1962,274 @@ const WorldEngine = {
             includeUnequipped: true
         })
             .filter(m => m.effect.type === 'check_bonus' && m.effect.consume === true)
-            .map(m => ({
+            .map((m, idx) => ({
+                id: `item:${m.item.id || m.item.name || idx}:${idx}`,
+                kind: 'item',
+                itemId: m.item.id || '',
                 source: m.item.name,
                 label: `${m.effect.value >= 0 ? '+' : ''}${m.effect.value} 检定，可消耗使用`,
                 value: Number(m.effect.value || 0),
+                checkBonus: Number(m.effect.value || 0),
+                dcDelta: 0,
+                riskDelta: 0,
                 consume: true
             }));
     },
 
     consumeCheckItems(scene, modifiers = []) {
+        if (!scene || !Array.isArray(scene.inventory)) return false;
         let consumed = false;
         modifiers.forEach(mod => {
             if (!mod.consume || !mod.source) return;
-            const item = (scene.inventory || []).find(i => i.name === mod.source);
-            if (!item || item.uses === undefined) return;
-            item.uses = Math.max(0, Number(item.uses || 0) - 1);
+            const idx = scene.inventory.findIndex(i =>
+                (mod.itemId && i.id === mod.itemId) || i.name === mod.source
+            );
+            if (idx < 0) return;
+            const item = scene.inventory[idx];
+            if (item.uses !== undefined) {
+                item.uses = Math.max(0, Number(item.uses || 0) - 1);
+            } else if (Number(item.quantity || 1) > 1) {
+                item.quantity = Number(item.quantity || 1) - 1;
+            } else {
+                scene.inventory.splice(idx, 1);
+            }
             consumed = true;
         });
         if (consumed) SidebarRight.renderInventory?.();
+        return consumed;
+    },
+
+    canUseInventoryItem(item) {
+        if (!item || typeof item !== 'object') return false;
+        this.normalizeItem(item);
+        return this._directItemEffects(item).length > 0 || this._fallbackDirectUse(item) !== null;
+    },
+
+    useInventoryItem(scene, itemRef) {
+        if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
+        this.normalizeScene(scene);
+        const ref = String(itemRef || '').trim();
+        const item = scene.inventory.find(i => (ref && i.id === ref) || i.name === ref);
+        if (!item) return { ok: false, message: '没有找到这个物品。' };
+        this.normalizeItem(item);
+        if (item.uses !== undefined && Number(item.uses || 0) <= 0) return { ok: false, message: `${item.name} 已经没有可用次数。` };
+        if (Number(item.quantity || 1) <= 0) return { ok: false, message: `${item.name} 已经用完。` };
+
+        const effects = this._directItemEffects(item);
+        const fallback = effects.length === 0 ? this._fallbackDirectUse(item) : null;
+        if (effects.length === 0 && !fallback) {
+            return { ok: false, message: `${item.name} 主要在检定卡中作为资源使用。` };
+        }
+
+        const applied = [];
+        const applyHeal = value => {
+            const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
+            const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
+            const amount = this._clamp(Number(value || 0), 1, maxHp);
+            scene.playerHp = Math.min(maxHp, before + amount);
+            const actual = scene.playerHp - before;
+            if (actual > 0) applied.push(`生命 +${actual}`);
+            else applied.push('生命已满');
+        };
+
+        if (fallback) {
+            applyHeal(fallback.heal);
+        }
+
+        effects.forEach(effect => {
+            const value = Number(effect.value || 0);
+            if (effect.type === 'heal') {
+                applyHeal(value || 1);
+            } else if (effect.type === 'gold') {
+                scene.gold = Math.max(0, Number(scene.gold || 0) + value);
+                applied.push(`金币 ${value >= 0 ? '+' : ''}${value}`);
+            } else if (effect.type === 'exp') {
+                const amount = this._clamp(value, 1, 200);
+                if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) QuestTracker._addExp(amount);
+                else scene.exp = Number(scene.exp || 0) + amount;
+                applied.push(`经验 +${amount}`);
+            } else if (effect.type === 'clock_delta') {
+                const clock = (scene.clocks || []).find(c => effect.clockTag && c.tag === effect.clockTag);
+                const result = clock
+                    ? this.applyClockUpdate(scene, [{ id: clock.id, delta: value, reason: `使用${item.name}` }])
+                    : { changed: false };
+                if (result.changed) applied.push(`${clock.name || '局势时钟'} ${value >= 0 ? '+' : ''}${value}`);
+            } else if (effect.type === 'world_tension') {
+                scene.worldTension = Math.max(0, Number(scene.worldTension || 0) + value);
+                applied.push(`世界紧张度 ${value >= 0 ? '+' : ''}${value}`);
+            }
+        });
+
+        const shouldConsume = item.type === 'consumable' || item.uses !== undefined || effects.some(e => e.consume === true) || !!fallback;
+        if (shouldConsume) this._consumeInventoryItem(scene, item);
+        const summary = applied.length > 0 ? applied.join('，') : '没有直接效果';
+        this.addSystemMessage(scene, `【使用物品：${item.name}】${summary}`, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+        }
+        return { ok: true, itemName: item.name, applied, consumed: shouldConsume };
+    },
+
+    async restPlayer(scene, options = {}) {
+        if (!scene) return { ok: false, message: '没有可休息的场景。' };
+        this.normalizeScene(scene);
+        const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
+        const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
+        const amount = options.amount !== undefined
+            ? this._clamp(Number(options.amount), 1, maxHp)
+            : Math.max(2, Math.ceil(maxHp * 0.35));
+        scene.playerHp = Math.min(maxHp, before + amount);
+        const actual = scene.playerHp - before;
+        this.addSystemMessage(scene, `【休息】恢复 ${actual} 点生命，当前 ${scene.playerHp}/${maxHp}。时间推进，局势可能变化。`, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
+        if (options.tick !== false && scene.gameState === 'playing' && typeof State !== 'undefined' && State.scene === scene) {
+            await this.tickAfterPlayerTurn('rest');
+        }
+        return { ok: true, healed: actual, hp: scene.playerHp, maxHp };
+    },
+
+    buyBasicSupply(scene, supplyType = 'supply') {
+        if (!scene) return { ok: false, message: '没有可交易的场景。' };
+        this.normalizeScene(scene);
+        const key = String(supplyType || 'supply');
+        const catalog = {
+            supply: { price: 15, item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、穿越或野外判断。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] } },
+            medical: { price: 20, item: { id: 'shop_medical_kit', name: '应急医疗包', description: '基础医疗材料，可直接恢复生命，也可辅助体质检定。', type: 'consumable', quantity: 1, uses: 1, tags: ['医疗', '治疗', '应急'], effects: [{ type: 'heal', value: 4, consume: true }, { type: 'check_bonus', stat: 'constitution', value: 2, consume: true }] } },
+            parts: { price: 20, item: { id: 'shop_parts_kit', name: '备用零件包', description: '备用零件，可辅助一次修复、破解或设备操作。', type: 'consumable', quantity: 1, uses: 1, tags: ['零件', '修复', '设备'], effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }] } }
+        };
+        const entry = catalog[key] || catalog.supply;
+        const gold = Number(scene.gold || 0);
+        if (gold < entry.price) {
+            const message = `金币不足：需要 ${entry.price}，当前 ${gold}。`;
+            this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
+            return { ok: false, message };
+        }
+        scene.gold = gold - entry.price;
+        this._addOrMergeInventoryItem(scene, entry.item);
+        this.addSystemMessage(scene, `【购买】花费 ${entry.price} 金币，获得 ${entry.item.name}。`, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName: entry.item.name, price: entry.price, gold: scene.gold };
+    },
+
+    getAvailableCompanionResources(scene, check) {
+        if (!scene) return [];
+        this.normalizeScene(scene);
+        const stat = String(check?.key || check?.stat || '');
+        const actionType = String(check?.actionType || check?.type || '');
+        const intent = String(check?.intent || check?.stakes || '').toLowerCase();
+        return (scene.companionResources || [])
+            .filter(resource => resource && Number(resource.uses || 0) > 0)
+            .filter(resource => this._effectMatches(resource.effect, {
+                stat,
+                actionType,
+                intent,
+                item: { tags: resource.tags || [] }
+            }))
+            .map(resource => {
+                const effect = resource.effect || {};
+                const checkBonus = Number(effect.checkBonus || 0);
+                const dcDelta = Number(effect.dcDelta || 0);
+                const riskDelta = Number(effect.riskDelta || 0);
+                const parts = [];
+                if (checkBonus) parts.push(`检定 ${checkBonus >= 0 ? '+' : ''}${checkBonus}`);
+                if (dcDelta) parts.push(`DC ${dcDelta >= 0 ? '+' : ''}${dcDelta}`);
+                if (riskDelta) parts.push(`风险 ${riskDelta >= 0 ? '+' : ''}${riskDelta}`);
+                if (!parts.length) return null;
+                const cost = resource.cost || {};
+                const costText = [
+                    Number(cost.time || 0) > 0 ? `耗时 ${Number(cost.time)}分` : '',
+                    Number(cost.trust || 0) > 0 ? `信任 -${Number(cost.trust)}` : ''
+                ].filter(Boolean).join('，');
+                return {
+                    id: `companion:${resource.id}`,
+                    kind: 'companion',
+                    resourceId: resource.id,
+                    characterId: resource.characterId || '',
+                    source: resource.name,
+                    label: `${parts.join('，')}，使用后消耗${costText ? `（${costText}）` : ''}`,
+                    value: checkBonus,
+                    checkBonus,
+                    dcDelta,
+                    riskDelta,
+                    consume: true,
+                    risk: resource.risk || ''
+                };
+            })
+            .filter(Boolean);
+    },
+
+    getSelectedCheckResourceModifiers(scene, check) {
+        const selectedItemIds = new Set(Array.isArray(check?.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
+        const selectedCompanionIds = new Set(Array.isArray(check?.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
+        const itemModifiers = this.getAvailableCheckItems(scene, check).filter(m => selectedItemIds.has(m.id));
+        const companionModifiers = this.getAvailableCompanionResources(scene, check).filter(m => selectedCompanionIds.has(m.id));
+        const modifiers = [...itemModifiers, ...companionModifiers];
+        return {
+            itemModifiers,
+            companionModifiers,
+            modifiers,
+            bonus: modifiers.reduce((sum, m) => sum + Number(m.checkBonus || m.value || 0), 0),
+            dcDelta: modifiers.reduce((sum, m) => sum + Number(m.dcDelta || 0), 0),
+            riskDelta: modifiers.reduce((sum, m) => sum + Number(m.riskDelta || 0), 0)
+        };
+    },
+
+    getCheckTotals(scene, check) {
+        const selected = this.getSelectedCheckResourceModifiers(scene, check);
+        const statMod = Number.isFinite(Number(check?.statMod)) ? Number(check.statMod) : 0;
+        const itemBonus = Number(check?.itemBonus || 0);
+        const baseDc = Number.isFinite(Number(check?.dc)) ? Number(check.dc) : 15;
+        const mod = statMod + itemBonus + selected.bonus;
+        const dc = this._clamp(baseDc + selected.dcDelta, 5, 30);
+        return {
+            ...selected,
+            statMod,
+            itemBonus,
+            mod,
+            dc,
+            baseDc
+        };
+    },
+
+    consumeCompanionResources(scene, modifiers = []) {
+        if (!scene || !Array.isArray(scene.companionResources)) return false;
+        let consumed = false;
+        const notes = [];
+        modifiers.forEach(mod => {
+            if (mod.kind !== 'companion' || !mod.resourceId) return;
+            const resource = scene.companionResources.find(r => r.id === mod.resourceId);
+            if (!resource || Number(resource.uses || 0) <= 0) return;
+            resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
+            consumed = true;
+            notes.push(resource.name);
+            if (resource.risk) {
+                if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+                if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+                scene.currentSituation.recentRisks.push(`同伴协助代价：${resource.risk}`);
+                this.recordConsequence(scene, {
+                    title: `${resource.name}的协助代价`,
+                    cause: `使用同伴协助：${resource.name}`,
+                    effect: resource.risk,
+                    severity: 'medium',
+                    category: 'resource',
+                    tags: ['companion', resource.characterId, ...(resource.tags || [])].filter(Boolean)
+                });
+            }
+        });
+        if (consumed) {
+            this.addSystemMessage(scene, `【资源消耗】使用同伴协助：${notes.join('、')}`, 'system');
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderSituation?.();
+                SidebarRight.markTabNew?.('situation');
+            }
+        }
         return consumed;
     },
 
@@ -1393,10 +2254,11 @@ const WorldEngine = {
         const challengeEvidence = activeChallenge ? this.getEvidenceForChallenge(scene, activeChallenge).slice(0, 4) : [];
         const visibleEvidence = (scene.evidenceLedger || []).filter(e => e.visible !== false).slice(-8);
         const revelations = this.getVisibleRevelations(scene);
+        const storyTexture = scene.storyTexture || null;
         const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
         const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations };
+        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, storyTexture };
     },
 
     _buildRecommendedActions(scene, data) {
@@ -1694,19 +2556,72 @@ const WorldEngine = {
     _settleChallengeStatus(scene, challenge, reason = '') {
         if (!challenge) return;
         const was = challenge.status;
-        if (challenge.progress >= challenge.targetProgress && challenge.status !== 'completed') {
+        const minChecks = this._minChecksForChallenge(challenge);
+        const hasEnoughChecks = Number(challenge.checkCount || 0) >= minChecks;
+        if (challenge.status === 'completed' && !hasEnoughChecks) {
+            challenge.status = 'active';
+        }
+        if (challenge.progress >= challenge.targetProgress && !hasEnoughChecks && !['completed', 'failed', 'bypassed'].includes(challenge.status)) {
+            challenge.progress = Math.max(0, Number(challenge.targetProgress || 1) - 1);
+            const needed = Math.max(0, minChecks - Number(challenge.checkCount || 0));
+            this.addSystemMessage(scene, `【挑战临门一脚：${challenge.title}】还需要 ${needed} 次关键交锋或等价代价来让结果站得住。`, 'system');
+            this.recordConsequence(scene, {
+                title: `${challenge.title}尚未坐实`,
+                cause: reason || '挑战进度接近完成但缺少关键交锋',
+                effect: `还需要 ${needed} 次关键交锋或等价代价，否则结果只能停留在阶段性进展。`,
+                severity: 'medium',
+                category: 'challenge',
+                tags: ['challenge', challenge.id, challenge.phaseId].filter(Boolean)
+            });
+        } else if (challenge.progress >= challenge.targetProgress && challenge.status !== 'completed') {
             challenge.status = 'completed';
             this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
+            this._grantChallengeReward(scene, challenge);
             this._completeQuestObjectivesForChallenge(scene, challenge);
             this._completeLinkedPhaseIfReady(scene, challenge);
         } else if (challenge.strain >= challenge.maxStrain && !['completed', 'failed', 'bypassed'].includes(challenge.status)) {
             challenge.status = 'failed';
             const fail = (challenge.failForward || [])[0] || '挑战失败，但局势会以新的代价继续推进。';
             this.addSystemMessage(scene, `【挑战受挫：${challenge.title}】${fail}`, 'system');
+            this.recordConsequence(scene, {
+                title: `${challenge.title}受挫`,
+                cause: '挑战压力达到上限',
+                effect: fail,
+                severity: 'high',
+                category: 'challenge',
+                tags: ['challenge', challenge.id, challenge.phaseId].filter(Boolean)
+            });
         }
         if (was !== challenge.status && scene.currentSituation?.recentRisks) {
             scene.currentSituation.recentRisks.push(`${challenge.title}：${challenge.status}`);
         }
+    },
+
+    _grantChallengeReward(scene, challenge) {
+        if (!scene || !challenge || challenge.rewardGranted) return 0;
+        const target = Number(challenge.targetProgress || 1);
+        const minChecks = Number(challenge.checkBudget?.min || 0);
+        const configured = Number(challenge.expReward || 0);
+        const amount = configured > 0
+            ? this._clamp(configured, 1, 200)
+            : this._clamp(15 + target * 8 + minChecks * 4, 20, 80);
+        challenge.rewardGranted = true;
+        this.addSystemMessage(scene, `【里程碑奖励：${challenge.title}】经验 +${amount}`, 'system');
+        if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
+            QuestTracker._addExp(amount);
+        } else {
+            scene.exp = Number(scene.exp || 0) + amount;
+        }
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
+        return amount;
+    },
+
+    _minChecksForChallenge(challenge) {
+        const budget = challenge?.checkBudget || {};
+        const min = Number(budget.min ?? 0);
+        if (!Number.isFinite(min)) return 0;
+        return this._clamp(min, 0, 8);
     },
 
     _completeQuestObjectivesForChallenge(scene, challenge) {
@@ -1762,6 +2677,29 @@ const WorldEngine = {
         return { changed: true, completedByQuest, completedQuests };
     },
 
+    _completeQuestObjectiveBySupport(scene, support, reason = '') {
+        if (!scene || !support || !Array.isArray(scene.quests)) return false;
+        const match = String(support).match(/^([^:]+):(\d+)$/);
+        if (!match) return false;
+        const [, questId, indexRaw] = match;
+        const quest = scene.quests.find(q => q.id === questId);
+        const idx = Number(indexRaw) - 1;
+        const objective = quest?.objectives?.[idx];
+        if (!quest || !objective || objective.completed) return false;
+        objective.completed = true;
+        this.addSystemMessage(scene, `【任务进展：${quest.name}】${objective.text}${reason ? `（${reason}）` : ''}`, 'system');
+        if ((quest.objectives || []).every(o => o.completed)) {
+            quest.status = 'completed';
+            quest.completedAt = Date.now();
+            this.addSystemMessage(scene, `【任务完成：${quest.name}】`, 'system');
+        }
+        if (scene.questProgressGuards) {
+            scene.questProgressGuards.autoAdvanceStreak = 0;
+            scene.questProgressGuards.lastAdvancedAt = Date.now();
+        }
+        return true;
+    },
+
     _completeLinkedPhaseIfReady(scene, challenge) {
         if (!challenge?.phaseId || !Array.isArray(scene.storyPhases)) return;
         const phase = scene.storyPhases.find(p => p.id === challenge.phaseId);
@@ -1805,13 +2743,15 @@ const WorldEngine = {
             ? ['onCritical', 'onSuccess']
             : (outcome === 'success' ? ['onSuccess'] : (outcome === 'partial' ? ['onPartial'] : ['onFailure']));
         const effects = keys.flatMap(key => Array.isArray(approach[key]) ? approach[key] : []);
-        effects.forEach(effect => this._applyChallengeEffectString(scene, challenge, approach, effect, check, outcome));
+        effects.forEach(effect => this._applyChallengeEffectString(scene, challenge, approach, effect, check, outcome, effects));
     },
 
-    _applyChallengeEffectString(scene, challenge, approach, effect, check, outcome) {
+    _applyChallengeEffectString(scene, challenge, approach, effect, check, outcome, siblingEffects = []) {
         const text = String(effect || '').trim();
         if (!text) return;
-        const [kindRaw, restRaw = ''] = text.split(':');
+        const sep = text.indexOf(':');
+        const kindRaw = sep >= 0 ? text.slice(0, sep) : text;
+        const restRaw = sep >= 0 ? text.slice(sep + 1) : '';
         const kind = kindRaw.trim();
         const rest = restRaw.trim();
         if (kind === 'evidenceAdd' && rest) {
@@ -1824,15 +2764,22 @@ const WorldEngine = {
                 new_eden_air: '新伊甸空气循环数据',
                 new_eden_water: '新伊甸净水设备评估',
                 new_eden_capacity: '新伊甸容量与床位记录',
-                energy_key_verified: '入口能源钥匙验证'
+                energy_key_verified: '入口能源钥匙验证',
+                mutation_plant_sample: '变异植物活性样本',
+                hologram_record_module: '战前全息记录模块'
             };
+            const questSupports = (siblingEffects || [])
+                .map(item => String(item || '').trim())
+                .filter(item => item.startsWith('quest:'))
+                .map(item => item.slice('quest:'.length).trim())
+                .filter(Boolean);
             this.applyEvidenceAdd(scene, [{
                 id: rest.startsWith('ev_') ? rest : `ev_${rest}`,
                 title: evidenceTitles[rest] || rest.replace(/[_-]/g, ' '),
                 tags: [...(approach.tags || []), rest],
                 reliability: outcome === 'partial' ? 'partial' : 'confirmed',
                 obtainedBy: `${check.statName || approach.statName}检定`,
-                supports: [challenge.id, ...(challenge.coreRevelations || []), ...(challenge.supports || [])]
+                supports: [challenge.id, ...(challenge.coreRevelations || []), ...(challenge.supports || []), ...questSupports]
             }]);
         } else if (kind === 'revelation' && rest) {
             this.applyRevelationUpdate(scene, [{ id: rest, status: outcome === 'partial' ? 'suspected' : 'confirmed', reason: challenge.title }]);
@@ -1841,6 +2788,8 @@ const WorldEngine = {
             if (match) {
                 this.applyClockUpdate(scene, [{ id: match[1], delta: Number(match[2]), reason: challenge.title }]);
             }
+        } else if (kind === 'quest' && rest) {
+            this._completeQuestObjectiveBySupport(scene, rest, approach?.label || challenge.title);
         }
     },
 

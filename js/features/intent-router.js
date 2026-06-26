@@ -10,6 +10,13 @@ const IntentRouter = {
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized);
         if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
+        const move = this.matchLocationMove(raw, scene);
+        if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
+        const itemUse = this.matchInventoryUse(raw, scene);
+        if (itemUse) return { kind: 'use_inventory_item', text: raw, meta: itemUse, reason: 'direct_item_use' };
+        const purchase = this.matchPurchase(raw);
+        if (purchase) return { kind: 'buy_supply', text: raw, meta: purchase, reason: 'direct_purchase' };
+        if (this.matchRest(raw, normalized)) return { kind: 'local_rest', text: raw, reason: 'direct_rest' };
         if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'help_question' };
         if (this.isStrategy(raw, normalized)) return { kind: 'strategy', text: raw, reason: 'strategy_intent' };
 
@@ -87,6 +94,75 @@ const IntentRouter = {
             normalized.startsWith('系统：');
     },
 
+    matchLocationMove(raw, scene) {
+        const text = String(raw || '').trim();
+        if (!scene || !Array.isArray(scene.locations) || scene.locations.length === 0) return null;
+        const normalized = this._normalize(text);
+        const movePrefixes = [
+            '去', '前往', '移动到', '走到', '来到', '进入', '回到', '返回',
+            '我去', '我要去', '我想去', '我前往', '我走到'
+        ];
+        if (!movePrefixes.some(p => normalized.startsWith(this._normalize(p)))) return null;
+
+        const current = scene.locations.find(l => l.id === scene.currentLocation);
+        const locs = scene.locations
+            .filter(loc => loc && loc.id !== scene.currentLocation)
+            .map(loc => ({
+                id: loc.id,
+                name: String(loc.name || ''),
+                reachable: !current || (current.connections || []).includes(loc.id)
+            }))
+            .filter(loc => loc.name);
+
+        const exact = locs.find(loc =>
+            normalized === this._normalize(loc.name) ||
+            normalized === this._normalize('去' + loc.name) ||
+            normalized === this._normalize('我去' + loc.name) ||
+            normalized === this._normalize('前往' + loc.name) ||
+            normalized === this._normalize('回到' + loc.name)
+        );
+        const matched = exact || locs.find(loc => normalized.includes(this._normalize(loc.name)));
+        if (!matched) return null;
+        return { locationId: matched.id, locationName: matched.name, reachable: matched.reachable };
+    },
+
+    matchInventoryUse(raw, scene) {
+        const text = String(raw || '').trim();
+        if (!scene || !Array.isArray(scene.inventory) || scene.inventory.length === 0) return null;
+        const normalized = this._normalize(text);
+        const prefixes = ['使用', '用', '喝下', '吃下', '消耗'];
+        if (!prefixes.some(p => normalized.startsWith(this._normalize(p)))) return null;
+        const usable = scene.inventory
+            .filter(item => item && item.name && typeof WorldEngine !== 'undefined' && WorldEngine.canUseInventoryItem?.(item))
+            .sort((a, b) => String(b.name).length - String(a.name).length);
+        const matched = usable.find(item => normalized.includes(this._normalize(item.name)));
+        if (!matched) return null;
+        return { itemId: matched.id || '', itemName: matched.name };
+    },
+
+    matchPurchase(raw) {
+        const normalized = this._normalize(raw);
+        const buyWords = ['买', '购买'];
+        if (!buyWords.some(w => normalized.startsWith(this._normalize(w)))) return null;
+        if (normalized.includes('医疗') || normalized.includes('治疗') || normalized.includes('药')) {
+            return { supplyType: 'medical', label: '应急医疗包' };
+        }
+        if (normalized.includes('零件') || normalized.includes('修理') || normalized.includes('修复')) {
+            return { supplyType: 'parts', label: '备用零件包' };
+        }
+        if (normalized.includes('补给') || normalized.includes('口粮') || normalized.includes('物资')) {
+            return { supplyType: 'supply', label: '探索补给包' };
+        }
+        return null;
+    },
+
+    matchRest(raw, normalized = this._normalize(raw)) {
+        const restCommands = [
+            '休息', '休息一下', '短休', '睡觉', '睡一觉', '扎营', '扎营休息', '疗伤', '原地休息'
+        ].map(item => this._normalize(item));
+        return restCommands.includes(normalized);
+    },
+
     buildHelpText(raw, scene) {
         const state = scene?.pendingCheck
             ? 'pending_check'
@@ -109,7 +185,7 @@ const IntentRouter = {
         }
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
-            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。';
+            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”。';
     },
 
     _routePendingCheck(raw, normalized) {

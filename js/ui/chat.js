@@ -93,6 +93,7 @@ const ChatUI = {
         this.actionBtn = document.getElementById('actionBtn');
         this.strategyBtn = document.getElementById('strategyBtn');
         this.modeHintEl = document.getElementById('inputModeHint');
+        this.suggestionHelpEl = document.getElementById('inputSuggestionHelp');
         this.suggestionChipsEl = document.getElementById('inputSuggestionChips');
 
         this.sendBtn.onclick = async () => {
@@ -234,10 +235,28 @@ const ChatUI = {
     _renderSuggestionChips() {
         if (!this.suggestionChipsEl) return;
         const chips = this._buildSuggestionChips(State.scene);
+        if (this.suggestionHelpEl) {
+            if (chips.length === 0) {
+                this.suggestionHelpEl.textContent = '';
+            } else if (State.scene?.pendingCheck) {
+                this.suggestionHelpEl.textContent = '输入建议：这些按钮会处理当前检定；你也可以直接输入“掷骰”或“取消”。';
+            } else if (State.scene?.pendingAction) {
+                this.suggestionHelpEl.textContent = '输入建议：确认和取消会立即处理；改写会填入输入框。';
+            } else {
+                this.suggestionHelpEl.textContent = '输入建议：点击只是填入示例句，可以改完再发送。';
+            }
+        }
         this.suggestionChipsEl.innerHTML = chips.map(chip => {
-            const cls = chip.primary ? 'input-chip primary' : 'input-chip';
+            const cls = [
+                'input-chip',
+                chip.primary ? 'primary' : '',
+                chip.behavior === 'send' ? 'command' : ''
+            ].filter(Boolean).join(' ');
             const behavior = chip.behavior || 'fill';
-            return `<button class="${cls}" type="button" data-chip-text="${Renderer.escapeAttr(chip.text)}" data-chip-behavior="${Renderer.escapeAttr(behavior)}" title="${Renderer.escapeAttr(chip.text)}">${Renderer.escapeHtml(chip.label)}</button>`;
+            const title = behavior === 'send'
+                ? `点击后立即处理：${chip.text}`
+                : `点击填入输入框，可修改后发送：${chip.text}`;
+            return `<button class="${cls}" type="button" data-chip-text="${Renderer.escapeAttr(chip.text)}" data-chip-behavior="${Renderer.escapeAttr(behavior)}" title="${Renderer.escapeAttr(title)}" aria-label="${Renderer.escapeAttr(title)}">${Renderer.escapeHtml(chip.label)}</button>`;
         }).join('');
     },
 
@@ -245,19 +264,22 @@ const ChatUI = {
         if (State.isStreaming) return [];
         if (scene?.pendingCheck) {
             return [
-                { label: '掷骰', text: '掷骰', behavior: 'send', primary: true },
-                { label: '取消检定', text: '取消', behavior: 'send' },
-                { label: '解释检定', text: '这是什么检定？', behavior: 'send' }
+                { label: '掷骰继续', text: '掷骰', behavior: 'send', primary: true },
+                { label: '取消', text: '取消', behavior: 'send' },
+                { label: '解释', text: '这是什么检定？', behavior: 'send' }
             ];
         }
         if (scene?.pendingAction) {
             return [
-                { label: '执行', text: '执行', behavior: 'send', primary: true },
+                { label: '确认执行', text: '执行', behavior: 'send', primary: true },
                 { label: '取消', text: '取消', behavior: 'send' },
-                { label: '说明风险', text: '为什么这么高风险？', behavior: 'send' },
-                { label: '改写行动', text: '改成', behavior: 'fill' }
+                { label: '解释风险', text: '为什么这么高风险？', behavior: 'send' },
+                { label: '改写', text: '改成', behavior: 'fill' }
             ];
         }
+
+        const tutorialChips = this._buildTutorialSuggestionChips(scene);
+        if (tutorialChips.length > 0) return tutorialChips;
 
         const chips = [];
         const add = chip => {
@@ -280,15 +302,50 @@ const ChatUI = {
         const currentChar = State.currentCharacterId
             ? State.characters.find(c => c.id === State.currentCharacterId)
             : null;
-        add({ label: '观察四周', text: '我观察当前地点有什么异常。', behavior: 'fill' });
+        add({ label: '观察', text: '我观察当前地点有什么异常。', behavior: 'fill' });
         add({
-            label: currentChar ? `询问${currentChar.name}` : '询问在场的人',
+            label: currentChar ? `询问${currentChar.name}` : '询问建议',
             text: currentChar ? `@${currentChar.name} 我想问问现在该注意什么。` : '我询问在场的人最近发生了什么。',
             behavior: 'fill'
         });
         add({ label: '制定计划', text: '我想制定一个计划：', behavior: 'fill' });
-        add({ label: '我该做什么', text: '我现在该干什么？', behavior: 'send' });
+        add({ label: '问下一步', text: '我现在该干什么？', behavior: 'fill' });
         return chips.slice(0, 4);
+    },
+
+    _buildTutorialSuggestionChips(scene) {
+        if (!scene || typeof TutorialWorld === 'undefined' || typeof TutorialState === 'undefined') return [];
+        if (!TutorialWorld.isCurrentScene()) return [];
+        const step = TutorialState.getStep();
+        const findChar = name => (scene.characters || [])
+            .map(id => State.characters.find(c => c.id === id))
+            .filter(Boolean)
+            .find(c => c.name === name);
+        const ally = findChar('艾莉');
+        const target = ally ? `@${ally.name} ` : '@艾莉 ';
+        const byStep = {
+            0: [
+                { label: '打招呼', text: '你好，莫里斯。', behavior: 'fill', primary: true },
+                { label: '问怎么玩', text: '我第一次来，这个游戏怎么玩？', behavior: 'fill' }
+            ],
+            1: [
+                { label: '问艾莉', text: `${target}你能教我怎么冒险吗？`, behavior: 'fill', primary: true },
+                { label: '问莫里斯', text: '@莫里斯 我想知道接下来该做什么。', behavior: 'fill' }
+            ],
+            2: [
+                { label: '偷苹果派', text: '我趁莫里斯转身时，悄悄把苹果派藏进袖子里。', behavior: 'fill', primary: true },
+                { label: '先观察', text: '我先观察吧台上有什么能拿来练手。', behavior: 'fill' }
+            ],
+            3: [
+                { label: '问检定', text: '这是什么检定？', behavior: 'fill' },
+                { label: '我准备好了', text: '我准备好了，告诉我下一步。', behavior: 'fill' }
+            ],
+            4: [
+                { label: '去后院', text: '我去后院。', behavior: 'fill', primary: true },
+                { label: '看地图', text: '我想看看酒馆地图。', behavior: 'fill' }
+            ]
+        };
+        return byStep[step] || [];
     },
 
     _shortChipLabel(text) {
@@ -302,6 +359,10 @@ const ChatUI = {
         this.inputEl.value = text;
         this.autoResize();
         this.inputEl.focus();
+        if (this.inputEl.setSelectionRange) {
+            const len = this.inputEl.value.length;
+            this.inputEl.setSelectionRange(len, len);
+        }
         if (btn.dataset.chipBehavior === 'send') {
             await this.onSend();
         }
@@ -659,6 +720,39 @@ const ChatUI = {
                 this._clearInput();
                 this._appendLocalSystemMessage(IntentRouter.buildHelpText(originalText, scene));
                 return true;
+            case 'move_location':
+                this._clearInput();
+                if (typeof MapView !== 'undefined' && MapView.moveTo) {
+                    await MapView.moveTo(route.meta.locationId);
+                }
+                this._syncInputMode();
+                return true;
+            case 'use_inventory_item':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.useInventoryItem) {
+                    const result = WorldEngine.useInventoryItem(scene, route.meta.itemId || route.meta.itemName);
+                    if (!result.ok) showToast(result.message || '无法使用这个物品');
+                    else await State.saveCurrentSceneDebounced();
+                }
+                this._syncInputMode();
+                return true;
+            case 'local_rest':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.restPlayer) {
+                    await WorldEngine.restPlayer(scene);
+                    await State.saveCurrentSceneDebounced();
+                }
+                this._syncInputMode();
+                return true;
+            case 'buy_supply':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.buyBasicSupply) {
+                    const result = WorldEngine.buyBasicSupply(scene, route.meta.supplyType);
+                    if (!result.ok) showToast(result.message || '交易未完成');
+                    await State.saveCurrentSceneDebounced();
+                }
+                this._syncInputMode();
+                return true;
             case 'action_preview':
                 await this.preparePendingAction(originalText, route.meta);
                 return true;
@@ -723,6 +817,10 @@ const ChatUI = {
         this._clearInput();
         this._syncInputMode();
         showToast('已生成行动预览');
+        if (typeof TutorialWorld !== 'undefined' && TutorialWorld.isCurrentScene() &&
+            typeof Tutorial !== 'undefined' && Tutorial.afterActionPreviewCreated) {
+            Tutorial.afterActionPreviewCreated().catch(e => console.warn('[Tutorial] afterActionPreviewCreated 失败:', e));
+        }
     },
 
     async confirmPendingAction() {

@@ -141,17 +141,57 @@ const ActionBar = {
             return;
         }
 
-        const mod = Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0;
-        const dc = Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15;
+        const totals = typeof WorldEngine !== 'undefined' && WorldEngine.getCheckTotals
+            ? WorldEngine.getCheckTotals(State.scene, check)
+            : {
+                mod: Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0,
+                dc: Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15,
+                baseDc: Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15,
+                statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : 0,
+                itemBonus: Number(check.itemBonus || 0),
+                bonus: 0,
+                dcDelta: 0,
+                modifiers: []
+            };
+        const mod = totals.mod;
+        const dc = totals.dc;
         const sign = mod >= 0 ? `+${mod}` : String(mod);
-        const statMod = Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod;
+        const statMod = totals.statMod;
         const itemBonus = Number(check.itemBonus || 0);
         const itemModsHtml = (check.itemModifiers || []).slice(0, 4).map(m =>
             `<span class="pending-action-factor">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
         ).join('');
-        const availableItemsHtml = (check.availableItemModifiers || []).slice(0, 4).map(m =>
-            `<span class="pending-action-factor pending-action-factor-available">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
+        const selectedItemIds = new Set(Array.isArray(check.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
+        const selectedCompanionIds = new Set(Array.isArray(check.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
+        const availableItems = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
+            ? WorldEngine.getAvailableCheckItems(State.scene, check)
+            : (check.availableItemModifiers || []);
+        const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
+            ? WorldEngine.getAvailableCompanionResources(State.scene, check)
+            : (check.availableCompanionModifiers || []);
+        const resourceOption = (m, kind, selected) => `
+            <button class="pending-resource-option ${selected ? 'selected' : ''}" type="button"
+                data-resource-kind="${Renderer.escapeAttr(kind)}"
+                data-resource-id="${Renderer.escapeAttr(m.id)}"
+                aria-pressed="${selected ? 'true' : 'false'}">
+                <span class="pending-resource-name">${Renderer.escapeHtml(m.source)}</span>
+                <span class="pending-resource-label">${Renderer.escapeHtml(m.label)}</span>
+            </button>
+        `;
+        const availableItemsHtml = availableItems.slice(0, 5).map(m =>
+            resourceOption(m, 'item', selectedItemIds.has(m.id))
         ).join('');
+        const availableCompanionsHtml = availableCompanions.slice(0, 5).map(m =>
+            resourceOption(m, 'companion', selectedCompanionIds.has(m.id))
+        ).join('');
+        const resourceBonus = Number(totals.bonus || 0);
+        const dcDelta = Number(totals.dcDelta || 0);
+        const breakdown = [
+            `属性 ${statMod >= 0 ? '+' + statMod : statMod}`,
+            itemBonus ? `常驻物品 ${itemBonus >= 0 ? '+' + itemBonus : itemBonus}` : '',
+            resourceBonus ? `已选资源 ${resourceBonus >= 0 ? '+' + resourceBonus : resourceBonus}` : '',
+            dcDelta ? `资源调整 DC ${dcDelta >= 0 ? '+' + dcDelta : dcDelta}` : ''
+        ].filter(Boolean).join(' · ');
         const statIcons = {
             strength: 'str',
             dexterity: 'dex',
@@ -184,7 +224,7 @@ const ActionBar = {
                     ${challengeText ? `<div class="pending-action-note pending-check-challenge">${challengeText}</div>` : ''}
                     ${secondaryText ? `<div class="pending-action-note pending-check-challenge">${secondaryText}</div>` : ''}
                 </div>
-                <span class="pending-check-dc">DC ${dc}</span>
+                <span class="pending-check-dc">DC ${dc}${dc !== totals.baseDc ? `<small>原 ${totals.baseDc}</small>` : ''}</span>
             </div>
             <div class="pending-check-equation">
                 <span>D20</span>
@@ -193,10 +233,12 @@ const ActionBar = {
                 <strong>${dc}</strong>
             </div>
             <div class="pending-check-breakdown">
-                属性 ${statMod >= 0 ? '+' + statMod : statMod}${itemBonus ? ` · 物品 ${itemBonus >= 0 ? '+' + itemBonus : itemBonus}` : ''}
+                ${Renderer.escapeHtml(breakdown)}
             </div>
             ${itemModsHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">自动生效</span><div class="pending-action-factors">${itemModsHtml}</div></div>` : ''}
-            ${availableItemsHtml ? `<div class="pending-action-factor-row pending-check-available"><span class="pending-action-factor-label">可用但未自动消耗</span><div class="pending-action-factors">${availableItemsHtml}</div></div>` : ''}
+            ${availableItemsHtml ? `<div class="pending-action-factor-row pending-check-available"><span class="pending-action-factor-label">物品</span><div class="pending-resource-list">${availableItemsHtml}</div></div>` : ''}
+            ${availableCompanionsHtml ? `<div class="pending-action-factor-row pending-check-available"><span class="pending-action-factor-label">同伴</span><div class="pending-resource-list">${availableCompanionsHtml}</div></div>` : ''}
+            ${availableItemsHtml || availableCompanionsHtml ? `<div class="pending-action-note pending-check-resource-note">点击资源投入本次检定；掷骰时才会消耗。</div>` : ''}
             ${check.stakes ? `<p class="pending-check-stakes">${Renderer.escapeHtml(check.stakes)}</p>` : ''}
             ${risksHtml ? `<ul class="pending-action-risks pending-check-risks">${risksHtml}</ul>` : ''}
             <div class="pending-action-actions">
@@ -205,7 +247,22 @@ const ActionBar = {
             </div>
         `;
 
+        el.querySelectorAll('.pending-resource-option').forEach(btn => {
+            btn.onclick = () => this.toggleCheckResource(btn.dataset.resourceKind, btn.dataset.resourceId);
+        });
         document.getElementById('rollPendingCheckBtn').onclick = () => GroupChat.rollPendingCheck();
         document.getElementById('cancelPendingCheckBtn').onclick = () => GroupChat.cancelPendingCheck();
+    },
+
+    toggleCheckResource(kind, id) {
+        const check = State.scene?.pendingCheck;
+        if (!check || !id) return;
+        const key = kind === 'companion' ? 'selectedCompanionResourceIds' : 'selectedItemModifierIds';
+        if (!Array.isArray(check[key])) check[key] = [];
+        const idx = check[key].indexOf(id);
+        if (idx >= 0) check[key].splice(idx, 1);
+        else check[key].push(id);
+        State.saveCurrentSceneDebounced();
+        this.renderPendingCheck();
     }
 };

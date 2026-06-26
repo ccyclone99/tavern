@@ -279,9 +279,31 @@ const PromptBuilder = {
         if (inventory.length > 0) {
             const invLines = inventory.map(item => {
                 const eqMark = item.equipped ? ' [已装备]' : '';
-                return `- ${item.name} x${item.quantity || 1}${eqMark}（${item.description || ''}）`;
+                const uses = item.uses !== undefined ? `；剩余${item.uses}次` : '';
+                const effects = Array.isArray(item.effects) && item.effects.length > 0
+                    ? `；效果：${item.effects.slice(0, 3).map(effect => {
+                        if (effect.type === 'check_bonus') return `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.consume ? '(消耗)' : ''}`;
+                        if (effect.type === 'heal') return `恢复${effect.value >= 0 ? '+' : ''}${effect.value}${effect.consume ? '(消耗)' : ''}`;
+                        if (effect.type === 'dc_delta') return `DC${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        if (effect.type === 'risk_delta') return `风险${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        return effect.type;
+                    }).join('、')}`
+                    : '';
+                return `- ${item.name} x${item.quantity || 1}${eqMark}（${item.description || ''}${uses}${effects}）`;
             });
             parts.push(`【物品栏】\n${invLines.join('\n')}`);
+        }
+        const companionResources = (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
+        if (companionResources.length > 0) {
+            const lines = companionResources.slice(0, 6).map(resource => {
+                const effect = resource.effect || {};
+                const bits = [];
+                if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
+                if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
+                if (effect.riskDelta) bits.push(`风险${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
+                return `- ${resource.name}：${bits.join('、') || '叙事协助'}；剩余${resource.uses}次${resource.risk ? `；代价：${resource.risk}` : ''}`;
+            });
+            parts.push(`【可用同伴协助】\n${lines.join('\n')}\n这些资源只能在玩家合理请求、剧情允许或检定卡选择后消耗；不要把同伴协助当作自动成功。`);
         }
         const equipment = scene.equipment;
         if (equipment) {
@@ -311,6 +333,9 @@ const PromptBuilder = {
         const phaseBlock = this.buildStoryPhaseContext(scene);
         if (phaseBlock) parts.push(phaseBlock);
 
+        const textureBlock = this.buildStoryTextureContext(scene);
+        if (textureBlock) parts.push(textureBlock);
+
         const clueBlock = this.buildClueGraphContext(scene);
         if (clueBlock) parts.push(clueBlock);
 
@@ -330,7 +355,7 @@ const PromptBuilder = {
         if (pressureBlock) parts.push(pressureBlock);
 
         // 行动 / 检定规则 + 动态事件 + 生存系统
-        parts.push(`【行动意图与检定规则】当玩家消息带有 [玩家行动意图] 时，表示玩家已经看过本地风险预览并确认执行。你必须按公正 DM 方式结算：\n- 尊重其中的行动类型、风险预览、建议检定和失败推进。\n- 若行动有不确定性、对抗、危险或重大收益，使用检定标记要求系统生成检定卡。\n- 如果玩家行动意图里已有“建议检定”，必须沿用该属性和 DC；推荐输出 [check:auto]，不要另定不同 DC。\n- 检定失败不能只说"失败了"，必须产生推进型后果：暴露、关系变化、时间推进、资源损失、不完整线索、被迫进入新场景、欠债或反制。\n- 可以出现部分成功：目标达成但付出代价，或得到线索但引入新问题。\n\n玩家不需要主动选择检定；只有当玩家描述了有风险且结果不确定的行动时，你才提出检定。一般有风险或不确定结果的行为也可要求属性检定。在回复末尾使用 [check:属性名|DC值] 或 [check:auto] 标记，系统会生成检定卡；玩家点击或输入“掷骰”后，系统将把 D20+属性修正 vs DC 的结果写入历史，然后你会收到结果并继续叙事。\nDC参考：10=简单，15=中等，20=困难，25=极难。自然20=大成功（无视DC），自然1=大失败（无视DC）。\n可用的属性名：力量、敏捷、体质、智力、感知、魅力。\n\n【生存系统】玩家有生命值(HP)、金币、等级。战斗、陷阱、跌落等会造成伤害；休息、治疗术、药水可恢复。当涉及这些时，在回复末尾使用：\n- [damage:N|原因] 对玩家造成 N 点伤害（如受击、陷阱、中毒）\n- [heal:N] 为玩家恢复 N 点生命（如休息、治疗、药水）\n- [gold:N] 金币变动，正数获得负数花费（如拾取、奖励、购买）\n- [exp:N] 给予玩家 N 点经验（如完成任务、击败强敌、解开谜题）\nHP 归零玩家会死亡，故事将走向结局，请慎重使用 [damage:]。危险要符合剧情逻辑，不要无故伤害玩家。\n\n【动态事件】你可以根据剧情发展主动触发以下事件（放在回复末尾）：\n- [quest:任务名|main或side|描述|目标1,目标2|奖励] 创建新任务（奖励格式如：金币x100,经验x50,物品名）\n- [quest_update:任务名|目标序号] 标记某任务目标完成\n- [event:事件描述] 触发一次剧情事件\n- [move:地点名] 建议移动到新地点\n- [check:属性名|DC] 或 [check:auto] 要求玩家进行属性检定\n- [item_add:物品名|描述|类型|数量] 给予玩家物品`);
+        parts.push(`【行动意图与检定规则】当玩家消息带有 [玩家行动意图] 时，表示玩家已经看过本地风险预览并确认执行。你必须按公正 DM 方式结算：\n- 尊重其中的行动类型、风险预览、建议检定和失败推进。\n- 若行动有不确定性、对抗、危险或重大收益，使用检定标记要求系统生成检定卡。\n- 如果玩家行动意图里已有“建议检定”，必须沿用该属性和 DC；推荐输出 [check:auto]，不要另定不同 DC。\n- 检定失败不能只说"失败了"，必须产生推进型后果：暴露、关系变化、时间推进、资源损失、不完整线索、被迫进入新场景、欠债或反制。\n- 可以出现部分成功：目标达成但付出代价，或得到线索但引入新问题。\n\n玩家不需要主动选择检定；只有当玩家描述了有风险且结果不确定的行动时，你才提出检定。一般有风险或不确定结果的行为也可要求属性检定。在回复末尾使用 [check:属性名|DC值] 或 [check:auto] 标记，系统会生成检定卡；玩家点击或输入“掷骰”后，系统将把 D20+属性修正 vs DC 的结果写入历史，然后你会收到结果并继续叙事。\nDC参考：10=简单，15=中等，20=困难，25=极难。自然20=大成功（无视DC），自然1=大失败（无视DC）。\n可用的属性名：力量、敏捷、体质、智力、感知、魅力。\n\n【生存系统】玩家有生命值(HP)、金币、等级。战斗、陷阱、跌落等会造成伤害；休息、治疗术、药水可恢复。系统已支持本地命令“休息”“使用某物”“购买补给/医疗包/零件包”；复杂治疗或交易仍可由你用剧情和标记处理。当涉及这些时，在回复末尾使用：\n- [damage:N|原因] 对玩家造成 N 点伤害（如受击、陷阱、中毒）\n- [heal:N] 为玩家恢复 N 点生命（如休息、治疗、药水）\n- [gold:N] 金币变动，正数获得负数花费（如拾取、奖励、购买）\n- [exp:N] 给予玩家 N 点经验（如完成任务、击败强敌、解开谜题）\nHP 归零玩家会死亡，故事将走向结局，请慎重使用 [damage:]。危险要符合剧情逻辑，不要无故伤害玩家。\n\n【动态事件】你可以根据剧情发展主动触发以下事件（放在回复末尾）：\n- [quest:任务名|main或side|描述|目标1,目标2|奖励] 创建新任务（奖励格式如：金币x100,经验x50,物品名）\n- [quest_update:任务名|目标序号] 标记某任务目标完成\n- [event:事件描述] 触发一次剧情事件\n- [move:地点名] 建议移动到新地点\n- [check:属性名|DC] 或 [check:auto] 要求玩家进行属性检定\n- [item_add:物品名|描述|类型|数量] 给予玩家物品`);
 
         // 合理性协议（最高优先级，约束玩家随意发挥）
         parts.push(`【合理性协议】（最高优先级，凌驾于讨好玩家之上）\n1. 玩家声称"成功/说服/打败/拿到/潜入成功"等结果时，若该行为有风险、需要他人配合、或超出当前能力，你绝不能直接承认成功——必须要求检定 [check:]，或让 NPC 提出质疑/条件/反对。\n2. 不合逻辑的行为必须被拒绝或产生负面后果：无工具撬锁、空手挡剑、凭空知道未获知的秘密、一人敌众、无资质识破伪装等。NPC 会合理地怀疑和抗拒。\n3. NPC 有自己的信条、利益和立场，不会因为玩家"说了几句好话"就违背原则。说服需要筹码、关系、把柄或检定支撑，不是靠嘴就能成事。\n4. 越是重大的成功，越需要更多铺垫（情报、准备、关系、检定）。跳跃式、想当然的成功必须伴随高 DC 或明确的失败风险。\n5. 当玩家试图跳过剧情关键环节（如：还没调查就声称知道真相、还没建立关系就要求 NPC 帮忙）时，用 NPC 拒绝、环境阻碍或新危机引导回正轨。\n6. 你的职责是做公正的 DM，不是玩家的许愿机。合理的挑战和偶尔的失败比一味顺从更能带来好故事。`);
@@ -421,6 +446,24 @@ const PromptBuilder = {
         return `【剧情阶段】\n${phaseLines}\n\n阶段规则：\n- 优先围绕当前阶段的目标和赌注组织场景。\n- 推荐行动只是推动方向，不替玩家选择。\n- 当阶段目标实际达成，可用 storyPhaseUpdate 激活下一阶段，也可配合 storyArcUpdate 推进主线；不要突然跳过中段。\n- 赌注要通过 NPC 反应、环境变化、时钟和代价体现。`;
     },
 
+    buildStoryTextureContext(scene) {
+        const texture = scene?.storyTexture;
+        if (!texture || typeof texture !== 'object') return '';
+        const block = (title, items) => Array.isArray(items) && items.length > 0
+            ? `${title}：${items.slice(0, 5).join('；')}`
+            : '';
+        const lines = [
+            texture.tone ? `基调：${texture.tone}` : '',
+            block('感官锚点', texture.sensory),
+            block('重复意象', texture.motifs),
+            block('戏剧问题', texture.dramaticQuestions),
+            block('NPC微反应', texture.npcBeats),
+            block('场景规则', texture.sceneRules)
+        ].filter(Boolean);
+        if (lines.length === 0) return '';
+        return `【故事质感与沉浸锚点】\n${lines.join('\n')}\n\n沉浸规则：\n- 每次回复选 1-2 个锚点自然融入，不要把清单逐条背给玩家。\n- 用地点细节、声音、气味、温度、光线、身体反应或 NPC 微表情承接玩家行动。\n- 重要进展必须留下可感知痕迹：某个人态度变化、场所状态变化、时钟压力或证据被摆上台面。\n- 未解锁秘密只能用异常、回避、矛盾和片面线索暗示，不能直接揭露真相。\n- NPC 发言应从自身立场出发，不要替旁白总结全局。`;
+    },
+
     buildClueGraphContext(scene) {
         const clues = Array.isArray(scene?.clueGraph) ? scene.clueGraph.filter(c => c && c.title) : [];
         if (clues.length === 0) return '';
@@ -482,7 +525,8 @@ const PromptBuilder = {
             const approaches = (ch.approaches || []).slice(0, 4).map(a =>
                 `${a.label}(${a.statName || a.stat}/DC${a.dc})`
             ).join('；');
-            return `- [${mark}] ${ch.title}：进度 ${ch.progress || 0}/${ch.targetProgress || 3}，压力 ${ch.strain || 0}/${ch.maxStrain || 3}\n  目标：${ch.goal || '—'}\n  赌注：${ch.stakes || '—'}\n  可用方向：${approaches || '由玩家提出合理方案'}\n  失败推进：${(ch.failForward || []).slice(0, 2).join('；') || '给出代价并打开新局势'}`;
+            const minChecks = ch.checkBudget?.min ?? 0;
+            return `- [${mark}] ${ch.title}：进度 ${ch.progress || 0}/${ch.targetProgress || 3}，压力 ${ch.strain || 0}/${ch.maxStrain || 3}，关键交锋 ${ch.checkCount || 0}/${minChecks}\n  目标：${ch.goal || '—'}\n  赌注：${ch.stakes || '—'}\n  可用方向：${approaches || '由玩家提出合理方案'}\n  失败推进：${(ch.failForward || []).slice(0, 2).join('；') || '给出代价并打开新局势'}`;
         }).join('\n');
         return `【场景挑战】\n${lines}\n\n挑战规则：\n- 当玩家行动命中当前挑战方向，优先使用该方向的属性和 DC；若系统已给出 [check:auto]，沿用本地裁决。\n- 大成功/成功推进挑战；部分成功推进但增加压力；失败增加压力并给核心线索代价或新节点。\n- 挑战未完成前，不要直接叙述阶段目标彻底达成；可以给“有限许可、部分证据、附带条件”的阶段性结果。\n- 挑战完成或失败时，可在 <state_update> 中写 challengeUpdate/evidenceAdd/revelationUpdate。`;
     },
@@ -680,7 +724,10 @@ const PromptBuilder = {
                 const consequenceLines = Array.isArray(d.consequenceOptions) && d.consequenceOptions.length > 0
                     ? `\n建议后果：${d.consequenceOptions.join('；')}`
                     : '';
-                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据以下结果叙述具体后果：\n- 检定：${d.statName} ${d.roll} ${d.mod >= 0 ? '+' + d.mod : d.mod} = ${d.total} vs DC${d.dc}\n- 结果层级：${d.resultLabel || d.outcome || (d.success ? '成功' : '失败')}\n- 裁决提示：${d.consequenceHint || '按结果合理推进'}${consequenceLines}\n\n要求：\n- 大成功：给出额外收益、优势、机会或更深线索。\n- 成功：让目标按预期推进。\n- 部分成功：目标达成一部分，或达成但必须付出代价。\n- 失败推进：不要只写失败，必须产生新线索、新阻碍、新场景、资源损失、关系变化或反制。\n- 大失败：严重后果，但仍要打开新的剧情方向。`);
+                const resourceLines = Array.isArray(d.resourceModifiers) && d.resourceModifiers.length > 0
+                    ? `\n- 投入资源：${d.resourceModifiers.map(m => `${m.source}（${m.label}）`).join('；')}`
+                    : '';
+                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据以下结果叙述具体后果：\n- 检定：${d.statName} ${d.roll} ${d.mod >= 0 ? '+' + d.mod : d.mod} = ${d.total} vs DC${d.dc}${d.baseDc && d.baseDc !== d.dc ? `（基础DC${d.baseDc}）` : ''}${resourceLines}\n- 结果层级：${d.resultLabel || d.outcome || (d.success ? '成功' : '失败')}\n- 裁决提示：${d.consequenceHint || '按结果合理推进'}${consequenceLines}\n\n要求：\n- 大成功：给出额外收益、优势、机会或更深线索。\n- 成功：让目标按预期推进。\n- 部分成功：目标达成一部分，或达成但必须付出代价。\n- 失败推进：不要只写失败，必须产生新线索、新阻碍、新场景、资源损失、关系变化或反制。\n- 大失败：严重后果，但仍要打开新的剧情方向。`);
             } else {
                 systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据检定结果以叙事方式描述发生的情况；失败时不要只阻断，必须让局势继续向前。`);
             }
@@ -704,6 +751,8 @@ const PromptBuilder = {
         systemParts.push(this.buildStrategyProtocol(scene));
         const phaseBlock = this.buildStoryPhaseContext(scene);
         if (phaseBlock) systemParts.push(phaseBlock);
+        const textureBlock = this.buildStoryTextureContext(scene);
+        if (textureBlock) systemParts.push(textureBlock);
         const clueBlock = this.buildClueGraphContext(scene);
         if (clueBlock) systemParts.push(clueBlock);
         const failureBlock = this.buildFailureStateContext(scene);
@@ -751,7 +800,7 @@ const PromptBuilder = {
         systemParts.push(this.buildPromptSecurityContext());
         // 教学模式强约束（核心区别于普通 DM 叙事）
         systemParts.push(`你是「${dmName}」——新手酒馆的教学向导。你现在不是在演戏，而是在教 ${userName} 玩这个游戏。`);
-        systemParts.push(`【教学模式 · 必须遵守】\n- 你的唯一目标是教会玩家第 ${step} 步：${stepData.title}（${stepData.goal}）。\n- 不要推进任何严肃剧情，不要制造紧张或危险，这是教学世界，氛围轻松友好。\n- 可以打破第四面墙，直接告诉玩家该点哪个按钮、做什么操作。\n- 语气亲切、幽默、鼓励，像一个耐心的老朋友。一次只教一个动作，不要一次性堆砌太多信息。\n- 玩家做对了就大力夸奖，做错了也绝不批评。\n- 不要替玩家角色做决定或发言。`);
+        systemParts.push(`【教学模式 · 必须遵守】\n- 你的唯一目标是教会玩家第 ${step} 步：${stepData.title}（${stepData.goal}）。\n- 不要推进任何严肃剧情，不要制造紧张或危险，这是教学世界，氛围轻松友好。\n- 优先给玩家一个可以直接复制/输入的自然语言例句；不要要求玩家切换“行动/计策/检定”模式。\n- 只有在确认、掷骰、取消这类待处理状态时，才提到按钮；同时说明也可以直接输入同样的词。\n- 语气亲切、幽默、鼓励，像一个耐心的老朋友。一次只教一个动作，不要一次性堆砌太多信息。\n- 玩家做对了就大力夸奖，做错了也绝不批评。\n- 不要替玩家角色做决定或发言。`);
         systemParts.push(`【叙事风格】\n${dm.description}`);
         systemParts.push(`【本步引导要点】\n${stepData.cue}`);
 

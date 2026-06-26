@@ -111,6 +111,15 @@ const MapView = {
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+                WorldEngine.recordEvent(scene, {
+                    category: 'movement',
+                    title: '移动地点',
+                    text: `移动到 ${loc.name}`,
+                    messageId: msg.id,
+                    timestamp: msg.timestamp
+                });
+            }
             ChatUI.onMessageAdded(msg);
 
             this.render();

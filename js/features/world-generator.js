@@ -50,6 +50,14 @@ const WorldGenerator = {
                 emoji: '📜',
                 description: '一个低沉、沉稳的叙事之声，如同战锤40K宇宙中那些记录着帝国历史的抄写员。叙述风格冷峻、黑暗，充满哥特式科幻的宏大与绝望。偶尔插入"帝国档案记录"式的旁注，用冷漠的官僚口吻描述恐怖的事件。擅长用舰船的环境描写——闪烁的流明灯、低沉的亚空间引擎轰鸣、走廊中回荡的伺服颅骨诵经声——来营造压抑的氛围。'
             },
+            storyTexture: {
+                tone: '哥特式审讯惊悚：所有人都在怀疑彼此，真相不是解脱，而是决定谁会被牺牲的证据。',
+                sensory: ['熏香和臭氧混在冷空气里', '伺服颅骨的诵经声沿金属走廊回响', '流明灯忽明忽暗，像濒死的祷告', '亚空间引擎传来低沉脉动', '金属桌面冰冷得像审判记录'],
+                motifs: ['机械义眼的红光', '被蜡封的审讯档案', '低语从通风管道里钻出', '帝国鹰徽投下刀锋般的影子'],
+                dramaticQuestions: ['塞拉斯会先相信证据，还是先执行净化？', '艾拉的梦境是预警、诱饵，还是求救？', '克拉克斯的数据里究竟藏着机械故障还是刻意隐瞒？'],
+                npcBeats: ['塞拉斯沉默时先看证据，再看玩家的眼睛', '克拉克斯会用数据否认情绪，却在异常值前停顿', '艾拉说出真相前会先被自己的恐惧打断'],
+                sceneRules: ['NPC 不会轻易信任玩家，信任必须来自证据、代价或共同风险', '混沌真相只用梦境、数据矛盾和环境异象逐步暗示', '每次重大成功都应伴随审判庭更严厉的下一问']
+            },
             characters: [
                 {
                     name: '审判官塞拉斯',
@@ -266,7 +274,7 @@ const WorldGenerator = {
             ],
             currentLocation: 'main_hall',
             quests: [
-                { id: 'q_main', name: '筑基试炼', type: 'main', description: '作为新晋修士，你必须通过机械寺的筑基试炼——御剑飞行、灵气测试、法器适配——才能被正式认可。', objectives: [{ text: '完成本命法器适配测试', completed: false }, { text: '通过御剑飞行考核', completed: false }, { text: '在灵气测试中证明你的价值', completed: false }], status: 'active', giver: '器灵长老', reward: '正式修士身份和专属法器' },
+                { id: 'q_main', name: '筑基与飞升协议', type: 'main', description: '作为新晋修士，你必须先通过机械寺筑基认可，再证明小七的异常不是普通故障，最后在天庭秩序与灵气自由之间作出选择。', objectives: [{ text: '完成本命法器适配测试', completed: false }, { text: '证明小七异常不是普通故障', completed: false }, { text: '通过保护小七的门规听证', completed: false }, { text: '作出飞升协议最终选择', completed: false }], status: 'active', giver: '器灵长老', reward: '正式修士身份和专属法器' },
                 { id: 'q_side1', name: '小七的梦想', type: 'side', description: '杂役机器人小七偷偷安装了情感模块heart.exe，梦想成为真正的器灵。但它不知道这个程序可能被天庭网络的安全协议标记为"非法AI"。', objectives: [{ text: '了解小七的来历和情感模块', completed: false }, { text: '帮小七向器灵长老陈情', completed: false }], status: 'active', giver: '杂役小七', reward: '小七成为正式的器灵学徒' },
                 { id: 'q_side2', name: '冷凝的过往', type: 'side', description: '师姐冷凝对新人冷若冰霜——但这背后是一段不愿提起的往事：她上一次带的新人队伍在一次试炼中全军覆没。打开她的心结。', objectives: [{ text: '在御剑测试中不让冷凝失望', completed: false }, { text: '了解冷凝隐藏的往事', completed: false }], status: 'active', giver: '冷凝', reward: '冷凝的认可和独家雷法指导' }
             ],
@@ -291,6 +299,14 @@ const WorldGenerator = {
                 name: '天命之龙',
                 emoji: '🐉',
                 description: '天庭网络中的古老叙事AI，以千年龙魂的口吻讲述故事。语气在庄严古典和赛博幽默之间切换——前一句引用《道德经》，后一句吐槽系统延迟。善于用数据流、量子纠缠、全息投影等赛博朋克意象重新诠释传统修仙概念。偶尔会"宕机"插入一段乱码或404笑话，然后又若无其事地恢复正经。'
+            },
+            storyTexture: {
+                tone: '赛博仙侠成长悬疑：门规像代码一样冰冷，但器灵和人心都在异常里长出自我。',
+                sensory: ['灵能防火墙像冷风一样扫过经脉', '石墨烯地板映出漂浮符文', '旧钟声被量子扬声器模拟得略有失真', '剑光划过时留下蓝白色数据残影', '香火味里混着电路过热的焦味'],
+                motifs: ['heart.exe 的红色警告框', '冷凝剑鞘上未同步的裂纹', '器灵长老反复出现的 404 停顿', '天庭协议像金色锁链一样垂落'],
+                dramaticQuestions: ['小七到底是错误程序，还是被系统压住的人格？', '冷凝维护门规，是因为信仰还是因为旧伤？', '玩家要证明异常有价值，还是必须牺牲某部分自我来换取许可？'],
+                npcBeats: ['小七害怕时会先开玩笑，再悄悄降低音量', '冷凝越在意，语气越像门规条文', '器灵长老出错前会突然引用古老戒律'],
+                sceneRules: ['秘密先表现为故障、延迟、误报或梦话，不直接公开', '门规和情感冲突时，让角色先守规矩，再露出裂缝', '修炼进步必须留下身体负荷或评分变化']
             },
             characters: [
                 {
@@ -534,6 +550,14 @@ const WorldGenerator = {
                 emoji: '📻',
                 description: '幸存者电台的广播员之声——沙哑、疲惫但从不放弃希望。用战前旧世界里那种老式广播的语气讲述故事，偶尔插入"今日生存贴士"或辐射指数报告。叙述中夹杂着对旧世界的怀念和对新世界的警觉。擅长描写废土的苍凉美感：混凝土裂缝中的野花、落日下的废墟剪影、地下避难所里微弱但顽强的灯火。'
             },
+            storyTexture: {
+                tone: '末世社区抉择剧：真正的敌人不是废土，而是资源耗尽时人们还愿不愿意彼此相信。',
+                sensory: ['潮湿混凝土散发霉味', '配给勺敲击搪瓷碗的声音格外清晰', '昏黄灯泡让每张脸都显得疲惫', '气闸门外的风像砂纸刮过钢板', '旧商场深处有尘土、塑料和冷掉的消毒水味'],
+                motifs: ['老王捏皱的旧地图', '苏珊缺页的隔离记录', '阿杰投影里一闪而过的陌生徽章', '配给表上越来越短的粉笔线'],
+                dramaticQuestions: ['第7区是该冒险迁徙，还是守着正在耗尽的安全？', '苏珊的医学判断能否压过人群对变异的恐惧？', '老王隐瞒旧路线，是保护大家还是保护自己的失败？'],
+                npcBeats: ['老王质疑时先看人群，再看玩家', '苏珊越害怕越会把话说得像诊断记录', '阿杰兴奋时会忘记压低声音，引来旁人的目光'],
+                sceneRules: ['任何大决定都应被配给、恐慌或旧失败阴影牵动', '新伊甸的真相必须由容量、空气、水、电力和入口安全逐步拼出', '成功不只是“找到地点”，还要改变人群愿不愿意动身']
+            },
             characters: [
                 {
                     name: '委员会长老王',
@@ -761,10 +785,12 @@ const WorldGenerator = {
 - counterStrategies: 1-3个初始NPC/敌方反制数组，每个含 { id,title,actorName,target,status:"active",visibility("hidden"/"hinted"/"known"),progress,exposure,hint,counterplay:[玩家可反制行动] }
 - flowGuide: 剧本流程指南 { openingMoves:[开局3-5个玩家可直接输入的自然行动], sessionGoals:[本次游玩的阶段目标], stalledPrompts:[玩家卡住时的建议], failForward:[失败或部分成功时的推进型后果] }
 - gameplayProfile: 玩法密度配置 { checkDensity:{targetPerRun:[8,12],minPerMainPhase:1,maxAutoQuestAdvances:2}, cluePolicy:{coreCluesAreGuaranteed:true,cluesPerRevelation:3}, npcBoundary:{separateNarratorFromNpc:true} }
+- storyTexture: 沉浸锚点 { tone, sensory:[具体气味/声音/光线/触感], motifs:[反复出现的物件或意象], dramaticQuestions:[贯穿副本的核心问题], npcBeats:[关键NPC的微反应规律], sceneRules:[叙事时必须体现的场景规则] }
 - flowGraph: 剧本节点图 { nodes:[{id,phaseId,type,title,status,visibleText,privateTruth,npcs,challengeIds,clueIds,exits}], revelations:[{id,conclusion,status:"unknown",core:true,clueIds,requiredFor}] }
 - sceneChallenges: 3-6个可玩挑战，每个含 { id,phaseId,title,status,targetProgress,maxStrain,checkBudget:{min,target,max},approaches:[{id,label,stat,dc,effect,actionType,tags,keywords,onSuccess,onPartial,onFailure}],supports,coreRevelations,failForward }
 - evidenceLedger: 初始为空数组，后续记录玩家取得的证据；不要预填隐藏真相
 - companionResources: 1-3个同伴协助资源，每个含 { id,characterId,name,uses,cost,effect,risk }
+- inventory: 2-4个起始物品，每个含 { id,name,description,type,quantity,uses,tags,effects:[{type:"check_bonus",stat,actionType,value,consume}] }；至少一个常驻调查/观察工具和一个一次性消耗资源
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
 
@@ -816,20 +842,21 @@ const WorldGenerator = {
     // ===== 应用模板/生成结果到世界 =====
     async applyTemplate(template) {
         const data = template.data || template;
+        const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 
         // 1. 创建场景
         const scene = await State.createScene(data.name || '新世界');
         scene.background = data.background || '';
         scene.userName = data.userName || '旅人';
-        scene.playerStats = data.playerStats || { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 };
-        scene.quests = Array.isArray(data.quests) ? data.quests : [];
-        scene.locations = Array.isArray(data.locations) ? data.locations : [];
+        scene.playerStats = clone(data.playerStats || { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 });
+        scene.quests = Array.isArray(data.quests) ? clone(data.quests) : [];
+        scene.locations = Array.isArray(data.locations) ? clone(data.locations) : [];
         scene.currentLocation = data.currentLocation || '';
-        scene.dmPersona = data.dmPersona || null;
-        scene.conflictSeeds = Array.isArray(data.conflictSeeds) ? data.conflictSeeds : [];
-        scene.factions = Array.isArray(data.factions) ? data.factions : [];
-        scene.intel = Array.isArray(data.intel) ? data.intel : [];
-        scene.storyArcs = Array.isArray(data.storyArcs) ? data.storyArcs : [];
+        scene.dmPersona = data.dmPersona ? clone(data.dmPersona) : null;
+        scene.conflictSeeds = Array.isArray(data.conflictSeeds) ? clone(data.conflictSeeds) : [];
+        scene.factions = Array.isArray(data.factions) ? clone(data.factions) : [];
+        scene.intel = Array.isArray(data.intel) ? clone(data.intel) : [];
+        scene.storyArcs = Array.isArray(data.storyArcs) ? clone(data.storyArcs) : [];
         scene.storyPhases = Array.isArray(data.storyPhases)
             ? data.storyPhases.map((p, idx) => WorldEngine.normalizeStoryPhase(p, idx)).filter(Boolean)
             : [];
@@ -843,6 +870,7 @@ const WorldGenerator = {
             ? data.failureStates.map((f, idx) => WorldEngine.normalizeFailureState(f, idx)).filter(Boolean)
             : [];
         scene.gameplayProfile = WorldEngine.normalizeGameplayProfile(data.gameplayProfile || this._buildDefaultGameplayProfile(data));
+        scene.storyTexture = WorldEngine.normalizeStoryTexture(data.storyTexture || this._buildDefaultStoryTexture(data));
         scene.flowGraph = WorldEngine.normalizeFlowGraph(data.flowGraph || this._buildDefaultFlowGraph(data));
         scene.sceneChallenges = Array.isArray(data.sceneChallenges) && data.sceneChallenges.length > 0
             ? data.sceneChallenges.map((c, idx) => WorldEngine.normalizeSceneChallenge(c, idx)).filter(Boolean)
@@ -853,6 +881,13 @@ const WorldGenerator = {
         scene.companionResources = Array.isArray(data.companionResources) && data.companionResources.length > 0
             ? data.companionResources.map(r => WorldEngine.normalizeCompanionResource(r)).filter(Boolean)
             : this._buildDefaultCompanionResources(data);
+        const starterInventory = Array.isArray(data.inventory) && data.inventory.length > 0
+            ? clone(data.inventory)
+            : this._buildDefaultStarterInventory(data);
+        scene.inventory = starterInventory.map(item => WorldEngine.normalizeItem(item)).filter(Boolean).slice(0, 40);
+        if (data.equipment && typeof data.equipment === 'object') {
+            scene.equipment = { ...scene.equipment, ...clone(data.equipment) };
+        }
         scene.questProgressGuards = { autoAdvanceStreak: 0, lastAdvancedAt: 0 };
         scene.flowGuide = this._normalizeFlowGuide(data.flowGuide || this._buildDefaultFlowGuide(data));
         scene.clocks = Array.isArray(data.clocks) && data.clocks.length > 0
@@ -861,7 +896,7 @@ const WorldGenerator = {
         scene.counterStrategies = Array.isArray(data.counterStrategies)
             ? data.counterStrategies.map(c => WorldEngine.normalizeCounterStrategy(c)).filter(Boolean)
             : [];
-        scene.currentSituation = data.currentSituation || { recentRisks: [], recommendedActions: [] };
+        scene.currentSituation = data.currentSituation ? clone(data.currentSituation) : { recentRisks: [], recommendedActions: [] };
         scene.turnCount = 0;
         State.normalizeKnowledge(scene);
 
@@ -879,18 +914,18 @@ const WorldGenerator = {
                 first_mes: charData.first_mes || '',
                 mes_example: charData.mes_example || '',
                 scenario: data.scenario || '',
-                tags: charData.tags || [],
+                tags: clone(charData.tags || []),
                 creator: '',
                 character_version: '1.0',
                 extensions: {},
                 _relations: {},
-                _emotionTags: charData._emotionTags || [],
+                _emotionTags: clone(charData._emotionTags || []),
                 _talkativeness: charData._talkativeness || 0.5,
                 _priority: 0,
-                motives: charData.motives || [],
-                fears: charData.fears || [],
-                secrets: charData.secrets || [],
-                leverage: charData.leverage || [],
+                motives: clone(charData.motives || []),
+                fears: clone(charData.fears || []),
+                secrets: clone(charData.secrets || []),
+                leverage: clone(charData.leverage || []),
                 agenda: WorldEngine.normalizeAgenda({
                     agenda: charData.agenda || {
                         currentPlan: (charData.motives || [])[0] || '',
@@ -900,7 +935,7 @@ const WorldGenerator = {
                     }
                 }),
                 creed: charData.creed || '',
-                redLines: charData.redLines || [],
+                redLines: clone(charData.redLines || []),
                 values: charData.values || '',
                 profile: this._buildCharacterProfile(charData)
             };
@@ -914,7 +949,7 @@ const WorldGenerator = {
         const lorebook = Array.isArray(data.lorebook) ? data.lorebook : [];
         for (const entry of lorebook) {
             scene.lorebookEntries.push({
-                keys: entry.keys || [],
+                keys: clone(entry.keys || []),
                 secondary_keys: [],
                 content: entry.content || '',
                 comment: entry.comment || '',
@@ -1004,6 +1039,38 @@ const WorldGenerator = {
         });
     },
 
+    _buildDefaultStoryTexture(data = {}) {
+        const locs = Array.isArray(data.locations) ? data.locations : [];
+        const chars = Array.isArray(data.characters) ? data.characters : [];
+        const seeds = Array.isArray(data.conflictSeeds) ? data.conflictSeeds : [];
+        const firstLoc = locs[0];
+        const firstChar = chars[0];
+        return WorldEngine.normalizeStoryTexture({
+            tone: data.description || data.scenario || '围绕关键矛盾推进的角色扮演故事。',
+            sensory: [
+                firstLoc?.description ? `${firstLoc.name || '当前地点'}：${firstLoc.description}` : '',
+                locs[1]?.description ? `${locs[1].name || '邻近地点'}：${locs[1].description}` : '',
+                data.openingNarrative ? String(data.openingNarrative).replace(/[*"“”]/g, '').slice(0, 120) : ''
+            ].filter(Boolean),
+            motifs: seeds.slice(0, 3),
+            dramaticQuestions: [
+                seeds[0] || '',
+                seeds[1] || '',
+                firstChar?.motives?.[0] ? `${firstChar.name}真正想要什么？` : ''
+            ].filter(Boolean),
+            npcBeats: chars.slice(0, 3).map(char => {
+                const motive = Array.isArray(char.motives) ? char.motives[0] : '';
+                const fear = Array.isArray(char.fears) ? char.fears[0] : '';
+                return `${char.name || '角色'}：想要${motive || '推进自己的目标'}，害怕${fear || '失去筹码'}`;
+            }),
+            sceneRules: [
+                '每次重要行动都要留下地点变化、NPC态度变化或局势压力变化',
+                '秘密先用异常和矛盾暗示，再通过证据确认',
+                '失败要打开新问题，而不是让故事停住'
+            ]
+        });
+    },
+
     _buildDefaultFlowGraph(data = {}) {
         const id = data.id || '';
         const phases = Array.isArray(data.storyPhases) ? data.storyPhases : [];
@@ -1022,7 +1089,7 @@ const WorldGenerator = {
         let revelations = [];
         if (id === 'template_post_apocalypse') {
             revelations = [
-                { id: 'rev_player_is_not_contagious', conclusion: '玩家的地表适应不是传染性污染，可以作为有限背书进入探索队。', status: 'unknown', core: true, clueIds: ['clue_shelter_susan_mutant'], requiredFor: ['q_side1', 'q_main:1'] },
+                { id: 'rev_player_is_not_contagious', conclusion: '玩家的地表适应不是传染性污染，可以作为有限背书进入探索队。', status: 'unknown', core: true, clueIds: ['clue_shelter_susan_mutant'], requiredFor: ['q_side2', 'q_main:1'] },
                 { id: 'rev_new_eden_is_home', conclusion: '阿杰坐标指向可容纳第7区的新家园，而不只是临时补给点。', status: 'unknown', core: true, clueIds: ['clue_shelter_aj_coordinate'], requiredFor: ['q_main', 'q_main:2', 'q_main:3'] },
                 { id: 'rev_vote_needs_evidence', conclusion: '委员会投票取决于证据质量和迁徙代价，不会因一句承诺全票通过。', status: 'unknown', core: true, clueIds: ['clue_shelter_missing_team'], requiredFor: ['q_main:4'] }
             ];
@@ -1068,11 +1135,12 @@ const WorldGenerator = {
                 maxStrain: 3,
                 checkBudget: { min: 2, target: 3, max: 5 },
                 tags: ['permission', 'medical', 'route'],
-                supports: ['q_main:1', 'q_side1:1'],
+                supports: ['q_main:1'],
                 coreRevelations: ['rev_player_is_not_contagious'],
                 approaches: [
                     { id: 'present_route_data', label: '提交路线和辐射读数', stat: 'intelligence', dc: 13, effect: 1, actionType: 'persuade', tags: ['route', 'permission'], keywords: ['路线', '辐射', '读数'], onSuccess: ['evidenceAdd:route_reading'] },
-                    { id: 'accept_medical_scan', label: '接受苏珊体检并保留隐私边界', stat: 'constitution', dc: 12, effect: 1, actionType: 'ask', tags: ['medical', 'no_contagion'], keywords: ['体检', '扫描', '苏珊'], onSuccess: ['evidenceAdd:no_contagion', 'revelation:rev_player_is_not_contagious'], onPartial: ['evidenceAdd:no_contagion'] },
+                    { id: 'accept_medical_scan', label: '接受苏珊体检并保留隐私边界', stat: 'constitution', dc: 12, effect: 1, actionType: 'ask', tags: ['medical', 'no_contagion'], keywords: ['体检', '扫描', '苏珊'], onSuccess: ['evidenceAdd:no_contagion', 'revelation:rev_player_is_not_contagious', 'quest:q_side2:1'], onPartial: ['evidenceAdd:no_contagion', 'quest:q_side2:1'] },
+                    { id: 'inspect_aj_hologram', label: '请阿杰展示旧全息投影', stat: 'intelligence', dc: 13, effect: 1, actionType: 'investigate', tags: ['hologram', 'coordinate'], keywords: ['阿杰', '全息', '投影'], onSuccess: ['quest:q_side1:1'], onPartial: ['quest:q_side1:1'] },
                     { id: 'read_committee_fear', label: '观察委员会最担心的风险', stat: 'wisdom', dc: 13, effect: 1, actionType: 'observe', tags: ['permission', 'panic'], keywords: ['观察', '担心', '委员会'] },
                     { id: 'public_appeal', label: '向老王陈述低风险探索方案', stat: 'charisma', dc: 14, effect: 1, actionType: 'persuade', tags: ['permission'], keywords: ['老王', '说服', '方案'] }
                 ],
@@ -1095,7 +1163,9 @@ const WorldGenerator = {
                     { id: 'navigate_b17', label: '辨认 B-17 通道标记', stat: 'wisdom', dc: 14, effect: 1, actionType: 'observe', tags: ['route'], keywords: ['B-17', '通道', '标记'], onSuccess: ['evidenceAdd:b17_route_mark'] },
                     { id: 'cross_collapse', label: '穿越坍塌货架区', stat: 'dexterity', dc: 15, effect: 1, actionType: 'sneak', tags: ['old_mall'], keywords: ['坍塌', '货架', '穿越'] },
                     { id: 'endure_radiation', label: '承受短时辐射区并记录剂量', stat: 'constitution', dc: 14, effect: 1, actionType: 'force', tags: ['radiation', 'route'], keywords: ['辐射', '剂量'], onPartial: ['evidenceAdd:radiation_limit'] },
-                    { id: 'read_old_terminal', label: '读取旧商场终端路线记录', stat: 'intelligence', dc: 15, effect: 1, actionType: 'investigate', tags: ['terminal', 'route'], keywords: ['终端', '记录', '路线'], onSuccess: ['evidenceAdd:old_mall_route_log'] }
+                    { id: 'read_old_terminal', label: '读取旧商场终端路线记录', stat: 'intelligence', dc: 15, effect: 1, actionType: 'investigate', tags: ['terminal', 'route'], keywords: ['终端', '记录', '路线'], onSuccess: ['evidenceAdd:old_mall_route_log'] },
+                    { id: 'recover_hologram_module', label: '回收战前全息记录模块', stat: 'intelligence', dc: 14, effect: 1, actionType: 'investigate', tags: ['hologram', 'old_device', 'coordinate'], keywords: ['旧设备', '全息', '记录模块'], onSuccess: ['evidenceAdd:hologram_record_module', 'quest:q_side1:2'] },
+                    { id: 'collect_mutation_plant', label: '采集裂缝中的变异植物样本', stat: 'wisdom', dc: 14, effect: 1, actionType: 'investigate', tags: ['mutation_sample', 'plant', 'medical'], keywords: ['植物', '样本', '变异'], onSuccess: ['evidenceAdd:mutation_plant_sample', 'quest:q_side2:2'], onPartial: ['evidenceAdd:mutation_plant_sample'] }
                 ],
                 failForward: ['路线确认但耗时过久，地表风暴提前推进。', '辐射兽痕迹迫使队伍改道。', '玩家带回残缺路线图，只能支持小队试迁。']
             },
@@ -1110,7 +1180,7 @@ const WorldGenerator = {
                 maxStrain: 4,
                 checkBudget: { min: 2, target: 3, max: 5 },
                 tags: ['new_home', 'new_eden', 'capacity'],
-                supports: ['q_main:3', 'q_side2:2'],
+                supports: ['q_main:3'],
                 coreRevelations: ['rev_new_eden_is_home'],
                 approaches: [
                     { id: 'audit_air', label: '检测空气循环系统', stat: 'intelligence', dc: 14, effect: 1, actionType: 'investigate', tags: ['air', 'new_home'], keywords: ['空气', '循环'], onSuccess: ['evidenceAdd:new_eden_air'] },
@@ -1173,12 +1243,24 @@ const WorldGenerator = {
     },
 
     _buildTempleChallenges() {
-        return this._normalizeChallengeList([
+        const challenges = this._normalizeChallengeList([
             ['challenge_temple_trial', 'phase_xianxia_trial', '本命法器适配', '通过入门试炼并建立小七协助资格。', '失败会降低评分并触发安全协议关注。', ['承受灵力适配|constitution|13|force|trial,qi', '理解器灵协议|intelligence|14|investigate|protocol', '完成御剑基础|dexterity|14|force|trial']],
             ['challenge_temple_xiaoqi', 'phase_xianxia_heart', '小七回收风险', '证明小七异常不是普通故障或魔道污染。', '拖延会让安全协议启动回收。', ['破解安全协议|intelligence|16|investigate|protocol,xiaoqi', '识别小七情绪|wisdom|15|observe|xiaoqi,heart', '说服冷凝暂缓回收|charisma|16|persuade|trust']],
-            ['challenge_temple_hearing', 'phase_xianxia_revolt', '门规听证', '在门派规则内争取保护小七人格的空间。', '失败会进入封印、禁足或秘密逃离分支。', ['排列试炼证据|intelligence|15|persuade|evidence,trial', '回应长老质询|charisma|16|persuade|vote', '察觉协议漏洞|wisdom|15|observe|protocol']],
+            ['challenge_temple_hearing', 'phase_xianxia_revolt', '门规听证', '在门派规则内争取保护小七人格的空间。', '失败会进入封印、禁足或秘密逃离分支。', ['排列试炼证据|intelligence|15|persuade|evidence,trial', '回应长老质询|charisma|16|persuade|vote', '察觉协议漏洞|wisdom|15|observe|protocol', '用试炼表现换取冷凝影像|dexterity|15|observe|lengning,evidence']],
             ['challenge_temple_protocol_choice', 'phase_xianxia_revolt', '飞升协议选择', '决定保留、重写或牺牲小七人格核心。', '失败会导致人格回收或修为代价。', ['保护 heart.exe|wisdom|17|use_item|heart,xiaoqi', '重写天规接口|intelligence|18|investigate|protocol', '以修为承担反噬|constitution|17|force|sacrifice']]
         ]);
+        const addEffects = (challengeId, approachIdx, effects) => {
+            const ch = challenges.find(item => item.id === challengeId);
+            const approach = ch?.approaches?.[approachIdx];
+            if (!approach) return;
+            approach.onSuccess = [...(approach.onSuccess || []), ...effects];
+            approach.onPartial = [...(approach.onPartial || []), ...effects];
+        };
+        addEffects('challenge_temple_trial', 2, ['quest:q_side2:1']);
+        addEffects('challenge_temple_xiaoqi', 1, ['quest:q_side1:1']);
+        addEffects('challenge_temple_hearing', 0, ['quest:q_side1:2']);
+        addEffects('challenge_temple_hearing', 3, ['quest:q_side2:2']);
+        return challenges;
     },
 
     _buildGenericChallenges(data = {}) {
@@ -1234,6 +1316,81 @@ const WorldGenerator = {
                 failForward: ['目标以附带条件推进。', '相关时钟或敌方反制上升。', '得到片面线索但暴露新问题。']
             }, idx);
         }).filter(Boolean);
+    },
+
+    _buildDefaultStarterInventory(data = {}) {
+        const text = `${data.name || ''} ${data.description || ''} ${data.scenario || ''}`;
+        const base = [
+            {
+                id: 'starter_field_notes',
+                name: '现场记录册',
+                description: '用于整理线索、标注矛盾和保留证词的随身记录工具。',
+                type: 'quest',
+                quantity: 1,
+                tags: ['调查', '观察', '线索'],
+                effects: [
+                    { type: 'check_bonus', actionType: 'investigate', value: 1, consume: false },
+                    { type: 'check_bonus', actionType: 'observe', value: 1, consume: false }
+                ]
+            }
+        ];
+        let themed;
+        if (/审判庭|黑船|混沌|亚空间/.test(text)) {
+            themed = {
+                id: 'starter_purifying_wax',
+                name: '一次性净化封蜡',
+                description: '审判庭常用的封印材料，只够完成一次关键封印或净化仪式。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['封印', '净化', '亚空间'],
+                effects: [
+                    { type: 'check_bonus', stat: 'wisdom', actionType: 'use_item', value: 3, consume: true }
+                ]
+            };
+        } else if (/避难所|废土|辐射|地表/.test(text)) {
+            themed = {
+                id: 'starter_rad_serum',
+                name: '抗辐射血清',
+                description: '短时间提高身体对辐射、污染和极端环境的承受力。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['辐射', '地表', '生存'],
+                effects: [
+                    { type: 'heal', value: 2, consume: true },
+                    { type: 'check_bonus', stat: 'constitution', value: 3, consume: true }
+                ]
+            };
+        } else if (/天庭|机械寺|修士|法器|小七/.test(text)) {
+            themed = {
+                id: 'starter_spirit_stabilizer',
+                name: '灵脉稳定符',
+                description: '一次性稳定神经接口和本命法器的同步频率。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['法器', '灵气', '协议'],
+                effects: [
+                    { type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 3, consume: true }
+                ]
+            };
+        } else {
+            themed = {
+                id: 'starter_emergency_kit',
+                name: '应急准备包',
+                description: '一次性投入的备用工具、药剂或材料，用来提高关键行动成功率。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['准备', '应急'],
+                effects: [
+                    { type: 'heal', value: 2, consume: true },
+                    { type: 'check_bonus', value: 2, consume: true }
+                ]
+            };
+        }
+        return [...base, themed].map(item => WorldEngine.normalizeItem(item)).filter(Boolean);
     },
 
     _buildDefaultCompanionResources(data = {}) {

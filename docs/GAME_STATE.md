@@ -79,6 +79,7 @@
   gameState: "playing",
   storyArcs: [],
   summary: "",
+  eventLog: [],
 
   strategies: [],
   intel: [],
@@ -138,6 +139,8 @@
 | `playerHp` / `playerMaxHp` | number | 当前/最大生命值 |
 | `gameState` | string | `playing` / `defeated` / `victorious` |
 | `storyArcs` | StoryArc[] | 剧情弧 prompt 上下文 |
+| `eventLog` | EventLogEntry[] | 冒险过程日志，记录检定、任务、探索、资源、购买、升级等关键变化 |
+| `consequenceLedger` | Consequence[] | 未解决后果账本，记录失败、部分成功、同伴代价和挑战受挫产生的持续影响 |
 | `clocks` | Clock[] | 局势时钟，支持 hidden/hinted/known 可见性 |
 | `failureStates` | FailureState[] | 剧本级失败结局条件，支持时钟/任务/反制/世界紧张度触发 |
 | `gameplayProfile` | object | 副本玩法密度、核心线索和 NPC 边界策略 |
@@ -145,6 +148,7 @@
 | `sceneChallenges` | SceneChallenge[] | 当前阶段可玩的挑战、进度、压力和检定方向 |
 | `evidenceLedger` | Evidence[] | 玩家已取得的证据，用于任务/结论推进闸门 |
 | `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟 |
+| `explorationRewardLog` | string[] | 已发放探索奖励的证据 id 记录，防止重复刷经验/物资 |
 | `questProgressGuards` | object | 连续自动任务推进保护，防止无挑战/无证据跳目标 |
 | `runRecord` | RunRecord/null | 当前冒险的结局回顾，胜利或失败时自动生成 |
 | `runHistory` | RunRecord[] | 最近通关/失败记录，便于玩家回看多次尝试 |
@@ -300,7 +304,8 @@ scene.evidenceLedger = [
   quantity: 1,
   equipped: false,
   effects: [
-    { type: "check_bonus", stat: "dexterity", value: 2, when: "lockpick" }
+    { type: "check_bonus", stat: "dexterity", value: 2, when: "lockpick" },
+    { type: "heal", value: 4, consume: true }
   ],
   uses: 3,
   tags: ["工具", "开锁"]
@@ -318,6 +323,61 @@ scene.evidenceLedger = [
 ```
 
 `weapon`、`armor` 进入对应槽，其它类型默认进入 `accessory` 槽。
+
+物品效果约定：
+
+- `check_bonus`：用于检定；装备和非消耗任务物品可自动生效，`consume: true` 的消耗品需要在检定卡显式点选。
+- `heal/gold/exp/clock_delta/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。
+- 带 `uses` 的同名物品合并时累加 uses，效果按语义去重，避免一次使用重复结算。
+- 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
+
+### 成长字段
+
+`exp` 表示当前等级内经验，升级所需为 `level * 100`。升级后：
+
+- `level += 1`
+- `attrPoints += 2`
+- `playerMaxHp` 按 `10 + 体质调整值 * 4 + (level - 1) * 4` 重算
+- `playerHp = playerMaxHp`
+
+属性点通过玩家详情面板分配。单项属性当前上限为 20；分配体质时会重算最大生命，最大生命提升会同步提高当前生命。
+
+### EventLogEntry
+
+```js
+{
+  id: "evlog_...",
+  category: "check",      // system/check/quest/inventory/resource/exploration/challenge/progress/survival/economy/level/movement/failure/victory
+  title: "感知检定：部分成功",
+  text: "D20=12 +1 = 13 vs DC14",
+  turn: 4,
+  timestamp: 1710000000000,
+  messageId: "msg_...",
+  refId: "ev_..."
+}
+```
+
+`eventLog` 不是聊天全文副本，只记录可回顾的状态变化。右侧“局势”面板展示最近事件；旧存档没有 `eventLog` 时，可从已有 `check/system/event/victory/gameover` 消息临时派生。
+
+### Consequence
+
+```js
+{
+  id: "cons_...",
+  title: "审判庭怀疑上升",
+  cause: "玩家拒绝配合血样检查",
+  effect: "塞拉斯限制玩家前往货舱",
+  severity: "medium",       // low | medium | high | critical
+  status: "active",         // active | resolved | expired
+  category: "sneak",
+  tags: ["潜入", "货舱"],
+  turn: 4,
+  createdAt: 1710000000000,
+  resolvedAt: 0
+}
+```
+
+`consequenceLedger` 用于持续后果，不记录每条普通日志。部分成功、失败推进、同伴协助代价、挑战受挫和阶段性结果不足会写入此账本。活跃的高严重度后果会进入行动预览风险修正；右侧“局势”面板展示未解决后果。
 
 ### Strategy
 
@@ -440,15 +500,20 @@ scene.evidenceLedger = [
     { source: "审讯记录", label: "+1 检定", value: 1 }
   ],
   availableItemModifiers: [
-    { source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
+    { id: "item:item_x:0", source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
   ],
+  availableCompanionModifiers: [
+    { id: "companion:ally_silas", source: "塞拉斯的专业背书", label: "DC -2，使用后消耗", dcDelta: -2, consume: true }
+  ],
+  selectedItemModifierIds: ["item:item_x:0"],
+  selectedCompanionResourceIds: [],
   stakes: "失败可能导致：对方提出条件",
   risks: ["对方提出条件", "需要交出筹码或人情"],
   createdAt: 1710000000000
 }
 ```
 
-`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 是当前可用但尚未自动消耗的物品。玩家点击“掷骰”或在主输入框输入“掷骰”后，系统生成 `type: "check"` 的结果消息并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源后再点击“掷骰”或在主输入框输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
 
 ### Clock
 

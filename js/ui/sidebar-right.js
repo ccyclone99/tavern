@@ -156,7 +156,28 @@ const SidebarRight = {
         const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
         const phase = situation.storyPhase;
         const challenge = situation.activeChallenge;
+        const texture = situation.storyTexture;
         const runRecordHtml = this._buildRunRecordHtml(scene.runRecord);
+        const eventLogHtml = this._buildEventLogHtml(
+            typeof WorldEngine !== 'undefined' && WorldEngine.getEventLog
+                ? WorldEngine.getEventLog(scene, 8)
+                : (scene.eventLog || []).slice(-8).reverse()
+        );
+        const consequenceHtml = this._buildConsequenceLedgerHtml(
+            typeof WorldEngine !== 'undefined' && WorldEngine.getActiveConsequences
+                ? WorldEngine.getActiveConsequences(scene, { limit: 6 })
+                : (scene.consequenceLedger || []).filter(c => c.status !== 'resolved').slice(-6).reverse()
+        );
+        const textureHtml = texture && (texture.tone || texture.sensory?.length || texture.motifs?.length || texture.dramaticQuestions?.length) ? `
+            <div class="situation-section">
+                <h4>氛围锚点</h4>
+                <div class="situation-main-goal">
+                    ${texture.tone ? `<span>${Renderer.escapeHtml(texture.tone)}</span>` : ''}
+                    ${texture.motifs?.[0] ? `<p class="situation-stakes">意象：${Renderer.escapeHtml(texture.motifs[0])}</p>` : ''}
+                    ${texture.dramaticQuestions?.[0] ? `<p class="situation-stakes">问题：${Renderer.escapeHtml(texture.dramaticQuestions[0])}</p>` : ''}
+                </div>
+            </div>
+        ` : '';
         const phaseHtml = phase ? `
             <div class="situation-section">
                 <h4>当前阶段</h4>
@@ -202,12 +223,38 @@ const SidebarRight = {
                             <div class="situation-row"><span>压力</span><strong>${challenge.strain || 0}/${challenge.maxStrain || 0}</strong></div>
                             <div class="situation-bar"><div class="situation-bar-fill" style="width:${strainPct}%"></div></div>
                         </div>
+                        <div class="situation-meter">
+                            <div class="situation-row"><span>关键交锋</span><strong>${challenge.checkCount || 0}/${challenge.checkBudget?.min || 0}</strong></div>
+                            <div class="situation-bar"><div class="situation-bar-fill" style="width:${Math.min(100, Math.max(0, (Number(challenge.checkCount || 0) / Math.max(1, Number(challenge.checkBudget?.min || 1))) * 100))}%"></div></div>
+                        </div>
                     </div>
                     ${approaches ? `<div class="situation-actions situation-challenge-actions">${approaches}</div>` : ''}
                     ${evidence ? `<div class="situation-tags situation-evidence-tags">${evidence}</div>` : ''}
                 </div>
             `;
         })() : '';
+        const companionResources = (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
+        const companionResourcesHtml = companionResources.length > 0
+            ? `<div class="situation-section">
+                <h4>可用协助</h4>
+                <div class="situation-resource-list">
+                    ${companionResources.slice(0, 5).map(resource => {
+                        const effect = resource.effect || {};
+                        const bits = [];
+                        if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
+                        if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
+                        if (effect.riskDelta) bits.push(`风险${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
+                        return `<div class="situation-resource">
+                            <div class="situation-row">
+                                <span>${Renderer.escapeHtml(resource.name)}</span>
+                                <strong>${Renderer.escapeHtml(bits.join('、') || '协助')} · ${resource.uses}次</strong>
+                            </div>
+                            ${resource.risk ? `<p>${Renderer.escapeHtml(resource.risk)}</p>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`
+            : '';
 
         const clocksHtml = situation.clocks.length > 0
             ? situation.clocks.map(clock => {
@@ -284,9 +331,13 @@ const SidebarRight = {
                 <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
             </div>
             ${runRecordHtml}
+            ${textureHtml}
             ${phaseHtml}
             ${questHtml}
             ${challengeHtml}
+            ${companionResourcesHtml}
+            ${consequenceHtml}
+            ${eventLogHtml}
             <div class="situation-section">
                 <h4>局势时钟</h4>
                 ${clocksHtml}
@@ -398,6 +449,62 @@ const SidebarRight = {
                 ${clocks ? `<div class="situation-tags run-record-tags">${clocks}</div>` : ''}
             </div>
         `;
+    },
+
+    _buildEventLogHtml(events) {
+        if (!Array.isArray(events) || events.length === 0) return '';
+        const labels = {
+            check: '检定',
+            quest: '任务',
+            inventory: '物品',
+            resource: '资源',
+            exploration: '探索',
+            challenge: '挑战',
+            progress: '进展',
+            survival: '生存',
+            economy: '经济',
+            level: '成长',
+            movement: '移动',
+            failure: '失败',
+            victory: '通关',
+            system: '系统'
+        };
+        const items = events.slice(0, 8).map(event => {
+            const label = labels[event.category] || '事件';
+            const turn = Number(event.turn || 0) > 0 ? `回合 ${event.turn}` : '';
+            return `<li class="event-log-item event-log-${Renderer.escapeAttr(event.category || 'system')}">
+                <span class="event-log-label">${Renderer.escapeHtml(label)}</span>
+                <div class="event-log-body">
+                    <strong>${Renderer.escapeHtml(event.title || '事件')}</strong>
+                    <p>${Renderer.escapeHtml(event.text || '')}</p>
+                    ${turn ? `<small>${Renderer.escapeHtml(turn)}</small>` : ''}
+                </div>
+            </li>`;
+        }).join('');
+        return `<div class="situation-section event-log">
+            <h4>最近事件</h4>
+            <ol>${items}</ol>
+        </div>`;
+    },
+
+    _buildConsequenceLedgerHtml(items) {
+        if (!Array.isArray(items) || items.length === 0) return '';
+        const labels = { low: '轻微', medium: '中等', high: '严重', critical: '致命' };
+        const html = items.slice(0, 6).map(item => {
+            const cls = item.severity || 'low';
+            return `<div class="situation-consequence situation-consequence-${Renderer.escapeAttr(cls)}">
+                <div class="situation-row">
+                    <span>${Renderer.escapeHtml(item.title || '后果')}</span>
+                    <strong>${Renderer.escapeHtml(labels[cls] || cls)}</strong>
+                </div>
+                ${item.cause ? `<p>原因：${Renderer.escapeHtml(item.cause)}</p>` : ''}
+                ${item.effect ? `<p>影响：${Renderer.escapeHtml(item.effect)}</p>` : ''}
+            </div>`;
+        }).join('');
+        return `<div class="situation-section consequence-ledger">
+            <h4>未解决后果</h4>
+            ${html}
+        </div>`;
     },
 
     renderStatusSummary(situation) {
@@ -643,6 +750,8 @@ const SidebarRight = {
                 const effectsHtml = (item.effects || []).slice(0, 3).map(effect => {
                     const label = effect.type === 'check_bonus'
                         ? `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stat ? ` · ${statLabels[effect.stat] || effect.stat}` : ''}${effect.consume ? ' · 需选择消耗' : ''}`
+                        : effect.type === 'heal'
+                            ? `使用恢复 ${effect.value}`
                         : effect.type === 'risk_delta'
                             ? `风险${effect.value >= 0 ? '+' : ''}${effect.value}`
                             : effect.type === 'dc_delta'
@@ -653,6 +762,17 @@ const SidebarRight = {
                     return `<span class="inv-effect-chip">${Renderer.escapeHtml(label)}</span>`;
                 }).join('');
                 const tagsHtml = (item.tags || []).slice(0, 4).map(tag => `<span class="inv-tag">${Renderer.escapeHtml(tag)}</span>`).join('');
+                const canUse = typeof WorldEngine !== 'undefined' && WorldEngine.canUseInventoryItem
+                    ? WorldEngine.canUseInventoryItem(item) && (item.uses === undefined || Number(item.uses || 0) > 0) && Number(item.quantity || 1) > 0
+                    : false;
+                const depleted = (item.uses !== undefined && Number(item.uses || 0) <= 0) || Number(item.quantity || 1) <= 0;
+                const canEquip = item.type !== 'consumable';
+                const actionHtml = item.equipped
+                    ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>`
+                    : `<span class="inv-actions">
+                        ${canUse ? `<button class="text-btn inv-use-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">使用</button>` : ''}
+                        ${canEquip ? `<button class="text-btn inv-equip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>` : (!canUse ? `<span class="inv-hint">${depleted ? '已用尽' : '检定时可用'}</span>` : '')}
+                    </span>`;
                 return `<div class="inventory-item ${item.equipped ? 'equipped' : ''}">
                     <span class="inv-icon">${icon}</span>
                     <div class="inv-info">
@@ -662,9 +782,7 @@ const SidebarRight = {
                         ${tagsHtml ? `<span class="inv-tags">${tagsHtml}</span>` : ''}
                     </div>
                     <span class="inv-qty">${item.quantity > 1 ? 'x' + item.quantity : ''}</span>
-                    ${item.equipped
-                        ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>`
-                        : `<button class="text-btn inv-equip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>`}
+                    ${actionHtml}
                 </div>`;
             }).join('');
         }
@@ -676,9 +794,24 @@ const SidebarRight = {
         listEl.querySelectorAll('.inv-equip-btn').forEach(btn => {
             btn.onclick = () => this._equipItem(btn.dataset.itemName);
         });
+        listEl.querySelectorAll('.inv-use-btn').forEach(btn => {
+            btn.onclick = () => this._useItem(btn.dataset.itemId || btn.dataset.itemName);
+        });
         listEl.querySelectorAll('.inv-unequip-btn').forEach(btn => {
             btn.onclick = () => this._unequipItem(btn.dataset.itemName);
         });
+    },
+
+    _useItem(ref) {
+        const scene = State.scene;
+        if (!scene || typeof WorldEngine === 'undefined' || !WorldEngine.useInventoryItem) return;
+        const result = WorldEngine.useInventoryItem(scene, ref);
+        if (!result.ok) {
+            showToast(result.message || '无法使用这个物品');
+            return;
+        }
+        State.saveCurrentSceneDebounced();
+        this.renderInventory();
     },
 
     _equipItem(name) {
@@ -776,21 +909,22 @@ const SidebarRight = {
         const scene = State.scene;
         if (!scene || !scene.playerStats || (scene.attrPoints || 0) <= 0) return;
         this._allocating = true;
-        scene.playerStats[key] = (scene.playerStats[key] || 10) + 1;
-        scene.attrPoints -= 1;
-        // 体质影响最大 HP
-        if (key === 'constitution') {
-            const con = scene.playerStats.constitution;
-            const level = scene.level || 1;
-            const newMax = 10 + Math.floor((con - 10) / 2) * 4 + (level - 1) * 4;
-            const diff = newMax - scene.playerMaxHp;
-            scene.playerMaxHp = newMax;
-            scene.playerHp = Math.min(scene.playerMaxHp, (scene.playerHp || 0) + Math.max(0, diff));
+        let result = { ok: false, message: '无法分配属性点' };
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.allocateStatPoint) {
+            result = WorldEngine.allocateStatPoint(scene, key);
+        } else {
+            scene.playerStats[key] = (scene.playerStats[key] || 10) + 1;
+            scene.attrPoints -= 1;
+            result = { ok: true, label: ({strength:'力量',dexterity:'敏捷',constitution:'体质',intelligence:'智力',wisdom:'感知',charisma:'魅力'})[key] || key };
         }
-        State.saveCurrentSceneDebounced();
-        this.renderDetail();
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderVitaDisplay) ActionBar.renderVitaDisplay();
-        showToast(`${({strength:'力量',dexterity:'敏捷',constitution:'体质',intelligence:'智力',wisdom:'感知',charisma:'魅力'})[key]} +1`);
+        if (result.ok) {
+            State.saveCurrentSceneDebounced();
+            this.renderDetail();
+            if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+            showToast(`${result.label} +1`);
+        } else {
+            showToast(result.message || '无法分配属性点');
+        }
         this._allocating = false;
     },
 

@@ -217,6 +217,11 @@ AI 回复文本
 - `tickAfterPlayerTurn()`：成功完成的玩家回合、休息、部分成功/失败后推进时钟并触发离屏行动；AI 回复失败/中断不推进，待掷检定会延后到掷骰结算后推进。
 - `filterMessagesForCharacter()`：按 `message.visibility` 过滤当前 NPC 可见历史。
 - `getCheckItemBonus()` / `getAvailableCheckItems()` / `consumeCheckItems()`：把自动物品修正和可用消耗品接入检定卡。
+- `applyEvidenceAdd()`：把探索取得的证据写入证据账本，同步线索链、知识账本、关键结论，并按证据首次取得发放少量经验和主题补给。
+- `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()`：处理背包直接使用、休息恢复与基础购买，复杂交易仍交给行动/AI 流程。
+- `createInventoryItemFromReward()` / `addOrMergeInventoryItem()` / `allocateStatPoint()`：把任务/AI 奖励物品语义化，统一物品堆叠，并处理属性点分配与 HP 重算。
+- `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。
+- `recordConsequence()` / `getActiveConsequences()` / `getConsequenceRiskModifier()`：把持续后果写入账本、展示到局势面板，并反馈到行动预览风险/DC。
 
 ### 行动预览流程
 
@@ -233,7 +238,7 @@ AI 回复文本
 ```
 
 `[check:]` 会创建 `scene.pendingCheck` 并在输入区显示检定卡。玩家点击“掷骰”或在主输入框输入“掷骰”后，系统写入 `type: "check"` 的结果消息，再触发 DM 续写后果。
-检定卡会区分自动生效修正和可用但未自动消耗的消耗品；当前稳定版不会在掷骰时自动扣除消耗品。
+检定卡会区分自动生效修正、可选消耗品和可选同伴协助；玩家点选资源后，掷骰会把资源加成/DC 调整写入结果并扣除对应 uses/数量。
 检定结果分为 `critical_success`、`success`、`partial`、`fail`、`critical_fail`；部分成功和失败会写入最近风险并可推进时钟。
 
 ## 五、安全约束
