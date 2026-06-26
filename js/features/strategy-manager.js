@@ -175,6 +175,8 @@ const StrategyManager = {
         let revelationChanged = false;
         let flowGraphChanged = false;
         let tensionChanged = false;
+        let factionChanged = false;
+        let relationChanged = false;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -302,25 +304,55 @@ const StrategyManager = {
 
         // 3. factionsUpdate
         if (Array.isArray(update.factionsUpdate)) {
+            if (!Array.isArray(scene.factions)) scene.factions = [];
             if (update.factionsUpdate.length > MAX_FACTIONS_PER_UPDATE) {
                 console.warn(`[StrategyManager] factionsUpdate 超过单条上限 ${MAX_FACTIONS_PER_UPDATE}，已截断`);
             }
             for (const f of update.factionsUpdate.slice(0, MAX_FACTIONS_PER_UPDATE)) {
                 if (!f || typeof f !== 'object' || !f.name) continue;
-                const existing = scene.factions.find(x => x.name === f.name);
+                const factionName = String(f.name).trim();
+                if (!factionName) continue;
+                const existing = scene.factions.find(x => String(x.name) === factionName);
+                const changes = [];
                 if (existing) {
-                    if (f.attitude !== undefined) existing.attitude = Number.isFinite(Number(f.attitude)) ? Number(f.attitude) : 0;
-                    if (f.power !== undefined) existing.power = Number.isFinite(Number(f.power)) ? Number(f.power) : 0;
-                    if (f.description !== undefined) existing.description = String(f.description || '');
-                    if (Array.isArray(f.leverage)) existing.leverage = f.leverage.map(String);
+                    if (f.attitude !== undefined) {
+                        const before = Number.isFinite(Number(existing.attitude)) ? Number(existing.attitude) : 0;
+                        const next = this._clampNumber(f.attitude, -100, 100, 0);
+                        if (next !== before) changes.push(`态度 ${this._formatSignedChange(next - before)}（${next}）`);
+                        existing.attitude = next;
+                    }
+                    if (f.power !== undefined) {
+                        const before = Number.isFinite(Number(existing.power)) ? Number(existing.power) : 0;
+                        const next = this._clampNumber(f.power, 0, 100, 0);
+                        if (next !== before) changes.push(`实力 ${before}→${next}`);
+                        existing.power = next;
+                    }
+                    if (f.description !== undefined) {
+                        const before = String(existing.description || '');
+                        const next = String(f.description || '').slice(0, 240);
+                        if (next !== before) changes.push('描述更新');
+                        existing.description = next;
+                    }
+                    if (Array.isArray(f.leverage)) {
+                        const next = this._stringList(f.leverage, 20);
+                        if (!this._sameStringList(existing.leverage, next)) changes.push(`筹码更新（${next.length}项）`);
+                        existing.leverage = next;
+                    }
                 } else {
+                    const leverage = Array.isArray(f.leverage) ? this._stringList(f.leverage, 20) : [];
                     scene.factions.push({
-                        name: String(f.name),
-                        attitude: Number.isFinite(Number(f.attitude)) ? Number(f.attitude) : 0,
-                        power: Number.isFinite(Number(f.power)) ? Number(f.power) : 0,
-                        description: String(f.description || ''),
-                        leverage: Array.isArray(f.leverage) ? f.leverage.map(String) : []
+                        name: factionName,
+                        attitude: this._clampNumber(f.attitude, -100, 100, 0),
+                        power: this._clampNumber(f.power, 0, 100, 0),
+                        description: String(f.description || '').slice(0, 240),
+                        leverage
                     });
+                    changes.push('新增势力');
+                    if (leverage.length > 0) changes.push(`筹码 ${leverage.length} 项`);
+                }
+                if (changes.length) {
+                    factionChanged = true;
+                    this._recordStatePatchEvent(scene, '势力变化', `${factionName}：${changes.join('，')}`);
                 }
             }
         }
@@ -340,28 +372,48 @@ const StrategyManager = {
                 if (!Array.isArray(rel.leverage)) rel.leverage = [];
                 if (!Array.isArray(rel.memories)) rel.memories = [];
                 if (!Array.isArray(rel.history)) rel.history = [];
+                const visibleChanges = [];
                 ['affection', 'trust', 'suspicion', 'fear', 'debt'].forEach(key => {
                     const deltaKey = key + 'Delta';
                     if (cu[deltaKey] === undefined) return;
                     const base = Number.isFinite(Number(rel[key])) ? Number(rel[key]) : 0;
                     const delta = Number.isFinite(Number(cu[deltaKey])) ? Number(cu[deltaKey]) : 0;
-                    rel[key] = Math.max(-100, Math.min(100, base + delta));
+                    const next = Math.max(-100, Math.min(100, base + delta));
+                    rel[key] = next;
+                    const actualDelta = next - base;
+                    if (actualDelta !== 0) {
+                        visibleChanges.push(`${this._relationLabel(key)} ${this._formatSignedChange(actualDelta)}（${next}）`);
+                    }
                 });
                 if (cu.leverageAdd !== undefined) {
                     const list = Array.isArray(cu.leverageAdd) ? cu.leverageAdd : [cu.leverageAdd];
+                    let added = 0;
                     list.map(String).filter(Boolean).forEach(item => {
-                        if (!rel.leverage.includes(item)) rel.leverage.push(item);
+                        if (!rel.leverage.includes(item)) {
+                            rel.leverage.push(item);
+                            added += 1;
+                        }
                     });
                     rel.leverage = rel.leverage.slice(-20);
+                    if (added > 0) visibleChanges.push(`新增筹码 ${added} 条`);
                 }
                 if (cu.memoryAdd !== undefined) {
                     const list = Array.isArray(cu.memoryAdd) ? cu.memoryAdd : [cu.memoryAdd];
+                    let added = 0;
                     list.map(String).filter(Boolean).forEach(item => {
-                        if (!rel.memories.includes(item)) rel.memories.push(item);
+                        if (!rel.memories.includes(item)) {
+                            rel.memories.push(item);
+                            added += 1;
+                        }
                     });
                     rel.memories = rel.memories.slice(-30);
+                    if (added > 0) visibleChanges.push(`新增共同记忆 ${added} 条`);
                 }
-                if (cu.mood !== undefined) rel.mood = String(cu.mood);
+                if (cu.mood !== undefined) {
+                    const mood = String(cu.mood).trim();
+                    if (mood && mood !== rel.mood) visibleChanges.push(`心情：${mood}`);
+                    rel.mood = mood || rel.mood || '平静';
+                }
                 if (cu.secret !== undefined) {
                     const secretStr = String(cu.secret).trim();
                     if (secretStr) {
@@ -371,6 +423,19 @@ const StrategyManager = {
                             if (char.secrets.length > 20) char.secrets.shift();
                         }
                     }
+                }
+                if (visibleChanges.length > 0) {
+                    relationChanged = true;
+                    const characterName = String(char.name || cu.characterId);
+                    const text = `${characterName}：${visibleChanges.join('，')}`;
+                    rel.history.push({
+                        timestamp: Date.now(),
+                        delta: 0,
+                        mood: rel.mood || '平静',
+                        reason: `状态补丁：${visibleChanges.join('，').slice(0, 120)}`
+                    });
+                    rel.history = rel.history.slice(-50);
+                    this._recordStatePatchEvent(scene, '关系变化', text);
                 }
                 Storage.saveCharacter(char).catch(e => console.warn('保存角色关系失败:', e));
             }
@@ -504,10 +569,10 @@ const StrategyManager = {
         SidebarLeft.render();
         // 被动获得：标记角标
         if (knowledgeAdded) SidebarRight.markTabNew('knowledge');
-        if (discoveryChanged) SidebarRight.markTabNew('detail');
+        if (discoveryChanged || relationChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged) SidebarRight.markTabNew('situation');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged) SidebarRight.markTabNew('situation');
     },
 
     _buildStateUpdateItem(data, quantity) {
@@ -541,5 +606,49 @@ const StrategyManager = {
         return typeof WorldEngine !== 'undefined' && WorldEngine.normalizeItem
             ? WorldEngine.normalizeItem(base)
             : base;
+    },
+
+    _clampNumber(value, min, max, fallback = 0) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return fallback;
+        return Math.max(min, Math.min(max, num));
+    },
+
+    _stringList(value, limit = 20) {
+        return (Array.isArray(value) ? value : [value])
+            .map(item => String(item || '').trim())
+            .filter(Boolean)
+            .slice(0, limit);
+    },
+
+    _sameStringList(a, b) {
+        const left = this._stringList(a, 200);
+        const right = this._stringList(b, 200);
+        if (left.length !== right.length) return false;
+        return left.every((item, idx) => item === right[idx]);
+    },
+
+    _formatSignedChange(delta) {
+        const num = Number(delta) || 0;
+        return `${num > 0 ? '+' : ''}${num}`;
+    },
+
+    _relationLabel(key) {
+        return {
+            affection: '好感',
+            trust: '信任',
+            suspicion: '怀疑',
+            fear: '恐惧',
+            debt: '人情'
+        }[key] || key;
+    },
+
+    _recordStatePatchEvent(scene, title, text) {
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.recordEvent) return null;
+        return WorldEngine.recordEvent(scene, {
+            category: 'progress',
+            title,
+            text
+        });
     }
 };

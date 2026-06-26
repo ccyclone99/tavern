@@ -730,7 +730,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 - `creed`、`redLines`、`values` 是人格锚点，`PromptBuilder.buildCreedBlock()` 会以高优先级注入。
 - `motives`、`fears`、`secrets`、`leverage` 属于 NPC 私密设定，用于扮演和计策裁决，不等于玩家已知。
 - `profile.public` 是玩家初见可见档案；`profile.hiddenFacts` 需要通过 `knowledgeAdd` / `discoveryUpdate` 逐步解锁。
-- `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护。
+- `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。
 - 动态新角色由 `[new_char:...]` 创建，默认字段较少，不会自动生成信条和谋略素材。
 
 ## 五、消息类型
@@ -807,7 +807,7 @@ IndexedDB：
 
 1. 普通剧情推进：追加 `messages`。
 2. UI 可识别事件：使用方括号标记（见 `API_PROTOCOL.md`）。
-3. 计策、情报、势力、关系、地点、物品轻量更新：使用 `<state_update>` 白名单补丁。
+3. 计策、情报、势力、关系、地点、物品轻量更新：使用 `<state_update>` 白名单补丁。势力/公开关系变化会进入事件日志；隐藏秘密必须通过 `knowledgeAdd` / `discoveryUpdate` 解锁后才算玩家已知。
 4. 玩家核心状态（HP、金币、经验、任务完成）优先使用已有标记，而不是 state_update。
 
 禁止通过 agent 修改：
