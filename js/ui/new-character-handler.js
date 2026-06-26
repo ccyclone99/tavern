@@ -47,15 +47,20 @@ const NewCharacterHandler = {
     async addCharacter(name, emoji, description, personality, firstMes) {
         const scene = State.scene;
         if (!scene) return;
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.addExistingCharacterToScene) {
+            console.warn('[NewCharacterHandler] WorldEngine.addExistingCharacterToScene 不可用，跳过动态角色登场');
+            if (typeof showToast !== 'undefined') showToast('角色登场系统不可用。');
+            return;
+        }
 
         const char = {
             id: 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-            name,
+            name: String(name || '新角色').trim().slice(0, 60) || '新角色',
             avatar: '',
-            _emoji: emoji || '🧑',
-            description,
-            personality,
-            first_mes: firstMes,
+            _emoji: String(emoji || '🧑').trim().slice(0, 8) || '🧑',
+            description: String(description || '').trim().slice(0, 240),
+            personality: String(personality || '').trim().slice(0, 180),
+            first_mes: String(firstMes || '').trim().slice(0, 500),
             mes_example: '',
             scenario: '',
             tags: ['动态角色'],
@@ -67,19 +72,37 @@ const NewCharacterHandler = {
             _talkativeness: 0.5,
             _priority: 0
         };
+
+        if (!WorldEngine.isScenePlaying(scene)) {
+            if (typeof showToast !== 'undefined') showToast(WorldEngine.endedSceneMessage(scene));
+            return;
+        }
+
         await Storage.saveCharacter(char);
         State.characters.push(char);
-        scene.characters.push(char.id);
+        const result = WorldEngine.addExistingCharacterToScene(scene, char.id, { character: char });
+        if (!result.ok) {
+            State.characters = State.characters.filter(item => item.id !== char.id);
+            if (Storage.deleteCharacter) {
+                try { await Storage.deleteCharacter(char.id); }
+                catch (e) { console.warn('回滚动态角色失败:', e); }
+            }
+            if (typeof showToast !== 'undefined') showToast(result.message || '角色未加入场景。');
+            return;
+        }
         await State.saveCurrentScene();
 
         // 发送开场白（增量追加，避免全量重绘）
-        if (firstMes) {
+        if (char.first_mes) {
             const msg = {
                 id: 'msg_' + Date.now(),
                 role: 'assistant',
                 characterId: char.id,
-                content: firstMes,
+                content: char.first_mes,
                 type: 'talk',
+                visibility: typeof WorldEngine !== 'undefined'
+                    ? WorldEngine.createVisibility({ public: true })
+                    : undefined,
                 timestamp: Date.now()
             };
             scene.messages.push(msg);
@@ -103,9 +126,17 @@ const NewCharacterHandler = {
 
         const char = State.characters.find(c => c.name === name && scene.characters.includes(c.id));
         if (!char) return;
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.removeCharacterFromScene) {
+            console.warn('[NewCharacterHandler] WorldEngine.removeCharacterFromScene 不可用，跳过角色退场');
+            if (typeof showToast !== 'undefined') showToast('角色退场系统不可用。');
+            return;
+        }
 
-        // 从场景中移除
-        scene.characters = scene.characters.filter(id => id !== char.id);
+        const result = WorldEngine.removeCharacterFromScene(scene, char.id, { reason });
+        if (!result.ok) {
+            if (typeof showToast !== 'undefined') showToast(result.message || '角色未离开场景。');
+            return;
+        }
         await State.saveCurrentScene();
 
         // 发送退场消息（增量追加）
@@ -114,6 +145,9 @@ const NewCharacterHandler = {
             role: 'assistant',
             content: `*${name}${reason}*`,
             type: 'narrate',
+            visibility: typeof WorldEngine !== 'undefined'
+                ? WorldEngine.createVisibility({ public: true })
+                : undefined,
             timestamp: Date.now()
         };
         scene.messages.push(msg);

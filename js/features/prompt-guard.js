@@ -87,6 +87,12 @@ const PromptGuard = {
             case 'quest':
                 clone.raw = this._sanitizeQuest(raw);
                 return clone;
+            case 'new_char':
+                clone.raw = this._sanitizeNewCharacter(raw);
+                return clone;
+            case 'char_exit':
+                clone.raw = this._sanitizeCharacterExit(raw);
+                return clone;
             case 'check':
                 clone.raw = this._sanitizeCheck(raw);
                 return clone;
@@ -237,6 +243,23 @@ const PromptGuard = {
             .join(',');
         const reward = this._clip(parts[4] || '', 160);
         return [name, type, desc, objectives, reward].join('|');
+    },
+
+    _sanitizeNewCharacter(raw) {
+        const parts = raw.split('|');
+        const name = this._clip(parts[0] || '新角色', 60);
+        const emoji = this._clip(parts[1] || '🧑', 8) || '🧑';
+        const description = this._clip(parts[2] || '', 240);
+        const personality = this._clip(parts[3] || '', 180);
+        const firstMes = this._clip(parts[4] || '', 500);
+        return [name, emoji, description, personality, firstMes].join('|');
+    },
+
+    _sanitizeCharacterExit(raw) {
+        const parts = raw.split('|');
+        const name = this._clip(parts[0] || '', 60);
+        const reason = this._clip(parts[1] || '离开了', 120) || '离开了';
+        return [name, reason].join('|');
     },
 
     _sanitizeCheck(raw) {

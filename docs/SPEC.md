@@ -581,6 +581,7 @@ UI 要求：
 - `eventLog` 记录“发生过什么”，`consequenceLedger` 记录“仍在影响什么”；两者不能混用。
 - 结构化副本中，`[quest_update]`、`questsUpdate` 和任务面板手动点击不能绕过任务推进闸门；任务面板手动回退必须走 `WorldEngine.reopenQuestObjective()` 留痕；只有普通叙事自动识别可在 `maxAutoQuestAdvances` 内有限 fallback。
 - `[quest:]` 标记必须先经过 `PromptGuard._sanitizeQuest()`，再由 `WorldEngine.addQuest()` 新增；单次最多保留 8 个目标，任务名、描述和奖励会截断，重复活跃任务不会新增。
+- `[new_char:]` 和 `[char_exit:]` 标记必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addExistingCharacterToScene()` / `removeCharacterFromScene()` 修改在场角色；不能直接 push/filter `scene.characters`，结局后不能改变在场角色。
 
 ## 5. Prompt 规格
 

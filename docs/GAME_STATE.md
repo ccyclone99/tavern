@@ -768,7 +768,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 - 旧角色或生成角色缺少 `profile.public.firstImpression` 时，UI/生成器应显示非剧透占位或标签化印象，不应从完整 `description` 摘取公开印象。
 - `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；旧字段 `relationshipUpdate` 仅作为兼容别名。公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。
 - 普通玩家详情页不显示完整角色卡或编辑入口；只有 `State.canShowDebugSpoilers()` 为 true 时才显示作者/调试剧透入口。该开关支持 `?debug=1`、`?spoilers=1`、`localStorage.tavern_show_character_spoilers=1`、`localStorage.tavern_debug=1` 或运行时 settings 标记。
-- 动态新角色由 `[new_char:...]` 创建，默认字段较少，不会自动生成信条和谋略素材。
+- 动态新角色由 `[new_char:...]` 创建，标记先经 `PromptGuard` 裁剪字段，再由 `WorldEngine.addExistingCharacterToScene()` 加入当前场景；结局后、重复姓名或场景角色过多时不会加入。`[char_exit:]` 由 `WorldEngine.removeCharacterFromScene()` 结算并写入事件日志。动态角色默认字段较少，不会自动生成信条和谋略素材，也不会绕过玩家知识解锁直接公开私密设定。
 
 ## 五、消息类型
 

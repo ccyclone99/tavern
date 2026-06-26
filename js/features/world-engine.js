@@ -1213,6 +1213,68 @@ const WorldEngine = {
         return { ok: true, loc, msg: options.message !== false ? msg : null };
     },
 
+    addExistingCharacterToScene(scene, charId, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        if (!Array.isArray(scene.characters)) scene.characters = [];
+
+        const id = String(charId || '').trim();
+        if (!id) return { ok: false, message: '角色不存在。' };
+        const char = options.character || (typeof State !== 'undefined'
+            ? (State.characters || []).find(item => item && item.id === id)
+            : null);
+        if (!char) return { ok: false, message: '角色不存在。' };
+        if (scene.characters.includes(id)) return { ok: false, duplicate: true, char, message: `${char.name || '角色'}已经在场。` };
+
+        const activeChars = typeof State !== 'undefined'
+            ? (State.characters || []).filter(item => item && scene.characters.includes(item.id))
+            : [];
+        const normalizedName = this._normalizeQuestText(char.name || '');
+        const duplicateName = normalizedName && activeChars.some(item => item.id !== id && this._normalizeQuestText(item.name || '') === normalizedName);
+        if (duplicateName) return { ok: false, duplicate: true, char, message: `场景中已经存在角色：${char.name || '角色'}` };
+        if (scene.characters.length >= 12) return { ok: false, message: '当前场景角色过多，无法继续加入。' };
+
+        scene.characters.push(id);
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '角色登场',
+            text: `${char.name || '角色'}加入场景`,
+            refId: id
+        });
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+        }
+        return { ok: true, char, charId: id };
+    },
+
+    removeCharacterFromScene(scene, charId, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        if (!Array.isArray(scene.characters)) scene.characters = [];
+
+        const id = String(charId || '').trim();
+        if (!id || !scene.characters.includes(id)) return { ok: false, duplicate: true, message: '角色不在当前场景。' };
+        const char = typeof State !== 'undefined'
+            ? (State.characters || []).find(item => item && item.id === id)
+            : null;
+        scene.characters = scene.characters.filter(item => item !== id);
+        const reason = String(options.reason || '离开了').trim().slice(0, 120) || '离开了';
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '角色退场',
+            text: `${char?.name || '角色'}${reason}`,
+            refId: id
+        });
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+        }
+        return { ok: true, char, charId: id };
+    },
+
     addQuest(scene, questData = {}, options = {}) {
         if (!scene) return { ok: false, message: '没有可用场景。' };
         this.normalizeScene(scene);

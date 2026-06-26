@@ -148,7 +148,7 @@ AI 回复文本
 | `action-bar.js` | 底部/快捷状态与操作栏 |
 | `character-editor.js` | 角色编辑 UI |
 | `player-creator.js` | 玩家角色创建流程 |
-| `new-character-handler.js` | `[new_char:]` / `[char_exit:]` 处理 |
+| `new-character-handler.js` | `[new_char:]` / `[char_exit:]` UI 确认；场景角色列表变更委托 `WorldEngine` |
 | `icons.js` | SVG 图标 sprite 与图标渲染 |
 
 ## 四、核心协议边界
