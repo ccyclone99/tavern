@@ -288,7 +288,7 @@ scene.companionResources = [
 规则：
 
 - 同伴不是自动胜利按钮，而是有限资源。
-- 同伴资源可以降低 DC、提高证据质量、抵消一次后果或延缓时钟。
+- 同伴资源可以通过 `effect.checkBonus/dcDelta/riskDelta` 影响检定，通过 `effect.evidenceReliability` 提高已有证据质量，通过 `effect.resolveConsequence*` 抵消匹配后果，或通过 `effect.clockDelta + clockId/clockTag` 延缓/推进时钟。
 - `unlock` 支持 `trustAtLeast`、`evidenceTags`、`knowledgeTags`、`revelationIds` 等条件；未解锁时不进入 prompt、右侧局势或检定卡，避免提前公开 NPC 底牌。
 - 使用同伴能力会扣除 `uses`，并结算 `cost.trust`、`cost.time`、`risk` 等代价；信任成本会写入 NPC 关系历史，耗时和风险会进入局势记录。
 

@@ -317,12 +317,23 @@ const WorldEngine = {
             const n = Number(effect[key]);
             return Number.isFinite(n) ? n : fallback;
         };
+        const list = (key, limit = 10) => this._asStringList(effect[key], limit);
         const fallbackBonus = Number.isFinite(Number(effect.value)) ? Number(effect.value) : 0;
+        const reliability = this.evidenceReliabilities.includes(effect.evidenceReliability) ? effect.evidenceReliability : '';
         return {
             checkBonus: num('checkBonus', fallbackBonus),
             dcDelta: num('dcDelta', 0),
             riskDelta: num('riskDelta', 0),
             clockDelta: num('clockDelta', 0),
+            clockId: effect.clockId ? String(effect.clockId).slice(0, 100) : '',
+            clockTag: effect.clockTag ? String(effect.clockTag).slice(0, 60) : '',
+            evidenceReliability: reliability,
+            evidenceIds: list('evidenceIds', 12),
+            evidenceTags: list('evidenceTags', 12),
+            resolveConsequence: effect.resolveConsequence === true,
+            resolveConsequenceTags: list('resolveConsequenceTags', 12),
+            consequenceTags: list('consequenceTags', 12),
+            resolveLimit: this._clamp(Number(effect.resolveLimit || 1), 1, 3),
             stat: statMap[stat] || stat,
             actionType: effect.actionType ? String(effect.actionType).slice(0, 40) : '',
             when: effect.when ? String(effect.when).slice(0, 120) : ''
@@ -2362,6 +2373,9 @@ const WorldEngine = {
                 if (checkBonus) parts.push(`检定 ${checkBonus >= 0 ? '+' : ''}${checkBonus}`);
                 if (dcDelta) parts.push(`DC ${dcDelta >= 0 ? '+' : ''}${dcDelta}`);
                 if (riskDelta) parts.push(`风险 ${riskDelta >= 0 ? '+' : ''}${riskDelta}`);
+                if (effect.clockDelta) parts.push(`时钟 ${effect.clockDelta >= 0 ? '+' : ''}${effect.clockDelta}`);
+                if (effect.evidenceReliability) parts.push(`证据→${effect.evidenceReliability}`);
+                if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) parts.push('解除后果');
                 if (!parts.length) return null;
                 const cost = resource.cost || {};
                 const costText = [
@@ -2379,6 +2393,15 @@ const WorldEngine = {
                     checkBonus,
                     dcDelta,
                     riskDelta,
+                    clockDelta: Number(effect.clockDelta || 0),
+                    clockId: effect.clockId || '',
+                    clockTag: effect.clockTag || '',
+                    evidenceReliability: effect.evidenceReliability || '',
+                    evidenceIds: effect.evidenceIds || [],
+                    evidenceTags: effect.evidenceTags || [],
+                    resolveConsequence: effect.resolveConsequence === true,
+                    resolveConsequenceTags: effect.resolveConsequenceTags || [],
+                    consequenceTags: effect.consequenceTags || [],
                     consume: true,
                     risk: resource.risk || ''
                 };
@@ -2492,7 +2515,9 @@ const WorldEngine = {
             resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
             consumed = true;
             const costNotes = this._applyCompanionResourceCost(scene, resource);
-            notes.push(`${resource.name}${costNotes.length ? `（${costNotes.join('，')}）` : ''}`);
+            const effectNotes = this._applyCompanionResourceEffect(scene, resource, mod);
+            const detailNotes = [...effectNotes, ...costNotes];
+            notes.push(`${resource.name}${detailNotes.length ? `（${detailNotes.join('，')}）` : ''}`);
             if (resource.risk) {
                 if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
                 if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
@@ -2515,6 +2540,48 @@ const WorldEngine = {
             }
         }
         return consumed;
+    },
+
+    _applyCompanionResourceEffect(scene, resource, modifier = {}) {
+        const effect = resource?.effect && typeof resource.effect === 'object' ? resource.effect : {};
+        const notes = [];
+
+        const clockDelta = Number(effect.clockDelta || modifier.clockDelta || 0);
+        if (clockDelta) {
+            const clock = this._findCompanionTargetClock(scene, resource, effect, modifier);
+            if (clock) {
+                const before = Number(clock.value || 0);
+                const result = this.applyClockUpdate(scene, [{ id: clock.id, delta: clockDelta, reason: `同伴协助：${resource.name}` }]);
+                const afterClock = (scene.clocks || []).find(c => c.id === clock.id);
+                const after = Number(afterClock?.value ?? before);
+                const actual = after - before;
+                if (result.changed && actual) notes.push(`${afterClock?.name || clock.name || '局势时钟'} ${actual >= 0 ? '+' : ''}${actual}`);
+            }
+        }
+
+        const reliability = effect.evidenceReliability || modifier.evidenceReliability || '';
+        if (reliability) {
+            const upgraded = this._applyCompanionEvidenceReliability(scene, resource, effect, reliability);
+            if (upgraded.length > 0) {
+                notes.push(...upgraded.map(item => `证据“${item.title}”→${item.reliability}`));
+            }
+        }
+
+        const resolveTags = [
+            ...(effect.resolveConsequenceTags || []),
+            ...(effect.consequenceTags || []),
+            ...(modifier.resolveConsequenceTags || []),
+            ...(modifier.consequenceTags || [])
+        ].filter(Boolean);
+        const shouldResolve = effect.resolveConsequence === true || modifier.resolveConsequence === true || resolveTags.length > 0;
+        if (shouldResolve) {
+            const resolved = this._resolveCompanionConsequences(scene, resource, effect, resolveTags);
+            if (resolved.length > 0) {
+                notes.push(`解除后果：${resolved.map(item => item.title).join('、')}`);
+            }
+        }
+
+        return notes;
     },
 
     _applyCompanionResourceCost(scene, resource) {
@@ -2553,6 +2620,140 @@ const WorldEngine = {
             scene.currentSituation.recentRisks.push(`同伴协助耗时：${resource.name} 占用约 ${timeCost} 分钟`);
         }
         return notes;
+    },
+
+    _findCompanionTargetClock(scene, resource, effect = {}, modifier = {}) {
+        const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
+        if (clocks.length === 0) return null;
+        const clockId = String(effect.clockId || modifier.clockId || '').trim();
+        const clockTag = String(effect.clockTag || modifier.clockTag || '').trim();
+        if (clockId) {
+            const byId = clocks.find(clock => clock.id === clockId);
+            if (byId) return byId;
+        }
+        if (clockTag) {
+            const byTag = clocks.find(clock => clock.tag === clockTag);
+            if (byTag) return byTag;
+        }
+        const tags = new Set([...(resource.tags || []), ...(effect.evidenceTags || [])].map(tag => String(tag || '').toLowerCase()).filter(Boolean));
+        const matched = clocks
+            .filter(clock => clock.visibility !== 'hidden')
+            .map(clock => {
+                const haystack = `${clock.id || ''} ${clock.name || ''} ${clock.tag || ''} ${clock.description || ''}`.toLowerCase();
+                let score = 0;
+                tags.forEach(tag => {
+                    if (tag && haystack.includes(tag)) score += 2;
+                });
+                if (String(clock.tag || '').toLowerCase() === 'main') score += 1;
+                return { clock, score };
+            })
+            .filter(entry => entry.score > 0)
+            .sort((a, b) => b.score - a.score || Number(b.clock.value || 0) - Number(a.clock.value || 0));
+        if (matched.length > 0) return matched[0].clock;
+        return clocks.filter(clock => clock.visibility !== 'hidden').sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
+    },
+
+    _applyCompanionEvidenceReliability(scene, resource, effect = {}, reliability = '') {
+        if (!scene || !this.evidenceReliabilities.includes(reliability)) return [];
+        const rank = { rumor: 0, contested: 1, partial: 2, confirmed: 3 };
+        const targetRank = rank[reliability] ?? 0;
+        const evidenceIds = new Set(this._asStringList(effect.evidenceIds, 12));
+        const tags = new Set([
+            ...this._asStringList(effect.evidenceTags, 12),
+            ...this._asStringList(resource.tags, 12)
+        ]);
+        const candidates = (scene.evidenceLedger || [])
+            .filter(ev => ev && ev.visible !== false)
+            .filter(ev => evidenceIds.size === 0 || evidenceIds.has(ev.id))
+            .filter(ev => {
+                if (evidenceIds.size > 0) return true;
+                if (tags.size === 0) return false;
+                return (ev.tags || []).some(tag => tags.has(String(tag)));
+            })
+            .filter(ev => (rank[ev.reliability] ?? 0) < targetRank)
+            .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+            .slice(0, Math.max(1, Number(effect.evidenceLimit || 1)));
+        if (candidates.length === 0) return [];
+        const updates = candidates.map(ev => ({
+            ...ev,
+            reliability,
+            obtainedBy: `同伴协助：${resource.name}`
+        }));
+        this.applyEvidenceAdd(scene, updates);
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '证据质量提升',
+            text: `${resource.name} 帮助确认：${candidates.map(ev => ev.title).join('、')} → ${reliability}`,
+            refId: candidates[0].id
+        });
+        return candidates.map(ev => ({ id: ev.id, title: ev.title, reliability }));
+    },
+
+    _resolveCompanionConsequences(scene, resource, effect = {}, tags = []) {
+        if (!scene || !Array.isArray(scene.consequenceLedger)) return [];
+        const tagList = this._asStringList(tags, 16);
+        const context = {
+            force: true,
+            limit: effect.resolveLimit || 1,
+            reason: `同伴协助：${resource.name}`,
+            source: resource.id,
+            intent: [resource.name, resource.risk, ...(resource.tags || []), ...tagList].filter(Boolean).join(' '),
+            actionType: effect.actionType || ''
+        };
+        const resolved = this.resolveRelevantConsequences(scene, context);
+        if (resolved.length > 0) return resolved;
+
+        if (tagList.length > 0) {
+            const tagSet = new Set(tagList.map(tag => String(tag).toLowerCase()));
+            const severityRank = { low: 1, medium: 2, high: 3, critical: 4 };
+            const limit = Math.max(1, Math.min(3, Number(effect.resolveLimit || 1)));
+            const matched = (scene.consequenceLedger || [])
+                .filter(item => item && item.status === 'active')
+                .filter(item => item.severity !== 'critical' || effect.resolveCritical === true)
+                .filter(item => (item.tags || []).some(tag => tagSet.has(String(tag).toLowerCase())))
+                .sort((a, b) => (severityRank[b.severity] || 1) - (severityRank[a.severity] || 1) || Number(b.createdAt || 0) - Number(a.createdAt || 0))
+                .slice(0, limit);
+            if (matched.length > 0) {
+                const now = Date.now();
+                matched.forEach(item => {
+                    item.status = 'resolved';
+                    item.resolvedAt = now;
+                    item.resolvedBy = String(resource.id || '').slice(0, 120);
+                    item.resolution = `同伴协助：${resource.name}`;
+                });
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '后果解除',
+                    text: `解除：${matched.map(item => item.title).join('、')}`,
+                    refId: matched[0].id,
+                    timestamp: now
+                });
+                return matched.map(item => ({ id: item.id, title: item.title, severity: item.severity, score: 0 }));
+            }
+            return [];
+        }
+
+        if (effect.resolveConsequence !== true) return [];
+        const severityRank = { low: 1, medium: 2, high: 3, critical: 4 };
+        const target = (scene.consequenceLedger || [])
+            .filter(item => item && item.status === 'active')
+            .filter(item => item.severity !== 'critical' || effect.resolveCritical === true)
+            .sort((a, b) => (severityRank[b.severity] || 1) - (severityRank[a.severity] || 1) || Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
+        if (!target) return [];
+        const now = Date.now();
+        target.status = 'resolved';
+        target.resolvedAt = now;
+        target.resolvedBy = String(resource.id || '').slice(0, 120);
+        target.resolution = `同伴协助：${resource.name}`;
+        const item = { id: target.id, title: target.title, severity: target.severity, score: 0 };
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '后果解除',
+            text: `解除：${target.title}`,
+            refId: target.id,
+            timestamp: now
+        });
+        return [item];
     },
 
     _getCompanionRelation(scene, characterId, create = false) {

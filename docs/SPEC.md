@@ -346,7 +346,7 @@ scene.pendingAction = {
 
 - 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
 - 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选，掷骰时才扣除 `uses` 或数量。
-- `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选，掷骰后扣除协助次数，并结算 `cost.trust`、`cost.time` 与可能代价。
+- `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。
 
 ### 4.8 计策与情报资源
 

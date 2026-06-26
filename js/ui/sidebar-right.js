@@ -246,6 +246,9 @@ const SidebarRight = {
                         if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
                         if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
                         if (effect.riskDelta) bits.push(`风险${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
+                        if (effect.clockDelta) bits.push(`时钟${effect.clockDelta >= 0 ? '+' : ''}${effect.clockDelta}`);
+                        if (effect.evidenceReliability) bits.push(`证据→${effect.evidenceReliability}`);
+                        if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) bits.push('解除后果');
                         return `<div class="situation-resource">
                             <div class="situation-row">
                                 <span>${Renderer.escapeHtml(resource.name)}</span>

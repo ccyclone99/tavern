@@ -289,13 +289,15 @@ scene.evidenceLedger = [
   unlock: { trustAtLeast: 15, evidenceTags: ["medical"] },
   uses: 1,
   cost: { trust: 2, time: 10 },
-  effect: { dcDelta: -2, actionType: "investigate" },
+  effect: { dcDelta: -2, actionType: "investigate", evidenceReliability: "confirmed", clockDelta: -1, clockTag: "panic" },
   tags: ["medical", "trust"],
   risk: "保守派会更关注苏珊的医疗记录。"
 }
 ```
 
 同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；信任成本写入对应 NPC 的 `_relations[userName].history`。
+
+`effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag` 或资源标签延缓/推进公开时钟；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
 
 ### Location
 

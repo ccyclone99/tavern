@@ -789,7 +789,7 @@ const WorldGenerator = {
 - flowGraph: 剧本节点图 { nodes:[{id,phaseId,type,title,status,visibleText,privateTruth,npcs,challengeIds,clueIds,exits}], revelations:[{id,conclusion,status:"unknown",core:true,clueIds,requiredFor}] }
 - sceneChallenges: 3-6个可玩挑战，每个含 { id,phaseId,title,status,targetProgress,maxStrain,checkBudget:{min,target,max},approaches:[{id,label,stat,dc,effect,actionType,tags,keywords,onSuccess,onPartial,onFailure}],supports,coreRevelations,failForward }
 - evidenceLedger: 初始为空数组，后续记录玩家取得的证据；不要预填隐藏真相
-- companionResources: 1-3个同伴协助资源，每个含 { id,characterId,name,uses,cost,effect,risk }
+- companionResources: 1-3个同伴协助资源，每个含 { id,characterId,name,unlock,uses,cost,effect,risk }；unlock 可用 trustAtLeast/evidenceTags/knowledgeTags 控制逐步公开；effect 可含 checkBonus/dcDelta/riskDelta/clockDelta/clockId/clockTag/evidenceReliability/resolveConsequenceTags
 - inventory: 2-4个起始物品，每个含 { id,name,description,type,quantity,uses,tags,effects:[{type:"check_bonus",stat,actionType,value,consume}] }；至少一个常驻调查/观察工具和一个一次性消耗资源
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
