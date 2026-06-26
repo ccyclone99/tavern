@@ -372,6 +372,7 @@ scene.evidenceLedger = [
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
 - `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
 - `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
+- 出售、移除、直接使用、检定投入和计策资源消耗如果真实腾出背包格子，会静默重试已完成但未领取的任务奖励；成功时写入正常任务奖励摘要。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。
 - `buyBasicSupply()` 会先确认背包可合并或仍有空位，成功扣金币后再走 `grantInventoryItem()`；金币不足或背包满时不会改变金币或背包。
 - 探索奖励生成的一次性物品也走 `grantInventoryItem()`；背包满且无法合并时，探索收获消息会明确说明未获得该物品。
