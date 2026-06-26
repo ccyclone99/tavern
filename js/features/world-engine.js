@@ -3385,8 +3385,12 @@ const WorldEngine = {
                 if (group.dcDelta) labelParts.push(`DC ${group.dcDelta >= 0 ? '+' : ''}${group.dcDelta}`);
                 if (group.riskDelta) labelParts.push(`风险 ${group.riskDelta >= 0 ? '+' : ''}${group.riskDelta}`);
                 if (!labelParts.length) return null;
+                const itemRef = group.item.id || group.item.name || `idx_${idx}`;
+                const stableId = `item:${itemRef}`;
+                const legacyId = `item:${itemRef}:${idx}`;
                 return {
-                    id: `item:${group.item.id || group.item.name || idx}:${idx}`,
+                    id: stableId,
+                    legacyIds: legacyId === stableId ? [] : [legacyId],
                     kind: 'item',
                     itemId: group.item.id || '',
                     source: group.item.name,
@@ -4027,7 +4031,14 @@ const WorldEngine = {
     getSelectedCheckResourceModifiers(scene, check) {
         const selectedItemIds = new Set(Array.isArray(check?.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
         const selectedCompanionIds = new Set(Array.isArray(check?.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
-        const itemModifiers = this.getAvailableCheckItems(scene, check).filter(m => selectedItemIds.has(m.id));
+        const isSelectedItemModifier = (modifier) => {
+            if (!modifier) return false;
+            if (selectedItemIds.has(String(modifier.id))) return true;
+            if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedItemIds.has(String(id)))) return true;
+            const legacyRefs = [modifier.itemId, modifier.source].map(String).filter(Boolean);
+            return [...selectedItemIds].some(id => legacyRefs.some(ref => id === `item:${ref}` || id.startsWith(`item:${ref}:`)));
+        };
+        const itemModifiers = this.getAvailableCheckItems(scene, check).filter(isSelectedItemModifier);
         const companionModifiers = this.getAvailableCompanionResources(scene, check).filter(m => selectedCompanionIds.has(m.id));
         const modifiers = [...itemModifiers, ...companionModifiers];
         return {

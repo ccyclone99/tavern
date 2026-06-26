@@ -169,6 +169,14 @@ const ActionBar = {
         const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
             ? WorldEngine.getAvailableCompanionResources(State.scene, check)
             : (check.availableCompanionModifiers || []);
+        const isResourceSelected = (modifier, selectedIds) => {
+            if (!modifier) return false;
+            if (selectedIds.has(String(modifier.id))) return true;
+            if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedIds.has(String(id)))) return true;
+            if (modifier.kind !== 'item') return false;
+            const legacyRefs = [modifier.itemId, modifier.source].map(String).filter(Boolean);
+            return [...selectedIds].some(id => legacyRefs.some(ref => id === `item:${ref}` || id.startsWith(`item:${ref}:`)));
+        };
         const resourceOption = (m, kind, selected) => `
             <button class="pending-resource-option ${selected ? 'selected' : ''}" type="button"
                 data-resource-kind="${Renderer.escapeAttr(kind)}"
@@ -179,10 +187,10 @@ const ActionBar = {
             </button>
         `;
         const availableItemsHtml = availableItems.slice(0, 5).map(m =>
-            resourceOption(m, 'item', selectedItemIds.has(m.id))
+            resourceOption(m, 'item', isResourceSelected(m, selectedItemIds))
         ).join('');
         const availableCompanionsHtml = availableCompanions.slice(0, 5).map(m =>
-            resourceOption(m, 'companion', selectedCompanionIds.has(m.id))
+            resourceOption(m, 'companion', isResourceSelected(m, selectedCompanionIds))
         ).join('');
         const resourceBonus = Number(totals.bonus || 0);
         const dcDelta = Number(totals.dcDelta || 0);
@@ -261,9 +269,33 @@ const ActionBar = {
         if (!check || !id) return;
         const key = kind === 'companion' ? 'selectedCompanionResourceIds' : 'selectedItemModifierIds';
         if (!Array.isArray(check[key])) check[key] = [];
-        const idx = check[key].indexOf(id);
-        if (idx >= 0) check[key].splice(idx, 1);
-        else check[key].push(id);
+        const available = kind === 'companion'
+            ? (typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
+                ? WorldEngine.getAvailableCompanionResources(State.scene, check)
+                : (check.availableCompanionModifiers || []))
+            : (typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
+                ? WorldEngine.getAvailableCheckItems(State.scene, check)
+                : (check.availableItemModifiers || []));
+        const target = (available || []).find(m => String(m.id) === String(id));
+        const aliases = new Set([String(id)]);
+        const legacyPrefixes = [];
+        if (target) {
+            aliases.add(String(target.id));
+            (target.legacyIds || []).forEach(legacyId => aliases.add(String(legacyId)));
+            if (target.kind === 'item') {
+                [target.itemId, target.source].map(String).filter(Boolean).forEach(ref => {
+                    aliases.add(`item:${ref}`);
+                    legacyPrefixes.push(`item:${ref}:`);
+                });
+            }
+        }
+        const matchesTarget = value => {
+            const normalized = String(value);
+            return aliases.has(normalized) || legacyPrefixes.some(prefix => normalized.startsWith(prefix));
+        };
+        const alreadySelected = check[key].some(matchesTarget);
+        check[key] = check[key].filter(value => !matchesTarget(value));
+        if (!alreadySelected) check[key].push(String(target?.id || id));
         State.saveCurrentSceneDebounced();
         this.renderPendingCheck();
     }

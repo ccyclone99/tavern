@@ -566,12 +566,12 @@ scene.evidenceLedger = [
     { source: "审讯记录", label: "+1 检定", value: 1 }
   ],
   availableItemModifiers: [
-    { id: "item:item_x:0", source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
+    { id: "item:item_x", legacyIds: ["item:item_x:0"], source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
   ],
   availableCompanionModifiers: [
     { id: "companion:ally_silas", source: "塞拉斯的专业背书", label: "DC -2，使用后消耗", dcDelta: -2, consume: true }
   ],
-  selectedItemModifierIds: ["item:item_x:0"],
+  selectedItemModifierIds: ["item:item_x"],
   selectedCompanionResourceIds: [],
   stakes: "失败可能导致：对方提出条件",
   risks: ["对方提出条件", "需要交出筹码或人情"],
@@ -579,7 +579,7 @@ scene.evidenceLedger = [
 }
 ```
 
-`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源后再点击“掷骰”或在主输入框输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源后再点击“掷骰”或在主输入框输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。消耗品资源 ID 必须基于物品 `id` 或名称保持稳定；旧存档中的 `item:xxx:序号` 形式可通过 `legacyIds` 或旧 ID 前缀兼容识别，但新选择应写入稳定 ID。
 
 检定结算是一个有序事务：先写入检定结果和资源消耗，再结算挑战、反制与持续后果，最后才允许因背包腾位而静默重试已完成任务的待领奖励。任一步骤把 `scene.gameState` 改为 `defeated` 或 `victorious` 后，后续挑战奖励、反制解除、后果解除、补领奖励和回合推进都必须停止。
 
