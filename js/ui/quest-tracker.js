@@ -172,6 +172,9 @@ const QuestTracker = {
     _addExp(amount) {
         const scene = State.scene;
         if (!scene) return;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.addExperience) {
+            return WorldEngine.addExperience(scene, amount, { source: '任务奖励', silent: true });
+        }
         scene.exp = (scene.exp || 0) + amount;
         while (true) {
             const need = (scene.level || 1) * 100;

@@ -1030,10 +1030,19 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return;
         const amount = Math.max(1, Math.min(200, parseInt(raw.split('|')[0]) || 1));
-        if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.addExperience) {
+            WorldEngine.addExperience(scene, amount, { source: '剧情奖励' });
+        } else if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
             QuestTracker._addExp(amount);
         } else {
             scene.exp = (scene.exp || 0) + amount;
+            while (scene.exp >= (scene.level || 1) * 100) {
+                scene.exp -= (scene.level || 1) * 100;
+                scene.level = (scene.level || 1) + 1;
+                scene.attrPoints = (scene.attrPoints || 0) + 2;
+                scene.playerMaxHp = 10 + Math.floor((((scene.playerStats && scene.playerStats.constitution) || 10) - 10) / 2) * 4 + (scene.level - 1) * 4;
+                scene.playerHp = scene.playerMaxHp;
+            }
         }
         State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();

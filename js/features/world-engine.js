@@ -646,6 +646,78 @@ const WorldEngine = {
         return Math.max(1, 10 + Math.floor((con - 10) / 2) * 4 + (level - 1) * 4);
     },
 
+    addExperience(scene, amount, options = {}) {
+        if (!scene) return { ok: false, amount: 0, levelsGained: 0, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!Array.isArray(scene.messages)) scene.messages = [];
+        const currentLevel = Math.floor(Number(scene.level || 1));
+        const currentExp = Math.floor(Number(scene.exp || 0));
+        const currentAttrPoints = Math.floor(Number(scene.attrPoints || 0));
+        scene.level = Number.isFinite(currentLevel) ? Math.max(1, currentLevel) : 1;
+        scene.exp = Number.isFinite(currentExp) ? Math.max(0, currentExp) : 0;
+        scene.attrPoints = Number.isFinite(currentAttrPoints) ? Math.max(0, currentAttrPoints) : 0;
+
+        const numeric = Number(amount || 0);
+        const gained = Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+        if (gained <= 0) {
+            return { ok: false, amount: 0, levelsGained: 0, message: '经验值无变化。' };
+        }
+
+        const beforeLevel = scene.level;
+        scene.exp += gained;
+        let levelsGained = 0;
+        while (true) {
+            const need = Math.max(1, Number(scene.level || 1) * 100);
+            if (scene.exp < need) break;
+            scene.exp -= need;
+            scene.level = Number(scene.level || 1) + 1;
+            scene.attrPoints = Number(scene.attrPoints || 0) + 2;
+            levelsGained += 1;
+        }
+
+        if (levelsGained > 0) {
+            scene.playerMaxHp = this.calculatePlayerMaxHp(scene);
+            scene.playerHp = scene.playerMaxHp;
+        }
+
+        const source = String(options.source || options.reason || '经验获得').replace(/\s+/g, ' ').trim().slice(0, 120) || '经验获得';
+        const title = levelsGained > 0 ? '升级' : '获得经验';
+        const content = levelsGained > 0
+            ? `【${title}】${source}：经验 +${gained}，升级到 ${scene.level} 级，获得 ${levelsGained * 2} 属性点，生命值已回满。`
+            : `【${title}】${source}：经验 +${gained}，当前 ${scene.exp}/${scene.level * 100}。`;
+        const shouldShowMessage = options.silent !== true || (levelsGained > 0 && options.levelMessage !== false);
+        if (shouldShowMessage) {
+            this.addSystemMessage(scene, content, 'system');
+        } else {
+            this.recordEvent(scene, {
+                category: 'level',
+                title,
+                text: content.replace(/^【[^】]+】/, '')
+            });
+        }
+
+        if (levelsGained > 0 && typeof showToast !== 'undefined') {
+            showToast(`升级！现在是 ${scene.level} 级，获得 ${levelsGained * 2} 属性点`);
+        } else if (options.toast === true && typeof showToast !== 'undefined') {
+            showToast(`经验 +${gained}`);
+        }
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+            if (levelsGained > 0) SidebarRight.markTabNew?.('detail');
+        }
+        return {
+            ok: true,
+            amount: gained,
+            beforeLevel,
+            level: scene.level,
+            exp: scene.exp,
+            attrPoints: scene.attrPoints,
+            levelsGained
+        };
+    },
+
     allocateStatPoint(scene, key) {
         const statLabels = { strength: '力量', dexterity: '敏捷', constitution: '体质', intelligence: '智力', wisdom: '感知', charisma: '魅力' };
         if (!scene || !statLabels[key]) return { ok: false, message: '未知属性。' };
@@ -1069,11 +1141,7 @@ const WorldEngine = {
         scene.explorationRewardLog = scene.explorationRewardLog.slice(-200);
 
         const exp = evidence.reliability === 'confirmed' ? 8 : 4;
-        if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
-            QuestTracker._addExp(exp);
-        } else {
-            scene.exp = Number(scene.exp || 0) + exp;
-        }
+        this.addExperience(scene, exp, { source: `探索收获：${evidence.title}`, silent: true });
 
         const item = this._buildExplorationRewardItem(evidence);
         const itemAdded = item ? this._addOrMergeInventoryItem(scene, item) : false;
@@ -1266,6 +1334,7 @@ const WorldEngine = {
         const target = scene.inventory[idx];
         if (target.uses !== undefined) {
             target.uses = Math.max(0, Number(target.uses || 0) - 1);
+            if (target.uses <= 0) scene.inventory.splice(idx, 1);
             return true;
         }
         if (Number(target.quantity || 1) > 1) {
@@ -2077,8 +2146,8 @@ const WorldEngine = {
         if (/资源消耗|同伴协助|投入资源/.test(clean)) return 'resource';
         if (/购买|交易|金币|花费/.test(clean)) return 'economy';
         if (/物品|背包|使用物品|获得 .+包|获得 .+药|装备|卸下/.test(clean)) return 'inventory';
-        if (/生命|伤害|休息|恢复/.test(clean)) return 'survival';
         if (/升级|经验|属性点/.test(clean)) return 'level';
+        if (/生命|伤害|休息|恢复/.test(clean)) return 'survival';
         if (/移动|前往|地点|地图/.test(clean)) return 'movement';
         if (/失败|倒下|死亡|Game Over/.test(clean)) return 'failure';
         if (/通关|胜利|完成冒险/.test(clean)) return 'victory';
@@ -2232,13 +2301,7 @@ const WorldEngine = {
             );
             if (idx < 0) return;
             const item = scene.inventory[idx];
-            if (item.uses !== undefined) {
-                item.uses = Math.max(0, Number(item.uses || 0) - 1);
-            } else if (Number(item.quantity || 1) > 1) {
-                item.quantity = Number(item.quantity || 1) - 1;
-            } else {
-                scene.inventory.splice(idx, 1);
-            }
+            if (!this._consumeInventoryItem(scene, item)) return;
             consumedKeys.add(key);
             consumed = true;
         });
@@ -2453,8 +2516,7 @@ const WorldEngine = {
                 applied.push(`金币 ${value >= 0 ? '+' : ''}${value}`);
             } else if (effect.type === 'exp') {
                 const amount = this._clamp(value, 1, 200);
-                if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) QuestTracker._addExp(amount);
-                else scene.exp = Number(scene.exp || 0) + amount;
+                this.addExperience(scene, amount, { source: `使用${item.name}`, silent: true });
                 applied.push(`经验 +${amount}`);
             } else if (effect.type === 'clock_delta' || effect.type === 'clock_resist') {
                 const clock = this._findItemTargetClock(scene, item, effect);
@@ -3355,11 +3417,7 @@ const WorldEngine = {
             : this._clamp(15 + target * 8 + minChecks * 4, 20, 80);
         challenge.rewardGranted = true;
         this.addSystemMessage(scene, `【里程碑奖励：${challenge.title}】经验 +${amount}`, 'system');
-        if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
-            QuestTracker._addExp(amount);
-        } else {
-            scene.exp = Number(scene.exp || 0) + amount;
-        }
+        this.addExperience(scene, amount, { source: `里程碑奖励：${challenge.title}`, silent: true });
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
         return amount;
