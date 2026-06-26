@@ -242,7 +242,7 @@
 }
 ```
 
-主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
+主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。回顾类输入（如“回顾”“通关记录”“失败记录”“冒险记录”）由 `IntentRouter` 本地处理，打开右侧“局势”面板；如果冒险已结束，会确保 `RunRecorder.complete()` 生成当前版本的 `runRecord`，不会进入 AI 回复流程。
 
 结局后的右侧面板仍可查看任务、背包、属性和计策，但应隐藏或置为只读：任务目标不再绑定勾选事件，背包不显示使用/装备/卸下按钮，属性点不显示加号，计策不显示放弃/重新规划入口。规则层仍必须保留最终防线，不能只依赖 UI 隐藏按钮。
 

@@ -709,7 +709,7 @@ const ChatUI = {
     },
 
     _shouldBlockEndedSceneInput(route, scene) {
-        if (State.isOOC || route?.kind === 'ooc' || route?.kind === 'help') return false;
+        if (State.isOOC || route?.kind === 'ooc' || route?.kind === 'help' || route?.kind === 'review') return false;
         if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
             return !WorldEngine.isScenePlaying(scene);
         }
@@ -752,6 +752,11 @@ const ChatUI = {
             case 'help':
                 this._clearInput();
                 this._appendLocalSystemMessage(IntentRouter.buildHelpText(originalText, scene));
+                return true;
+            case 'review':
+                this._clearInput();
+                this._openRunReview(scene);
+                this._syncInputMode();
                 return true;
             case 'move_location':
                 this._clearInput();
@@ -841,6 +846,25 @@ const ChatUI = {
     _clearInput() {
         this.inputEl.value = '';
         this.inputEl.style.height = 'auto';
+    },
+
+    _openRunReview(scene) {
+        if (!scene) return;
+        const ended = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? !WorldEngine.isScenePlaying(scene)
+            : !!scene.gameState && scene.gameState !== 'playing';
+        if (ended && typeof RunRecorder !== 'undefined' && RunRecorder.complete) {
+            RunRecorder.complete(scene, scene.gameState, scene.defeatReason || '玩家查看回顾');
+        }
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.openTab?.('situation');
+            SidebarRight.renderSituation?.();
+        }
+        const record = scene.runRecord;
+        const label = record?.title
+            ? `已打开右侧「局势」面板的冒险回顾：${record.title}。`
+            : '已打开右侧「局势」面板。当前冒险尚未结束，可先查看目标、风险、线索和最近事件。';
+        this._appendLocalSystemMessage(`【回顾】${label}`);
     },
 
     _appendLocalSystemMessage(content) {

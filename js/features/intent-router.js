@@ -8,6 +8,7 @@ const IntentRouter = {
         const normalized = this._normalize(raw);
         if (!raw) return { kind: 'empty' };
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
+        if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'review_command' };
         if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized);
         if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const statAllocation = this.matchStatAllocation(raw);
@@ -84,6 +85,19 @@ const IntentRouter = {
             const pattern = this._normalize(p);
             return pattern && normalized.includes(pattern);
         });
+    },
+
+    isReview(raw, normalized = this._normalize(raw)) {
+        const exact = [
+            '回顾', '冒险回顾', '通关记录', '失败记录', '冒险记录', '游戏记录',
+            '看看回顾', '查看回顾', '看看通关记录', '查看通关记录',
+            '看看失败记录', '查看失败记录'
+        ].map(item => this._normalize(item));
+        if (exact.includes(normalized)) return true;
+        const reviewTerms = ['回顾', '通关记录', '失败记录', '冒险记录', '游戏记录'];
+        const askTerms = ['看', '查看', '打开', '展示', '给我', '看看'];
+        return reviewTerms.some(t => normalized.includes(this._normalize(t))) &&
+            askTerms.some(t => normalized.includes(this._normalize(t)));
     },
 
     isStrategy(raw, normalized = this._normalize(raw)) {
@@ -280,6 +294,7 @@ const IntentRouter = {
     _routePendingCheck(raw, normalized) {
         if (this._isCancel(normalized)) return { kind: 'cancel_check', text: raw, reason: 'pending_check_cancel' };
         if (this._isRoll(normalized)) return { kind: 'roll_check', text: raw, reason: 'pending_check_roll' };
+        if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'pending_check_review' };
         if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'pending_check_help' };
         return { kind: 'blocked_by_check', text: raw, reason: 'pending_check_blocks_text' };
     },
@@ -287,6 +302,7 @@ const IntentRouter = {
     _routePendingAction(raw, normalized) {
         if (this._isCancel(normalized)) return { kind: 'cancel_action', text: raw, reason: 'pending_action_cancel' };
         if (this._isConfirm(normalized)) return { kind: 'confirm_action', text: raw, reason: 'pending_action_confirm' };
+        if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'pending_action_review' };
         if (this.isHelp(raw, normalized) || normalized.includes('为什么')) {
             return { kind: 'explain_action', text: raw, reason: 'pending_action_explain' };
         }
