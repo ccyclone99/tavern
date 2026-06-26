@@ -636,7 +636,12 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 }
 ```
 
-当前实现只把剧情弧注入 prompt，引导 AI 按节拍推进；`currentBeat` 尚未由系统自动更新。agent 如果要严格推进剧情弧，需要在外部模拟层维护 beat 进度。
+`currentBeat` 由 `WorldEngine.applyStoryArcUpdate()` 通过 `<state_update>.storyArcUpdate` 半自动推进。推进规则：
+
+- `advance`、`advanceBy` 或提高 `currentBeat` 时必须提供 `reason`。
+- 非结局阶段一次最多推进 1 个 beat；`advanceBy` 大于 1 或直接跳 `currentBeat` 会被本地规则夹到下一步。
+- `phase: "resolution"` 代表明确结局阶段，可以一次收束到最终 beat。
+- 成功推进会写入 `eventLog` 的 `progress` 事件，并把当前局势最近风险标记为“剧情推进”。
 
 ## 四、角色结构
 

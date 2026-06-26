@@ -512,6 +512,7 @@ UI 要求：
 - 一个 beat 推进必须有原因。
 - 推进时可生成系统摘要、知识条目或当前局势变化。
 - 不允许 AI 一次跳过多个 beat，除非明确结局。
+- 当前实现会在 `WorldEngine.applyStoryArcUpdate()` 中强制以上规则：缺少 `reason` 不推进，非 `resolution` 阶段跳跃推进会夹到下一步。
 
 ### 4.16 冒险日志
 

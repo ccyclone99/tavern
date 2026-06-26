@@ -791,6 +791,10 @@ const WorldEngine = {
     applyStoryArcUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
+        if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
+            scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        }
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
         let changed = false;
         updates.slice(0, 8).forEach(update => {
             if (!update || typeof update !== 'object') return;
@@ -808,15 +812,46 @@ const WorldEngine = {
             if (update.synopsis !== undefined) arc.synopsis = String(update.synopsis).slice(0, 400);
             if (Array.isArray(update.beats)) arc.beats = update.beats.slice(0, 8);
             const beats = Array.isArray(arc.beats) ? arc.beats : [];
+            const beforeBeat = this._clamp(Number(arc.currentBeat || 0), 0, Math.max(beats.length, 0));
+            let nextBeat = beforeBeat;
+            const reason = String(update.reason || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+            const explicitResolution = update.phase === 'resolution' || arc.phase === 'resolution';
             if (update.currentBeat !== undefined) {
-                arc.currentBeat = this._clamp(Number(update.currentBeat), 0, Math.max(beats.length, 0));
+                nextBeat = this._clamp(Number(update.currentBeat), 0, Math.max(beats.length, 0));
             } else if (update.advance === true || Number(update.advanceBy || 0) !== 0) {
-                const step = update.advance === true ? 1 : Number(update.advanceBy || 0);
-                arc.currentBeat = this._clamp(Number(arc.currentBeat || 0) + step, 0, Math.max(beats.length, 0));
+                const rawStep = update.advance === true ? 1 : Number(update.advanceBy || 0);
+                const step = explicitResolution ? rawStep : Math.sign(rawStep || 0);
+                nextBeat = this._clamp(beforeBeat + step, 0, Math.max(beats.length, 0));
             }
-            arc.lastReason = String(update.reason || arc.lastReason || '').slice(0, 240);
+
+            const wantsAdvance = nextBeat > beforeBeat;
+            if (wantsAdvance && !reason) {
+                const total = Math.max(beats.length, 0);
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '剧情推进待确认',
+                    text: `${arc.title || '剧情弧'} 请求推进到进度 ${Math.min(nextBeat, total)}/${total}，但缺少原因，已保持在进度 ${Math.min(beforeBeat, total)}/${total}。`
+                });
+                nextBeat = beforeBeat;
+            } else if (wantsAdvance && nextBeat > beforeBeat + 1 && !explicitResolution) {
+                nextBeat = beforeBeat + 1;
+            }
+
+            if (nextBeat !== beforeBeat) arc.currentBeat = nextBeat;
+            if (reason) arc.lastReason = reason;
             arc.updatedAt = Date.now();
             changed = true;
+            if (nextBeat !== beforeBeat) {
+                const total = Math.max(beats.length, 0);
+                const text = `${arc.title || '剧情弧'}：${reason || '剧情阶段推进'}（${Math.min(nextBeat, total)}/${total}）`;
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '剧情弧推进',
+                    text
+                });
+                scene.currentSituation.recentRisks.push(`剧情推进：${arc.title || '剧情弧'}`);
+                scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+            }
         });
         return changed;
     },
