@@ -293,7 +293,9 @@ const PromptBuilder = {
             });
             parts.push(`【物品栏】\n${invLines.join('\n')}`);
         }
-        const companionResources = (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
+        const companionResources = typeof WorldEngine !== 'undefined' && WorldEngine.getUnlockedCompanionResources
+            ? WorldEngine.getUnlockedCompanionResources(scene)
+            : (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
         if (companionResources.length > 0) {
             const lines = companionResources.slice(0, 6).map(resource => {
                 const effect = resource.effect || {};

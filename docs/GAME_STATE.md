@@ -279,6 +279,24 @@ scene.evidenceLedger = [
 
 `ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。
 
+### CompanionResource
+
+```js
+{
+  id: "ally_susan_medical_scan",
+  characterId: "susan",
+  name: "苏珊的体检背书",
+  unlock: { trustAtLeast: 15, evidenceTags: ["medical"] },
+  uses: 1,
+  cost: { trust: 2, time: 10 },
+  effect: { dcDelta: -2, actionType: "investigate" },
+  tags: ["medical", "trust"],
+  risk: "保守派会更关注苏珊的医疗记录。"
+}
+```
+
+同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；信任成本写入对应 NPC 的 `_relations[userName].history`。
+
 ### Location
 
 ```js

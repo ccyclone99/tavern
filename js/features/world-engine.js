@@ -2346,6 +2346,7 @@ const WorldEngine = {
         const intent = String(check?.intent || check?.stakes || '').toLowerCase();
         return (scene.companionResources || [])
             .filter(resource => resource && Number(resource.uses || 0) > 0)
+            .filter(resource => this.getCompanionResourceAvailability(scene, resource).ok)
             .filter(resource => this._effectMatches(resource.effect, {
                 stat,
                 actionType,
@@ -2383,6 +2384,67 @@ const WorldEngine = {
                 };
             })
             .filter(Boolean);
+    },
+
+    getUnlockedCompanionResources(scene, options = {}) {
+        if (!scene) return [];
+        this.normalizeScene(scene);
+        const includeLocked = options.includeLocked === true;
+        return (scene.companionResources || [])
+            .filter(resource => resource && Number(resource.uses || 0) > 0)
+            .map(resource => {
+                const availability = this.getCompanionResourceAvailability(scene, resource);
+                return includeLocked ? { ...resource, availability } : (availability.ok ? resource : null);
+            })
+            .filter(Boolean);
+    },
+
+    getCompanionResourceAvailability(scene, resource) {
+        if (!scene || !resource) return { ok: false, reason: '缺少场景或协助资源' };
+        const unlock = resource.unlock && typeof resource.unlock === 'object' ? resource.unlock : {};
+        const keys = Object.keys(unlock).filter(key => unlock[key] !== undefined && unlock[key] !== null && unlock[key] !== '');
+        if (keys.length === 0) return { ok: true, reason: '' };
+
+        const relationInfo = this._getCompanionRelation(scene, resource.characterId, false);
+        const trust = Number(relationInfo?.relation?.trust || 0);
+        const trustAtLeast = Number.isFinite(Number(unlock.trustAtLeast))
+            ? Number(unlock.trustAtLeast)
+            : (Number.isFinite(Number(unlock.trust)) ? Number(unlock.trust) : null);
+        if (trustAtLeast !== null) {
+            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: trustAtLeast };
+            if (trust < trustAtLeast) return { ok: false, reason: `需要信任 ${trustAtLeast}+`, trust, requiredTrust: trustAtLeast };
+        }
+
+        const trustBelow = Number.isFinite(Number(unlock.trustBelow)) ? Number(unlock.trustBelow) : null;
+        if (trustBelow !== null && trust >= trustBelow) {
+            return { ok: false, reason: `信任需低于 ${trustBelow}`, trust, requiredTrustBelow: trustBelow };
+        }
+
+        const evidenceTags = this._asStringList(unlock.evidenceTags || unlock.requiredEvidenceTags, 12);
+        if (evidenceTags.length > 0) {
+            const knownEvidenceTags = this._collectVisibleEvidenceTags(scene);
+            const missing = evidenceTags.filter(tag => !knownEvidenceTags.has(tag));
+            if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}` };
+        }
+
+        const knowledgeTags = this._asStringList(unlock.knowledgeTags || unlock.discoveryTags, 12);
+        if (knowledgeTags.length > 0) {
+            const knownTags = this._collectKnowledgeTags(scene);
+            const missing = knowledgeTags.filter(tag => !knownTags.has(tag));
+            if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}` };
+        }
+
+        const revelationIds = this._asStringList(unlock.revelationIds || unlock.revelations, 12);
+        if (revelationIds.length > 0) {
+            const confirmed = new Set((scene.flowGraph?.revelations || [])
+                .filter(item => item && ['suspected', 'confirmed'].includes(item.status))
+                .map(item => String(item.id || item.title || ''))
+                .filter(Boolean));
+            const missing = revelationIds.filter(id => !confirmed.has(id));
+            if (missing.length > 0) return { ok: false, reason: `缺少关键结论：${missing.join('、')}` };
+        }
+
+        return { ok: true, reason: '', trust };
     },
 
     getSelectedCheckResourceModifiers(scene, check) {
@@ -2426,9 +2488,11 @@ const WorldEngine = {
             if (mod.kind !== 'companion' || !mod.resourceId) return;
             const resource = scene.companionResources.find(r => r.id === mod.resourceId);
             if (!resource || Number(resource.uses || 0) <= 0) return;
+            if (!this.getCompanionResourceAvailability(scene, resource).ok) return;
             resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
             consumed = true;
-            notes.push(resource.name);
+            const costNotes = this._applyCompanionResourceCost(scene, resource);
+            notes.push(`${resource.name}${costNotes.length ? `（${costNotes.join('，')}）` : ''}`);
             if (resource.risk) {
                 if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
                 if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
@@ -2451,6 +2515,92 @@ const WorldEngine = {
             }
         }
         return consumed;
+    },
+
+    _applyCompanionResourceCost(scene, resource) {
+        const cost = resource?.cost && typeof resource.cost === 'object' ? resource.cost : {};
+        const notes = [];
+        const trustCost = Math.max(0, Math.floor(Number(cost.trust || 0)));
+        if (trustCost > 0) {
+            const relationInfo = this._getCompanionRelation(scene, resource.characterId, true);
+            const relation = relationInfo?.relation;
+            if (relation) {
+                const before = Number(relation.trust || 0);
+                relation.trust = this._clamp(before - trustCost, -100, 100);
+                if (!Array.isArray(relation.history)) relation.history = [];
+                relation.history.push({
+                    timestamp: Date.now(),
+                    delta: -trustCost,
+                    trustDelta: -trustCost,
+                    mood: relation.mood || '平静',
+                    reason: `使用同伴协助：${resource.name}`
+                });
+                notes.push(`信任 -${trustCost}`);
+                if (relationInfo.character && typeof Storage !== 'undefined' && Storage.saveCharacter) {
+                    Storage.saveCharacter(relationInfo.character).catch(e => console.warn('保存同伴协助关系成本失败:', e));
+                }
+                if (typeof State !== 'undefined' && State.emit && Array.isArray(State.characters)) {
+                    State.emit('charactersChanged', State.characters);
+                }
+            }
+        }
+
+        const timeCost = Math.max(0, Math.floor(Number(cost.time || 0)));
+        if (timeCost > 0) {
+            notes.push(`耗时 ${timeCost}分`);
+            if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+            if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+            scene.currentSituation.recentRisks.push(`同伴协助耗时：${resource.name} 占用约 ${timeCost} 分钟`);
+        }
+        return notes;
+    },
+
+    _getCompanionRelation(scene, characterId, create = false) {
+        const id = String(characterId || '');
+        if (!id || typeof State === 'undefined' || !Array.isArray(State.characters)) return null;
+        const character = State.characters.find(char => char && char.id === id);
+        if (!character) return null;
+        const userName = String(scene?.userName || State.scene?.userName || State.settings?.userName || '旅人');
+        if (create) {
+            if (!character._relations || typeof character._relations !== 'object') character._relations = {};
+            if (!character._relations[userName]) {
+                character._relations[userName] = {
+                    affection: 0,
+                    trust: 0,
+                    suspicion: 0,
+                    fear: 0,
+                    debt: 0,
+                    leverage: [],
+                    mood: '平静',
+                    memories: [],
+                    history: []
+                };
+            }
+        }
+        const relation = character._relations?.[userName] || null;
+        return { character, relation, userName };
+    },
+
+    _collectVisibleEvidenceTags(scene) {
+        const tags = new Set();
+        (scene.evidenceLedger || [])
+            .filter(item => item && item.visible !== false)
+            .forEach(item => this._asStringList(item.tags, 20).forEach(tag => tags.add(tag)));
+        return tags;
+    },
+
+    _collectKnowledgeTags(scene) {
+        const tags = new Set();
+        const addTags = item => this._asStringList(item?.tags, 20).forEach(tag => tags.add(tag));
+        (scene.knowledge?.discoveries || []).forEach(addTags);
+        (scene.knowledge?.evidence || []).forEach(addTags);
+        (scene.intel || []).forEach(addTags);
+        return tags;
+    },
+
+    _asStringList(value, limit = 20) {
+        const source = Array.isArray(value) ? value : (value ? [value] : []);
+        return source.map(item => String(item || '').trim()).filter(Boolean).slice(0, limit);
     },
 
     getCurrentSituation(scene) {

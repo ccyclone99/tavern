@@ -346,7 +346,7 @@ scene.pendingAction = {
 
 - 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
 - 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选，掷骰时才扣除 `uses` 或数量。
-- `companionResources` 会进入 `availableCompanionModifiers`，玩家可在检定卡点选；掷骰后扣除协助次数并记录可能代价。
+- `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选，掷骰后扣除协助次数，并结算 `cost.trust`、`cost.time` 与可能代价。
 
 ### 4.8 计策与情报资源
 
@@ -718,7 +718,7 @@ Prompt 必须区分以下块：
 - 物品 effects/uses/tags。
 - 多维关系进入计策风险。
 - 情报作为计策资源。
-- 装备和非消耗任务物品进入检定修正；消耗品和同伴协助先在检定卡展示为可选资源，玩家点选后随掷骰消耗。
+- 装备和非消耗任务物品进入检定修正；消耗品和已解锁同伴协助先在检定卡展示为可选资源，玩家点选后随掷骰消耗。同伴协助可用 `trustAtLeast`、`evidenceTags`、`knowledgeTags` 或 `revelationIds` 控制逐步公开。
 - 计策支持 `requiredIntel`、`usedIntel`、`exposure`、`counterplay`。
 
 验收：

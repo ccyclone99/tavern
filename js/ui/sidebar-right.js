@@ -233,7 +233,9 @@ const SidebarRight = {
                 </div>
             `;
         })() : '';
-        const companionResources = (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
+        const companionResources = typeof WorldEngine !== 'undefined' && WorldEngine.getUnlockedCompanionResources
+            ? WorldEngine.getUnlockedCompanionResources(scene)
+            : (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
         const companionResourcesHtml = companionResources.length > 0
             ? `<div class="situation-section">
                 <h4>可用协助</h4>
