@@ -207,7 +207,7 @@ const RunRecorder = {
     },
 
     _buildKeyMoments(scene) {
-        const interesting = new Set(['action', 'strategy', 'check', 'system', 'narrate', 'talk']);
+        const interesting = new Set(['action', 'strategy', 'check', 'system', 'narrate', 'talk', 'gameover', 'victory']);
         const seen = new Set();
         return (scene.messages || [])
             .filter(m => interesting.has(m.type) && this._clean(m.content).length > 0)

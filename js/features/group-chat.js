@@ -1065,8 +1065,18 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+            WorldEngine.recordEvent(scene, {
+                category: 'failure',
+                title: '失败结局',
+                text: msg.content,
+                messageId: msg.id,
+                timestamp: msg.timestamp
+            });
+        }
         if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'defeated', 'HP 归零');
         ChatUI.onMessageAdded(msg);
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderSituation?.();
             SidebarRight.markTabNew?.('situation');
@@ -1095,6 +1105,15 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+            WorldEngine.recordEvent(scene, {
+                category: 'victory',
+                title: '通关',
+                text: msg.content,
+                messageId: msg.id,
+                timestamp: msg.timestamp
+            });
+        }
         if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'victorious', '主线任务完成');
         ChatUI.onMessageAdded(msg);
         if (typeof SidebarRight !== 'undefined') {
