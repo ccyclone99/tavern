@@ -783,6 +783,11 @@ const SidebarRight = {
         const scene = State.scene;
         const inventory = scene ? scene.inventory || [] : [];
         const equipment = scene ? scene.equipment || {} : {};
+        const pendingExplorationRewards = (scene?.pendingExplorationRewards || [])
+            .map((reward, idx) => typeof WorldEngine !== 'undefined' && WorldEngine.normalizePendingExplorationReward
+                ? WorldEngine.normalizePendingExplorationReward(reward, idx)
+                : reward)
+            .filter(Boolean);
         const canMutateInventory = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
             ? WorldEngine.isScenePlaying(scene)
             : !!scene && (!scene.gameState || scene.gameState === 'playing');
@@ -801,10 +806,23 @@ const SidebarRight = {
             </div>`;
         }).join('');
 
-        if (inventory.length === 0) {
+        const pendingRewardsHtml = pendingExplorationRewards.length > 0
+            ? pendingExplorationRewards.slice(0, 6).map(reward => `
+                <div class="inventory-item inventory-pending-reward">
+                    <span class="inv-icon">⏳</span>
+                    <div class="inv-info">
+                        <span class="inv-name">待领取：${Renderer.escapeHtml(reward.item?.name || '探索奖励')}</span>
+                        <span class="inv-desc">${Renderer.escapeHtml(reward.evidenceTitle || '探索收获')} · 清理或消耗背包物品后自动补发</span>
+                    </div>
+                    <span class="inv-hint">待补发</span>
+                </div>
+            `).join('')
+            : '';
+
+        if (inventory.length === 0 && pendingExplorationRewards.length === 0) {
             listEl.innerHTML = '<p class="placeholder">暂无物品</p>';
         } else {
-            listEl.innerHTML = inventory.map(item => {
+            const inventoryHtml = inventory.map(item => {
                 if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(item);
                 const typeIcons = { weapon: '⚔', armor: '🛡', consumable: '🧪', quest: '📜', misc: '📦' };
                 const icon = typeIcons[item.type] || '📦';
@@ -858,6 +876,7 @@ const SidebarRight = {
                     ${actionHtml}
                 </div>`;
             }).join('');
+            listEl.innerHTML = `${pendingRewardsHtml}${inventoryHtml}`;
         }
 
         // 绑定按钮事件（避免动态 onclick 属性带来的注入风险）
