@@ -277,7 +277,7 @@ scene.evidenceLedger = [
 ];
 ```
 
-`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。
+`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。`[quest_update]`、`questsUpdate` 和任务面板手动点击完成都会调用同一闸门；主线只有普通叙事自动识别允许在 `maxAutoQuestAdvances` 内做有限 fallback，显式协议不能靠相似叙事直接完成目标。
 
 `storyPhaseUpdate` 不能直接跳阶段。`WorldEngine.applyStoryPhaseUpdate()` 会在激活下一阶段或完成当前 active 阶段时检查闸门：
 

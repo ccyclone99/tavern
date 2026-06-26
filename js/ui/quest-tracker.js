@@ -72,7 +72,19 @@ const QuestTracker = {
         if (!scene) return;
         const quest = scene.quests.find(q => q.id === questId);
         if (!quest) return;
-        quest.objectives[objIdx].completed = !quest.objectives[objIdx].completed;
+        const objective = quest.objectives[objIdx];
+        if (!objective) return;
+        const nextCompleted = !objective.completed;
+        if (nextCompleted &&
+            typeof WorldEngine !== 'undefined' &&
+            WorldEngine._objectiveAllowedByProgressGates &&
+            !WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, objIdx, '', { manualToggle: true })) {
+            WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果、证据或结论支持。`, 'system');
+            if (typeof showToast !== 'undefined') showToast('任务目标还缺少规则依据');
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            return;
+        }
+        objective.completed = nextCompleted;
 
         // 检查是否所有目标都完成
         if (quest.objectives.every(o => o.completed)) {

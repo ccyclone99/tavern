@@ -1737,6 +1737,10 @@ const WorldEngine = {
         if (this._objectiveSupportedByRevelation(scene, quest, objective, idx)) return true;
         if (this._objectiveSupportedByChallenge(scene, quest, objective, idx)) return true;
 
+        if (options.explicitMarker === true || options.stateUpdate === true || options.manualToggle === true) {
+            return false;
+        }
+
         const maxAuto = Number(scene.gameplayProfile?.checkDensity?.maxAutoQuestAdvances ?? 2);
         const streak = Number(scene.questProgressGuards?.autoAdvanceStreak || 0);
         if (streak >= maxAuto) return false;
