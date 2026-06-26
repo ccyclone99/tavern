@@ -225,6 +225,8 @@ AI 回复文本
 - `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。
 - `recordConsequence()` / `getActiveConsequences()` / `getConsequenceRiskModifier()`：把持续后果写入账本、展示到局势面板，并反馈到行动预览风险/DC。
 
+`QuestTracker` 只负责渲染任务和处理玩家点击；任务奖励、经验、物品和升级副作用必须委托给 `WorldEngine`，不能在任务面板内直接改金币、经验、背包或等级。
+
 ### 行动预览流程
 
 ```text

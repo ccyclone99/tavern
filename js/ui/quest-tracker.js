@@ -128,59 +128,8 @@ const QuestTracker = {
         if (typeof WorldEngine !== 'undefined' && WorldEngine.grantQuestReward) {
             return WorldEngine.grantQuestReward(scene, quest);
         }
-        const rewards = [];
-        // 解析奖励项
-        quest.reward.split(/[,，、]/).forEach(raw => {
-            const item = raw.trim();
-            if (!item) return;
-            const m = item.match(/^(.+?)\s*[x×]\s*(\d+)$/);
-            if (m) {
-                const name = m[1].trim();
-                const qty = parseInt(m[2]);
-                if (/金币|gold|铜币|银币|钱/i.test(name)) {
-                    scene.gold = (scene.gold || 0) + qty;
-                    rewards.push(`💰 金币 +${qty}`);
-                } else if (/经验|exp|experience/i.test(name)) {
-                    this._addExp(qty);
-                    rewards.push(`✨ 经验 +${qty}`);
-                } else {
-                    this._addItem(name, qty);
-                    rewards.push(`🎒 ${name} x${qty}`);
-                }
-            } else {
-                // 无数量，默认 1 个物品
-                if (/金币|gold/i.test(item)) { scene.gold = (scene.gold || 0) + 10; rewards.push('💰 金币 +10'); }
-                else if (/经验|exp/i.test(item)) { this._addExp(20); rewards.push('✨ 经验 +20'); }
-                else { this._addItem(item, 1); rewards.push(`🎒 ${item}`); }
-            }
-        });
-        // 反馈消息
-        if (rewards.length > 0) {
-            const msg = {
-                id: 'msg_' + Date.now() + '_rew',
-                role: 'assistant',
-                content: `获得奖励：${rewards.join('，')}`,
-                type: 'system',
-                timestamp: Date.now()
-            };
-            scene.messages.push(msg);
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-                WorldEngine.recordEvent(scene, {
-                    category: 'quest',
-                    title: '获得奖励',
-                    text: msg.content,
-                    messageId: msg.id,
-                    timestamp: msg.timestamp
-                });
-            }
-            ChatUI.onMessageAdded(msg);
-            if (typeof SidebarRight !== 'undefined') {
-                if (SidebarRight.renderInventory) SidebarRight.renderInventory();
-                if (SidebarRight.renderDetail) SidebarRight.renderDetail();
-                if (SidebarRight.markTabNew) SidebarRight.markTabNew('inventory');
-            }
-            if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        }
+        console.warn('[QuestTracker] WorldEngine.grantQuestReward 不可用，跳过任务奖励发放');
+        return { ok: false, rewards: [], message: '任务奖励系统不可用。' };
     },
 
     /** 加经验并检查升级（每 level×100 经验升 1 级，+2 属性点） */
@@ -190,62 +139,22 @@ const QuestTracker = {
         if (typeof WorldEngine !== 'undefined' && WorldEngine.addExperience) {
             return WorldEngine.addExperience(scene, amount, { source: '任务奖励', silent: true });
         }
-        scene.exp = (scene.exp || 0) + amount;
-        while (true) {
-            const need = (scene.level || 1) * 100;
-            if (scene.exp < need) break;
-            scene.exp -= need;
-            scene.level = (scene.level || 1) + 1;
-            scene.attrPoints = (scene.attrPoints || 0) + 2;
-            // 升级回满血
-            scene.playerMaxHp = typeof WorldEngine !== 'undefined' && WorldEngine.calculatePlayerMaxHp
-                ? WorldEngine.calculatePlayerMaxHp(scene)
-                : 10 + Math.floor((((scene.playerStats && scene.playerStats.constitution) || 10) - 10) / 2) * 4 + (scene.level - 1) * 4;
-            scene.playerHp = scene.playerMaxHp;
-            showToast(`🎉 升级！现在是 ${scene.level} 级，获得 2 属性点`);
-            const msg = {
-                id: 'msg_' + Date.now() + '_lvl',
-                role: 'assistant',
-                content: `升级到 ${scene.level} 级！生命值全满，获得 2 属性点可在详情面板分配`,
-                type: 'system',
-                timestamp: Date.now()
-            };
-            scene.messages.push(msg);
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-                WorldEngine.recordEvent(scene, {
-                    category: 'level',
-                    title: '升级',
-                    text: msg.content,
-                    messageId: msg.id,
-                    timestamp: msg.timestamp
-                });
-            }
-            ChatUI.onMessageAdded(msg);
-        }
+        console.warn('[QuestTracker] WorldEngine.addExperience 不可用，跳过经验发放');
+        return { ok: false, amount: 0, levelsGained: 0, message: '经验系统不可用。' };
     },
 
     /** 添加物品到背包 */
     _addItem(name, qty) {
         const scene = State.scene;
-        if (!scene.inventory) scene.inventory = [];
+        if (!scene) return { ok: false, message: '没有可用场景。' };
         if (typeof WorldEngine !== 'undefined' &&
             WorldEngine.createInventoryItemFromReward &&
-            WorldEngine.addOrMergeInventoryItem) {
+            WorldEngine.grantInventoryItem) {
             const item = WorldEngine.createInventoryItemFromReward(name, qty);
-            if (WorldEngine.addOrMergeInventoryItem(scene, item)) return;
+            return WorldEngine.grantInventoryItem(scene, item, { source: '任务奖励' });
         }
-        const MAX_TOTAL_INVENTORY = 200;
-        const existing = scene.inventory.find(i => i.name === name);
-        if (existing) {
-            existing.quantity = (existing.quantity || 1) + qty;
-        } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
-            scene.inventory.push({
-                id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                name, description: '', type: 'misc', quantity: qty
-            });
-        } else {
-            console.warn(`[QuestTracker] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
-        }
+        console.warn('[QuestTracker] WorldEngine.grantInventoryItem 不可用，跳过物品发放');
+        return { ok: false, message: '物品系统不可用。' };
     },
 
     /** AI 动态添加任务 */
