@@ -708,6 +708,7 @@ const WorldEngine = {
     grantInventoryItem(scene, item, options = {}) {
         if (!scene || !item) return { ok: false, message: '没有可添加的物品。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const normalized = this.normalizeItem({ ...item });
         if (!normalized) return { ok: false, message: '物品数据无效。' };
         const added = this._addOrMergeInventoryItem(scene, normalized);
@@ -753,6 +754,9 @@ const WorldEngine = {
     addExperience(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, levelsGained: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { ok: false, amount: 0, levelsGained: 0, message: this.endedSceneMessage(scene) };
+        }
         if (!Array.isArray(scene.messages)) scene.messages = [];
         const currentLevel = Math.floor(Number(scene.level || 1));
         const currentExp = Math.floor(Number(scene.exp || 0));
@@ -825,6 +829,7 @@ const WorldEngine = {
     addGold(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, amount: 0, message: this.endedSceneMessage(scene) };
         const numeric = Number(amount || 0);
         const delta = Number.isFinite(numeric) ? this._clamp(Math.trunc(numeric), -9999, 9999) : 0;
         if (delta === 0) return { ok: false, amount: 0, message: '金币无变化。' };
@@ -855,6 +860,9 @@ const WorldEngine = {
     addWorldTension(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { ok: false, amount: 0, tension: Number(scene.worldTension || 0), message: this.endedSceneMessage(scene) };
+        }
         const numeric = Number(amount || 0);
         const delta = Number.isFinite(numeric) ? this._clamp(Math.trunc(numeric), -100, 100) : 0;
         if (delta === 0) return { ok: false, amount: 0, tension: Number(scene.worldTension || 0), message: '世界紧张度无变化。' };
@@ -883,6 +891,7 @@ const WorldEngine = {
     applyPlayerDamage(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, amount: 0, message: this.endedSceneMessage(scene) };
         const maxHp = Math.max(1, Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene)));
         scene.playerMaxHp = maxHp;
         const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
@@ -916,6 +925,7 @@ const WorldEngine = {
     applyPlayerHealing(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, amount: 0, message: this.endedSceneMessage(scene) };
         const maxHp = Math.max(1, Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene)));
         scene.playerMaxHp = maxHp;
         const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
@@ -946,6 +956,7 @@ const WorldEngine = {
     grantQuestReward(scene, quest, options = {}) {
         if (!scene || !quest) return { ok: false, rewards: [], message: '没有可发放的任务奖励。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, rewards: [], message: this.endedSceneMessage(scene) };
         const rewardText = String(options.reward || quest.reward || '').trim();
         if (!rewardText) return { ok: false, rewards: [], message: '任务没有奖励。' };
         if (quest.rewardGranted === true) return { ok: false, rewards: [], duplicate: true, message: '任务奖励已经发放。' };
@@ -2240,6 +2251,7 @@ const WorldEngine = {
     removeInventoryItem(scene, itemRef, quantity = 1, options = {}) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const ref = String(itemRef || '').trim();
         if (!ref) return { ok: false, message: '没有指定物品。' };
         const idx = scene.inventory.findIndex(item => item && ((item.id && item.id === ref) || item.name === ref));
