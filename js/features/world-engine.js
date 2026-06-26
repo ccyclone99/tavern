@@ -1742,6 +1742,64 @@ const WorldEngine = {
         return { ok: true, itemName, quantity: removed, removedAll: item.uses !== undefined || currentQty <= requested };
     },
 
+    sellInventoryItem(scene, itemRef, quantity = 1, options = {}) {
+        if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
+        this.normalizeScene(scene);
+        const item = this._findInventoryItem(scene, itemRef);
+        if (!item) return { ok: false, message: '没有找到这个物品。' };
+        if (item.type === 'quest') return { ok: false, message: `${item.name} 是关键物品，不能直接出售。` };
+        if (item.equipped) return { ok: false, message: `${item.name} 已装备，请先卸下再出售。` };
+
+        const available = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+        const requested = options.all === true
+            ? available
+            : this._clamp(Number(quantity || 1), 1, available);
+        const price = this._inventoryItemSalePrice(item, requested);
+        if (price <= 0) return { ok: false, message: `${item.name} 没有可出售价值。` };
+
+        const removed = this.removeInventoryItem(scene, item.id || item.name, requested, {
+            source: '出售',
+            record: true
+        });
+        if (!removed.ok) return removed;
+        const payment = this.addGold(scene, price, { source: `出售${item.name}`, silent: true });
+        if (!payment.ok) return { ok: false, message: '交易结算失败。' };
+
+        const qtyText = removed.quantity > 1 ? ` x${removed.quantity}` : '';
+        this.addSystemMessage(scene, `【出售】${item.name}${qtyText}，获得 ${payment.amount} 金币。`, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName: item.name, quantity: removed.quantity, gold: payment.amount, currentGold: scene.gold };
+    },
+
+    _inventoryItemSalePrice(item, quantity = 1) {
+        if (!item || item.type === 'quest') return 0;
+        const explicit = Number(item.sellPrice ?? item.value ?? item.price);
+        const qty = Math.max(1, Number(quantity || 1));
+        if (Number.isFinite(explicit) && explicit > 0) return this._clamp(Math.floor(explicit * qty), 1, 9999);
+
+        const baseByType = { weapon: 18, armor: 18, accessory: 14, consumable: 8, misc: 5 };
+        let unit = baseByType[item.type] || 5;
+        const effects = Array.isArray(item.effects) ? item.effects : [];
+        effects.forEach(effect => {
+            const value = Math.abs(Number(effect.value ?? effect.checkBonus ?? effect.dcDelta ?? effect.riskDelta ?? 0));
+            if (effect.type === 'heal') unit += Math.min(12, value * 2);
+            else if (effect.type === 'check_bonus') unit += Math.min(12, value * 3);
+            else if (effect.type === 'dc_delta' || effect.type === 'risk_delta') unit += Math.min(10, value * 2);
+            else if (effect.type === 'world_tension' || effect.type === 'clock_delta' || effect.type === 'clock_resist') unit += 4;
+            else if (effect.type === 'strategy_leverage') unit += 5;
+        });
+        if (item.uses !== undefined) {
+            unit += Math.max(0, Math.min(10, Number(item.uses || 0) * 2));
+            return this._clamp(Math.floor(unit), 1, 9999);
+        }
+        return this._clamp(Math.floor(unit * qty), 1, 9999);
+    },
+
     _findItemTargetClock(scene, item, effect = {}) {
         const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
         if (clocks.length === 0) return null;

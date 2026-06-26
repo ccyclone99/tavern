@@ -775,6 +775,19 @@ const ChatUI = {
                 }
                 this._syncInputMode();
                 return true;
+            case 'sell_inventory_item':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.sellInventoryItem) {
+                    const result = WorldEngine.sellInventoryItem(scene, route.meta.itemId || route.meta.itemName, route.meta.quantity, { all: route.meta.all });
+                    if (!result.ok) {
+                        showToast(result.message || '交易未完成');
+                    } else {
+                        await State.saveCurrentSceneDebounced();
+                        showToast(`出售 ${result.itemName}，金币 +${result.gold}`);
+                    }
+                }
+                this._syncInputMode();
+                return true;
             case 'allocate_stat_point':
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.allocateStatPoint) {

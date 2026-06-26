@@ -16,6 +16,8 @@ const IntentRouter = {
         if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
         const equipment = this.matchInventoryEquipment(raw, scene);
         if (equipment) return { kind: `${equipment.action}_inventory_item`, text: raw, meta: equipment, reason: `direct_${equipment.action}` };
+        const sale = this.matchInventorySale(raw, scene);
+        if (sale) return { kind: 'sell_inventory_item', text: raw, meta: sale, reason: 'direct_sell' };
         const itemUse = this.matchInventoryUse(raw, scene);
         if (itemUse) return { kind: 'use_inventory_item', text: raw, meta: itemUse, reason: 'direct_item_use' };
         const purchase = this.matchPurchase(raw);
@@ -170,6 +172,29 @@ const IntentRouter = {
         };
     },
 
+    matchInventorySale(raw, scene) {
+        const text = String(raw || '').trim();
+        if (!scene || !Array.isArray(scene.inventory) || scene.inventory.length === 0) return null;
+        const normalized = this._normalize(text);
+        const prefixes = ['出售', '卖掉', '卖出', '卖'];
+        if (!prefixes.some(p => normalized.startsWith(this._normalize(p)))) return null;
+
+        const candidates = scene.inventory
+            .filter(item => item && item.name)
+            .sort((a, b) => String(b.name).length - String(a.name).length);
+        const matched = candidates.find(item => normalized.includes(this._normalize(item.name)));
+        if (!matched) return null;
+        const quantityMatch = normalized.match(/(?:出售|卖掉|卖出|卖)\s*(全部|全)?\s*(\d+)?/);
+        const all = normalized.includes('全部') || normalized.includes('全卖');
+        const quantity = quantityMatch && quantityMatch[2] ? Number(quantityMatch[2]) : 1;
+        return {
+            itemId: matched.id || '',
+            itemName: matched.name,
+            quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+            all
+        };
+    },
+
     matchPurchase(raw) {
         const normalized = this._normalize(raw);
         const buyWords = ['买', '购买'];
@@ -249,7 +274,7 @@ const IntentRouter = {
         }
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
-            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”“加一点敏捷”。';
+            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”“卖掉短剑”“加一点敏捷”。';
     },
 
     _routePendingCheck(raw, normalized) {
