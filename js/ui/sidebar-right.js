@@ -427,12 +427,31 @@ const SidebarRight = {
                 <span>${Renderer.escapeHtml(m.text || '')}</span>
             </li>
         `).join('');
-        const phases = (record.phaseSummaries || []).slice(0, 5).map(p => `
-            <li>
-                <strong>${Renderer.escapeHtml(p.title || '阶段')}</strong>
-                <span>${Renderer.escapeHtml(p.summary || '')}</span>
-            </li>
-        `).join('');
+        const phases = (record.phaseSummaries || []).slice(0, 5).map(p => {
+            const excerpts = (p.excerpts || []).slice(0, 6).map(entry => {
+                const check = entry.check
+                    ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}</small>`
+                    : '';
+                return `<li class="run-record-phase-excerpt run-record-transcript-${Renderer.escapeAttr(entry.type || 'message')}">
+                    <strong>${Renderer.escapeHtml(entry.speaker || '记录')}<em>${Renderer.escapeHtml(this._eventTimeText(entry.timestamp))}</em></strong>
+                    <p>${Renderer.escapeHtml(entry.text || '')}</p>
+                    ${check}
+                </li>`;
+            }).join('');
+            const excerptBlock = excerpts
+                ? `<details class="run-record-phase-excerpts">
+                    <summary>关键原文（${p.excerptCount || (p.excerpts || []).length}条）</summary>
+                    <ol>${excerpts}</ol>
+                </details>`
+                : '';
+            return `<li>
+                <div class="run-record-phase-summary">
+                    <strong>${Renderer.escapeHtml(p.title || '阶段')}</strong>
+                    <span>${Renderer.escapeHtml(p.summary || '')}</span>
+                </div>
+                ${excerptBlock}
+            </li>`;
+        }).join('');
         const quests = (record.quests || []).slice(0, 6).map(q => `
             <span>${Renderer.escapeHtml(q.name || '任务')}：${Renderer.escapeHtml(q.status || 'active')} ${q.completed || 0}/${q.total || 0}</span>
         `).join('');

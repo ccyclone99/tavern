@@ -3,7 +3,7 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 9,
+    version: 10,
 
     ensure(scene) {
         if (!scene) return scene;
@@ -115,7 +115,7 @@ const RunRecorder = {
                 challengeTitle: entry.check.challengeTitle || ''
             }))
             .slice(-12);
-        const phaseSummaries = this._buildPhaseSummaries(scene, challenges, evidence, checks);
+        const phaseSummaries = this._buildPhaseSummaries(scene, challenges, evidence, checks, transcript);
 
         return {
             id: 'run_' + completedAt + '_' + Math.random().toString(36).slice(2, 6),
@@ -183,7 +183,7 @@ const RunRecorder = {
         return (this._clean(scene.summary || '') || endingMessage).slice(0, 1200);
     },
 
-    _buildPhaseSummaries(scene, challenges = [], evidence = [], checks = []) {
+    _buildPhaseSummaries(scene, challenges = [], evidence = [], checks = [], transcript = []) {
         const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases : [];
         if (phases.length === 0) return [];
         const mainQuest = (scene.quests || []).find(q => q.type === 'main');
@@ -203,6 +203,7 @@ const RunRecorder = {
                 .filter(item => item.completed && objectiveTargets.has(item.target))
                 .map(item => item.text)
                 .slice(0, 4);
+            const excerpts = this._buildPhaseExcerpts(phase, phaseChallenges, phaseEvidence, completedObjectives, transcript);
             const done = phaseChallenges.filter(c => c.status === 'completed').length;
             const total = phaseChallenges.length;
             const evidenceTitles = phaseEvidence.map(e => e.title || '证据').slice(0, 3);
@@ -226,9 +227,101 @@ const RunRecorder = {
                 })).slice(0, 6),
                 evidence: evidenceTitles,
                 checkCount: phaseChecks.length,
-                completedObjectives
+                completedObjectives,
+                excerpts,
+                excerptCount: excerpts.length
             };
         }).filter(p => p.summary);
+    },
+
+    _buildPhaseExcerpts(phase, phaseChallenges = [], phaseEvidence = [], completedObjectives = [], transcript = []) {
+        if (!Array.isArray(transcript) || transcript.length === 0) return [];
+        const challengeTitles = new Set(phaseChallenges.map(c => c.title).filter(Boolean));
+        const rawTerms = [
+            phase?.title,
+            phase?.goal,
+            phase?.stakes,
+            ...(phaseChallenges || []).flatMap(c => [c.title, ...(c.supports || [])]),
+            ...(phaseEvidence || []).map(e => e.title),
+            ...(completedObjectives || [])
+        ];
+        const terms = [...new Set(rawTerms.flatMap(value => this._phaseMatchTerms(value)))].slice(0, 80);
+        if (terms.length === 0 && challengeTitles.size === 0) return [];
+
+        const indexes = new Set();
+        transcript.forEach((entry, idx) => {
+            if (!this._entryMatchesPhase(entry, terms, challengeTitles)) return;
+            [idx - 1, idx, idx + 1].forEach(pos => {
+                if (pos >= 0 && pos < transcript.length) indexes.add(pos);
+            });
+        });
+
+        return [...indexes]
+            .sort((a, b) => a - b)
+            .map(pos => this._transcriptEntryToExcerpt(transcript[pos]))
+            .filter(Boolean)
+            .filter(excerpt => !this._isLowSignalMoment(excerpt.text))
+            .slice(0, 6);
+    },
+
+    _entryMatchesPhase(entry, terms = [], challengeTitles = new Set()) {
+        if (!entry) return false;
+        if (entry.check?.challengeTitle && challengeTitles.has(entry.check.challengeTitle)) return true;
+        const text = this._phaseTerm([
+            entry.speaker,
+            entry.text,
+            entry.check?.intent,
+            entry.check?.challengeTitle
+        ].filter(Boolean).join(' '));
+        if (!text) return false;
+        return terms.some(term => term && (text.includes(term) || (term.length >= 6 && term.includes(text))));
+    },
+
+    _transcriptEntryToExcerpt(entry) {
+        if (!entry) return null;
+        const text = this._clipText(entry.text || '', 180);
+        if (!text) return null;
+        return {
+            index: Number(entry.index || 0),
+            speaker: entry.speaker || '记录',
+            type: entry.type || 'message',
+            text,
+            timestamp: entry.timestamp || 0,
+            check: entry.check ? {
+                statName: entry.check.statName || '检定',
+                total: Number(entry.check.total || 0),
+                dc: Number(entry.check.dc || 0),
+                outcome: entry.check.outcome || '',
+                intent: entry.check.intent || '',
+                challengeTitle: entry.check.challengeTitle || ''
+            } : null
+        };
+    },
+
+    _phaseMatchTerms(value) {
+        const term = this._phaseTerm(value);
+        if (!term) return [];
+        const terms = new Set([term]);
+        const chunks = String(value || '').match(/[a-z0-9_]{3,}|[\u4e00-\u9fff]{2,}/gi) || [];
+        chunks.forEach(chunk => {
+            const clean = this._phaseTerm(chunk);
+            if (clean.length >= 2) terms.add(clean);
+            if (/^[\u4e00-\u9fff]+$/.test(clean) && clean.length > 4) {
+                for (let i = 0; i < clean.length - 1; i += 2) {
+                    const part = clean.slice(i, i + 2);
+                    if (part.length >= 2) terms.add(part);
+                }
+            }
+        });
+        return [...terms].filter(item => item.length >= 2);
+    },
+
+    _phaseTerm(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[：:，,。；;！？!?.、（）()[\]【】"'“”‘’<>《》]/g, '')
+            .trim();
     },
 
     _buildKeyMoments(scene) {

@@ -2251,6 +2251,7 @@
     background: rgba(0,0,0,0.14);
 }
 
+.run-record-phase-summary strong,
 .run-record-phases strong {
     display: block;
     color: var(--text-gold);
@@ -2258,10 +2259,75 @@
     margin-bottom: 2px;
 }
 
+.run-record-phase-summary span,
 .run-record-phases span {
     color: var(--text-dim);
     font-size: 12px;
     line-height: 1.45;
+}
+
+.run-record-phase-excerpts {
+    margin-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    padding-top: 6px;
+}
+
+.run-record-phase-excerpts summary {
+    cursor: pointer;
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 700;
+    outline: none;
+}
+
+.run-record-phase-excerpts ol {
+    list-style: none;
+    margin: 7px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-height: 260px;
+    overflow: auto;
+}
+
+.run-record-phase-excerpt {
+    border-left: 2px solid rgba(251,191,36,0.22);
+    padding-left: 8px;
+}
+
+.run-record-phase-excerpt strong {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-main);
+    font-size: 12px;
+    margin-bottom: 0;
+}
+
+.run-record-phase-excerpt em {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 500;
+}
+
+.run-record-phase-excerpt p {
+    margin: 2px 0 0;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.run-record-phase-excerpt small {
+    display: inline-block;
+    margin-top: 3px;
+    color: var(--text-gold);
+    font-size: 11px;
 }
 
 .run-record-moments li {

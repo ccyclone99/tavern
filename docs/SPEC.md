@@ -569,6 +569,7 @@ UI 要求：
 - `factionsUpdate` 和 `locationUpdate` 必须委托 `WorldEngine.applyFactionUpdates()` / `applyLocationUpdates()`，同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。HP 归零、剧本失败和主线通关的结局消息统一由规则层写入，不能由 UI 或聊天层直接改写 `scene.gameState`。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
+- 通关/失败时的 `scene.runRecord.phaseSummaries` 必须把 `storyPhases`、挑战、证据、主线目标和检定与完整 transcript 关联，生成可展开的关键原文摘录；完整对话仍保留为独立折叠列表。
 - 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志或待领取探索物品丢失，避免重复刷经验、物资丢失或输入状态错乱。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
