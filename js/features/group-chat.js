@@ -131,8 +131,15 @@ const GroupChat = {
             this._reconcileQuestProgressFromNarrative(msg);
 
             // 处理检定标记：生成交互式检定卡，等待玩家点击或输入“掷骰”
+            let createdCheck = false;
             for (const cm of checkMarkers) {
-                this._createPendingCheck(cm.raw, msg.id);
+                if (this._createPendingCheck(cm.raw, msg.id)) createdCheck = true;
+            }
+
+            // 兜底：真实模型有时会按本地行动裁决叙事，但漏掉 [check:auto]。
+            // 对已确认的风险行动，系统仍应自动生成检定，而不是让玩家主动要求。
+            if (!createdCheck && this._shouldCreateLocalCheckFromLatestAction(scene, msg)) {
+                createdCheck = !!this._createPendingCheck('auto', msg.id);
             }
 
             // 更新关系
@@ -141,7 +148,7 @@ const GroupChat = {
                 console.warn('关系分析失败（非致命）:', err.message || err);
             });
 
-            if (checkMarkers.length > 0) {
+            if (createdCheck || checkMarkers.length > 0) {
                 ActionBar.renderPendingCheck();
                 ChatUI._syncInputMode?.();
                 showToast('需要检定：点击或输入“掷骰”继续');
@@ -160,7 +167,7 @@ const GroupChat = {
 
             return {
                 ok: true,
-                pendingCheck: checkMarkers.length > 0 || !!scene.pendingCheck
+                pendingCheck: createdCheck || checkMarkers.length > 0 || !!scene.pendingCheck
             };
 
         } catch (err) {
@@ -395,6 +402,21 @@ const GroupChat = {
         return { statName: statName || '属性', key, val, mod, dc };
     },
 
+    _shouldCreateLocalCheckFromLatestAction(scene, replyMessage) {
+        if (!scene || scene.pendingCheck) return false;
+        const latestAction = [...(scene.messages || [])]
+            .reverse()
+            .find(m => m.type === 'action_intent' && m.actionData);
+        if (!latestAction?.actionData?.suggestedCheck) return false;
+        const latestUserMessage = [...(scene.messages || [])].reverse().find(m => m.role === 'user');
+        if (!latestUserMessage || latestUserMessage.id !== latestAction.id) return false;
+        if (replyMessage?.timestamp && latestAction.timestamp > replyMessage.timestamp) return false;
+        return !(scene.messages || []).some(m =>
+            m.type === 'check' &&
+            m.timestamp >= latestAction.timestamp
+        );
+    },
+
     _parseActionAdjudication(actionData) {
         if (!actionData) return null;
         const adj = actionData.adjudication || actionData.suggestedCheck;
@@ -485,7 +507,7 @@ const GroupChat = {
     async rollPendingCheck() {
         const scene = State.scene;
         const check = scene?.pendingCheck;
-        if (!scene || !check || State.isStreaming) return;
+        if (!scene || !check || State.isStreaming || scene.gameState !== 'playing') return;
 
         const roll = Math.floor(Math.random() * 20) + 1;
         const mod = Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0;
@@ -529,8 +551,12 @@ const GroupChat = {
                 stakes: check.stakes || '',
                 risks: check.risks || [],
                 source: check.source || '',
+                sourceMessageId: check.sourceMessageId || '',
                 actionType: check.actionType || '',
                 intent: check.intent || '',
+                challengeContext: check.challengeContext
+                    ? JSON.parse(JSON.stringify(check.challengeContext))
+                    : null,
                 statMod: Number.isFinite(Number(check.statMod)) ? Number(check.statMod) : mod,
                 itemBonus: Number(check.itemBonus || 0),
                 itemModifiers: Array.isArray(check.itemModifiers) ? check.itemModifiers : [],
@@ -541,18 +567,18 @@ const GroupChat = {
                 : undefined,
             timestamp: Date.now()
         };
+        scene.pendingCheck = null;
+        scene.messages.push(msg);
+        ChatUI.onMessageAdded(msg);
         if (typeof WorldEngine !== 'undefined') {
             WorldEngine.consumeCheckItems(scene, check.itemModifiers || []);
             WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
         }
-        scene.pendingCheck = null;
-        scene.messages.push(msg);
-        ChatUI.onMessageAdded(msg);
         ActionBar.renderPendingCheck();
         ChatUI._syncInputMode?.();
         await State.saveCurrentSceneDebounced();
 
-        if (!this._isCheckContinuation) {
+        if (scene.gameState === 'playing' && !this._isCheckContinuation) {
             this._isCheckContinuation = true;
             try {
                 await this._dmNarrate({
@@ -569,7 +595,7 @@ const GroupChat = {
                 const reason = outcomeInfo.outcome === 'partial'
                     ? 'check_partial'
                     : (success ? 'check_success' : 'check_fail');
-                await WorldEngine.tickAfterPlayerTurn(reason);
+                if (scene.gameState === 'playing') await WorldEngine.tickAfterPlayerTurn(reason);
             }
         }
     },
