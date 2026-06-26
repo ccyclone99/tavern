@@ -246,6 +246,8 @@
 
 结局后的右侧面板仍可查看任务、背包、属性和计策，但应隐藏或置为只读：任务目标不再绑定勾选事件，背包不显示使用/装备/卸下按钮，属性点不显示加号，计策不显示放弃/重新规划入口。规则层仍必须保留最终防线，不能只依赖 UI 隐藏按钮。
 
+同一条 AI 回复中，如果状态补丁或标记已经触发胜利/失败，后续标记、自动检定、自动任务推断和自动关系分析都应停止，避免结局消息之后继续改变 NPC 关系或世界状态。
+
 剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
 结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定和公开时钟。右侧“局势”面板会展示这份冒险回顾。

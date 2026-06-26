@@ -145,11 +145,7 @@ const GroupChat = {
                 createdCheck = !!this._createPendingCheck('auto', msg.id);
             }
 
-            // 更新关系
-            Relationship.ruleBasedUpdate(char.id, cleanedContent);
-            Relationship.analyzeAndUpdate(char.id, scene.messages).catch(err => {
-                console.warn('关系分析失败（非致命）:', err.message || err);
-            });
+            this._updateRelationshipAfterReply(char, cleanedContent, scene);
 
             const waitingForCheck = this._isScenePlaying(scene) && (createdCheck || checkMarkers.length > 0 || !!scene.pendingCheck);
             if (waitingForCheck) {
@@ -1298,5 +1294,14 @@ const GroupChat = {
             console.warn('任务进展推断失败（非致命）:', err.message || err);
             return null;
         }
+    },
+
+    _updateRelationshipAfterReply(char, cleanedContent, scene = State.scene) {
+        if (!char || !this._isScenePlaying(scene)) return false;
+        Relationship.ruleBasedUpdate(char.id, cleanedContent);
+        Relationship.analyzeAndUpdate(char.id, scene.messages).catch(err => {
+            console.warn('关系分析失败（非致命）:', err.message || err);
+        });
+        return true;
     }
 };
