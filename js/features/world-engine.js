@@ -3729,14 +3729,61 @@ const WorldEngine = {
             .toLowerCase();
     },
 
+    resolveCharacterReference(scene, ref = {}) {
+        if (typeof State === 'undefined' || !Array.isArray(State.characters)) return null;
+        const characters = State.characters.filter(Boolean);
+        if (characters.length === 0) return null;
+
+        const activeIds = new Set(Array.isArray(scene?.characters) ? scene.characters.map(String) : []);
+        const candidates = activeIds.size > 0
+            ? characters.filter(char => activeIds.has(String(char.id || '')))
+            : characters;
+
+        const rawId = String(ref.characterId || ref.id || ref.actorId || '').trim();
+        if (rawId) {
+            const byId = characters.find(char => String(char.id || '') === rawId);
+            if (byId) return byId;
+        }
+
+        const refs = [
+            ref.characterName,
+            ref.name,
+            ref.actorName,
+            ref.targetName,
+            ref.character,
+            ref.actor,
+            ref.target,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findCharacterByNameRef(candidates, value);
+            if (match) return match;
+        }
+        return null;
+    },
+
+    _findCharacterByNameRef(characters, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return null;
+        const exact = characters.filter(char => this._normalizeQuestText(char.name || '') === normalized);
+        if (exact.length > 0) return exact.length === 1 ? exact[0] : null;
+
+        const partial = characters.filter(char => {
+            const name = this._normalizeQuestText(char.name || '');
+            return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
+        });
+        return partial.length === 1 ? partial[0] : null;
+    },
+
     applyNpcAgendaUpdate(updates) {
         if (!Array.isArray(updates)) return false;
         const scene = typeof State !== 'undefined' ? State.scene : null;
         if (scene && !this.isScenePlaying(scene)) return false;
         let changed = false;
         updates.slice(0, 20).forEach(update => {
-            if (!update || typeof update !== 'object' || !update.characterId) return;
-            const char = State.characters.find(c => c.id === update.characterId);
+            if (!update || typeof update !== 'object') return;
+            const char = this.resolveCharacterReference(scene, update);
             if (!char) return;
             const agenda = this.normalizeAgenda(char);
             if (update.currentPlan !== undefined) agenda.currentPlan = String(update.currentPlan).slice(0, 220);
