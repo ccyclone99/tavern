@@ -979,6 +979,118 @@ const WorldEngine = {
         return { ok: true, rewards, messageId: msg?.id || '', questName };
     },
 
+    completeQuestObjective(scene, quest, objectiveIdx, options = {}) {
+        if (!scene || !quest || !Array.isArray(quest.objectives)) {
+            return { ok: false, message: '没有可更新的任务目标。' };
+        }
+        this.normalizeScene(scene);
+        const idx = Math.trunc(Number(objectiveIdx));
+        if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
+            return { ok: false, message: '任务目标不存在。' };
+        }
+        const objective = quest.objectives[idx];
+        if (!objective) return { ok: false, message: '任务目标不存在。' };
+        if (objective.completed) return { ok: false, duplicate: true, message: '任务目标已经完成。' };
+
+        const gateOptions = options.gateOptions || {};
+        const allowed = options.skipGate === true || !this._objectiveAllowedByProgressGates ||
+            this._objectiveAllowedByProgressGates(scene, quest, objective, idx, '', gateOptions);
+        if (!allowed) {
+            this.addSystemMessage(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果、证据或结论支持。`, 'system');
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            return { ok: false, blocked: true, message: '任务目标缺少规则依据。' };
+        }
+
+        objective.completed = true;
+        const reason = String(options.reason || '').trim().slice(0, 160);
+        if (options.message !== false) {
+            this.addSystemMessage(scene, `【任务进展：${quest.name}】${objective.text}${reason ? `（${reason}）` : ''}`, 'system');
+        }
+
+        let questCompleted = false;
+        if (quest.objectives.every(o => o.completed)) {
+            quest.status = 'completed';
+            quest.completedAt = quest.completedAt || Date.now();
+            questCompleted = true;
+            if (options.message !== false) this.addSystemMessage(scene, `【任务完成：${quest.name}】`, 'system');
+            this.grantQuestReward(scene, quest);
+        } else if (quest.status !== 'active') {
+            quest.status = 'active';
+        }
+
+        if (scene.questProgressGuards) {
+            scene.questProgressGuards.autoAdvanceStreak = 0;
+            scene.questProgressGuards.lastAdvancedAt = Date.now();
+        }
+        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+        return { ok: true, questCompleted, objectiveIdx: idx, questId: quest.id };
+    },
+
+    applyQuestUpdates(scene, updates, options = {}) {
+        if (!scene || !Array.isArray(updates)) return { changed: false, results: [] };
+        this.normalizeScene(scene);
+        const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
+        const results = [];
+        let changed = false;
+
+        updates.slice(0, 12).forEach(update => {
+            if (!update || typeof update !== 'object' || !update.questId) return;
+            const quest = (scene.quests || []).find(q => q.id === update.questId);
+            if (!quest) return;
+            const reason = update.reason || options.reason || '';
+
+            if (update.objectiveIdx !== undefined || update.objectiveNumber !== undefined) {
+                const idx = update.objectiveIdx !== undefined
+                    ? Math.trunc(Number(update.objectiveIdx))
+                    : Math.trunc(Number(update.objectiveNumber)) - 1;
+                const result = this.completeQuestObjective(scene, quest, idx, {
+                    reason,
+                    gateOptions: { stateUpdate: options.stateUpdate !== false }
+                });
+                results.push({ questId: quest.id, objectiveIdx: idx, ...result });
+                changed = result.ok || changed;
+            }
+
+            if (update.status && validQuestStatuses.includes(update.status)) {
+                if (update.status === 'completed') {
+                    const allDone = (quest.objectives || []).every(o => o.completed);
+                    const structured = this._sceneUsesStructuredProgress(scene);
+                    if (allDone) {
+                        const wasCompleted = quest.status === 'completed';
+                        quest.status = 'completed';
+                        quest.completedAt = quest.completedAt || Date.now();
+                        if (!wasCompleted) this.addSystemMessage(scene, `【任务完成：${quest.name}】`, 'system');
+                        this.grantQuestReward(scene, quest);
+                        changed = true;
+                    } else if (!structured) {
+                        (quest.objectives || []).forEach((objective, idx) => {
+                            if (!objective.completed) {
+                                const result = this.completeQuestObjective(scene, quest, idx, {
+                                    reason,
+                                    skipGate: true
+                                });
+                                results.push({ questId: quest.id, objectiveIdx: idx, ...result });
+                                changed = result.ok || changed;
+                            }
+                        });
+                    } else {
+                        this.addSystemMessage(scene, `【任务完成待确认：${quest.name}】仍有目标缺少挑战、证据或结论支持。`, 'system');
+                    }
+                } else if (quest.status !== update.status) {
+                    quest.status = update.status;
+                    changed = true;
+                }
+            }
+        });
+
+        if (changed) {
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        }
+        return { changed, results };
+    },
+
     _parseQuestRewardEntries(rewardText) {
         return String(rewardText || '')
             .split(/[,，、;]/)
@@ -2355,10 +2467,14 @@ const WorldEngine = {
         return questName && text.includes(questName) && has(['完成', '通过', '确认', '认可']);
     },
 
+    _sceneUsesStructuredProgress(scene) {
+        return (scene?.sceneChallenges || []).length > 0 ||
+            (scene?.evidenceLedger || []).length > 0 ||
+            (scene?.flowGraph?.revelations || []).length > 0;
+    },
+
     _objectiveAllowedByProgressGates(scene, quest, objective, idx, narrative, options = {}) {
-        const structured = (scene.sceneChallenges || []).length > 0 ||
-            (scene.evidenceLedger || []).length > 0 ||
-            (scene.flowGraph?.revelations || []).length > 0;
+        const structured = this._sceneUsesStructuredProgress(scene);
         if (!structured) return true;
 
         const type = quest.type || 'side';

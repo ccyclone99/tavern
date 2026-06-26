@@ -122,7 +122,7 @@ AI 回复文本
 | 文件 | 职责 |
 |------|------|
 | `world-generator.js` | 预设世界、自定义世界生成提示词、模板应用到 scene/characters |
-| `world-engine.js` | 局势时钟、剧情弧推进、NPC 日程/离屏行动、反制、消息可见性、物品效果规则 |
+| `world-engine.js` | 局势时钟、剧情弧推进、NPC 日程/离屏行动、反制、消息可见性、物品效果规则、任务目标闸门与奖励结算 |
 | `action-planner.js` | 本地行动意图分类、风险预览、建议检定估算 |
 | `intent-router.js` | 单输入框自然语言路由，处理帮助、pending action/check、计策、OOC 和高风险行动预览 |
 | `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |

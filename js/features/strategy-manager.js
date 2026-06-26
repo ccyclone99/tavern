@@ -183,6 +183,7 @@ const StrategyManager = {
         let tensionChanged = false;
         let factionChanged = false;
         let relationChanged = false;
+        let questChanged = false;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -473,28 +474,21 @@ const StrategyManager = {
         // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
         const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
         if (Array.isArray(update.questsUpdate)) {
-            for (const qu of update.questsUpdate) {
-                if (!qu || typeof qu !== 'object' || !qu.questId) continue;
-                const quest = scene.quests.find(q => q.id === qu.questId);
-                if (!quest) continue;
-                if (qu.objectiveIdx !== undefined && quest.objectives[qu.objectiveIdx]) {
-                    const objective = quest.objectives[qu.objectiveIdx];
-                    const allowed = typeof WorldEngine === 'undefined' || !WorldEngine._objectiveAllowedByProgressGates ||
-                        WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, qu.objectiveIdx, '', { stateUpdate: true });
-                    if (allowed) {
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.applyQuestUpdates) {
+                const result = WorldEngine.applyQuestUpdates(scene, update.questsUpdate, { stateUpdate: true });
+                questChanged = !!result.changed;
+            } else {
+                for (const qu of update.questsUpdate) {
+                    if (!qu || typeof qu !== 'object' || !qu.questId) continue;
+                    const quest = scene.quests.find(q => q.id === qu.questId);
+                    if (!quest) continue;
+                    if (qu.objectiveIdx !== undefined && quest.objectives[qu.objectiveIdx]) {
                         quest.objectives[qu.objectiveIdx].completed = true;
-                    } else {
-                        WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果或证据支持。`, 'system');
+                        questChanged = true;
                     }
-                }
-                if (qu.status && validQuestStatuses.includes(qu.status)) {
-                    const structured = (scene.sceneChallenges || []).length > 0 || (scene.evidenceLedger || []).length > 0 || (scene.flowGraph?.revelations || []).length > 0;
-                    if (qu.status !== 'completed' || !structured || (quest.objectives || []).every(o => o.completed)) {
+                    if (qu.status && validQuestStatuses.includes(qu.status)) {
                         quest.status = qu.status;
-                        if (qu.status === 'completed' && typeof WorldEngine !== 'undefined' && WorldEngine.grantQuestReward) {
-                            quest.completedAt = quest.completedAt || Date.now();
-                            WorldEngine.grantQuestReward(scene, quest);
-                        }
+                        questChanged = true;
                     }
                 }
             }
@@ -608,7 +602,8 @@ const StrategyManager = {
         if (discoveryChanged || relationChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged || locAdded) SidebarRight.markTabNew('situation');
+        if (questChanged) SidebarRight.markTabNew('quests');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged || questChanged || locAdded) SidebarRight.markTabNew('situation');
     },
 
     _buildStateUpdateItem(data, quantity) {

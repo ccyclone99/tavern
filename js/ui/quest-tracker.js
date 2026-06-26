@@ -75,22 +75,28 @@ const QuestTracker = {
         const objective = quest.objectives[objIdx];
         if (!objective) return;
         const nextCompleted = !objective.completed;
-        if (nextCompleted &&
-            typeof WorldEngine !== 'undefined' &&
-            WorldEngine._objectiveAllowedByProgressGates &&
-            !WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, objIdx, '', { manualToggle: true })) {
-            WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果、证据或结论支持。`, 'system');
-            if (typeof showToast !== 'undefined') showToast('任务目标还缺少规则依据');
-            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+        if (nextCompleted && typeof WorldEngine !== 'undefined' && WorldEngine.completeQuestObjective) {
+            const result = WorldEngine.completeQuestObjective(scene, quest, objIdx, {
+                gateOptions: { manualToggle: true }
+            });
+            if (!result.ok) {
+                if (typeof showToast !== 'undefined') showToast(result.blocked ? '任务目标还缺少规则依据' : (result.message || '任务目标未更新'));
+                return;
+            }
+            if (result.questCompleted && typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
+            State.saveCurrentScene().catch(e => console.warn('任务状态保存失败:', e));
+            this.render();
+            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
             return;
         }
         objective.completed = nextCompleted;
+        if (!nextCompleted && quest.status === 'completed') quest.status = 'active';
 
         // 检查是否所有目标都完成
         if (quest.objectives.every(o => o.completed)) {
             quest.status = 'completed';
             this._grantReward(quest);
-            showToast(`任务完成：${quest.name}`);
+            if (typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
             // 插入任务完成消息
             const msg = {
                 id: 'msg_' + Date.now(),
@@ -187,18 +193,19 @@ const QuestTracker = {
         const idx = (parseInt(objIdx) || 1) - 1;
         if (idx >= 0 && idx < quest.objectives.length) {
             const objective = quest.objectives[idx];
-            if (typeof WorldEngine !== 'undefined' &&
-                WorldEngine._objectiveAllowedByProgressGates &&
-                !WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, idx, '', { explicitMarker: true })) {
-                WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果或证据支持。`, 'system');
-                SidebarRight.renderSituation?.();
-                return;
-            }
-            quest.objectives[idx].completed = true;
-            if (quest.objectives.every(o => o.completed)) {
-                quest.status = 'completed';
-                this._grantReward(quest);
-                showToast(`任务完成：${quest.name}`);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.completeQuestObjective) {
+                const result = WorldEngine.completeQuestObjective(scene, quest, idx, {
+                    gateOptions: { explicitMarker: true }
+                });
+                if (!result.ok) return;
+                if (result.questCompleted && typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
+            } else {
+                quest.objectives[idx].completed = true;
+                if (quest.objectives.every(o => o.completed)) {
+                    quest.status = 'completed';
+                    this._grantReward(quest);
+                    if (typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
+                }
             }
             State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
             this.render();
