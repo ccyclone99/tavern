@@ -190,13 +190,13 @@ AI 回复文本
 - 创建/更新计策。
 - 添加玩家知识账本条目（兼容旧 `intelAdd`）。
 - 更新 NPC 档案解锁状态。
-- 更新势力。
+- 更新势力（委托 `WorldEngine.applyFactionUpdates()`）。
 - 更新角色关系、警觉、心情、秘密。
 - 更新局势时钟、剧情弧、NPC 日程和反制计划。
 - 通过 `WorldEngine.addWorldTension()` 应用 `worldTensionDelta`，并更新 `activeStrategyId`。
 - 更新已有任务目标/状态。
 - 添加物品。
-- 新增/更新地点。
+- 新增/更新地点（委托 `WorldEngine.applyLocationUpdates()`）。
 
 不允许：
 
@@ -214,7 +214,7 @@ AI 回复文本
 `WorldEngine` 提供：
 
 - `normalizeScene()`：补齐 `clocks`、`counterStrategies`、`currentSituation`、`turnCount`。
-- `applyClockUpdate()` / `applyStoryArcUpdate()` / `applyCounterStrategyUpdate()` / `applyNpcAgendaUpdate()`：供 `StrategyManager` 白名单调用。
+- `applyClockUpdate()` / `applyStoryArcUpdate()` / `applyFactionUpdates()` / `applyLocationUpdates()` / `applyCounterStrategyUpdate()` / `applyNpcAgendaUpdate()`：供 `StrategyManager` 白名单调用。
 - `tickAfterPlayerTurn()`：成功完成的玩家回合、休息、部分成功/失败后推进时钟并触发离屏行动；AI 回复失败/中断不推进，待掷检定会延后到掷骰结算后推进。
 - `filterMessagesForCharacter()`：按 `message.visibility` 过滤当前 NPC 可见历史。
 - `getCheckItemBonus()` / `getAvailableCheckItems()` / `consumeCheckItems()`：把自动物品修正和可用消耗品接入检定卡。

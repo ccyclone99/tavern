@@ -244,16 +244,12 @@ const StrategyManager = {
 
         // 单条补丁上限，防止 AI 回复胀大存储
         const MAX_INTEL_PER_UPDATE = 10;
-        const MAX_FACTIONS_PER_UPDATE = 20;
         const MAX_RELATION_UPDATES_PER_UPDATE = 30;
         const MAX_RELATION_ADDITIONS_PER_FIELD = 8;
         const MAX_RELATION_LEVERAGE = 20;
         const MAX_RELATION_MEMORIES = 30;
         const MAX_CHARACTER_SECRETS = 20;
         const MAX_ITEMS_PER_UPDATE = 50;
-        const MAX_LOCATIONS_PER_UPDATE = 20;
-        const MAX_TOTAL_FACTIONS = 40;
-        const MAX_TOTAL_LOCATIONS = 80;
         const MAX_TOTAL_INVENTORY = 200;
         const MAX_STRATEGIES_PER_UPDATE = this.maxStrategiesPerUpdate;
         const MAX_STRATEGY_UPDATES_PER_UPDATE = this.maxStrategyUpdatesPerUpdate;
@@ -451,61 +447,13 @@ const StrategyManager = {
 
         // 3. factionsUpdate
         if (!stoppedByEnding && Array.isArray(update.factionsUpdate)) {
-            if (!Array.isArray(scene.factions)) scene.factions = [];
-            if (update.factionsUpdate.length > MAX_FACTIONS_PER_UPDATE) {
-                console.warn(`[StrategyManager] factionsUpdate 超过单条上限 ${MAX_FACTIONS_PER_UPDATE}，已截断`);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.applyFactionUpdates) {
+                const result = WorldEngine.applyFactionUpdates(scene, update.factionsUpdate, { source: '状态补丁' });
+                factionChanged = !!result.changed;
+            } else {
+                console.warn('[StrategyManager] WorldEngine.applyFactionUpdates 不可用，跳过 factionsUpdate');
             }
-            for (const f of update.factionsUpdate.slice(0, MAX_FACTIONS_PER_UPDATE)) {
-                if (!f || typeof f !== 'object' || !f.name) continue;
-                const factionName = String(f.name).trim().slice(0, 80);
-                if (!factionName) continue;
-                const existing = scene.factions.find(x => String(x.name || '').trim() === factionName);
-                const changes = [];
-                if (existing) {
-                    if (f.attitude !== undefined) {
-                        const before = Number.isFinite(Number(existing.attitude)) ? Number(existing.attitude) : 0;
-                        const next = this._clampNumber(f.attitude, -100, 100, 0);
-                        if (next !== before) changes.push(`态度 ${this._formatSignedChange(next - before)}（${next}）`);
-                        existing.attitude = next;
-                    }
-                    if (f.power !== undefined) {
-                        const before = Number.isFinite(Number(existing.power)) ? Number(existing.power) : 0;
-                        const next = this._clampNumber(f.power, 0, 100, 0);
-                        if (next !== before) changes.push(`实力 ${before}→${next}`);
-                        existing.power = next;
-                    }
-                    if (f.description !== undefined) {
-                        const before = String(existing.description || '');
-                        const next = String(f.description || '').slice(0, 240);
-                        if (next !== before) changes.push('描述更新');
-                        existing.description = next;
-                    }
-                    if (Array.isArray(f.leverage)) {
-                        const next = this._stringList(f.leverage, 20, 120);
-                        if (!this._sameStringList(existing.leverage, next)) changes.push(`筹码更新（${next.length}项）`);
-                        existing.leverage = next;
-                    }
-                } else {
-                    if (scene.factions.length >= MAX_TOTAL_FACTIONS) {
-                        console.warn(`[StrategyManager] factions 已达总上限 ${MAX_TOTAL_FACTIONS}，跳过新增势力：${factionName}`);
-                        continue;
-                    }
-                    const leverage = Array.isArray(f.leverage) ? this._stringList(f.leverage, 20, 120) : [];
-                    scene.factions.push({
-                        name: factionName,
-                        attitude: this._clampNumber(f.attitude, -100, 100, 0),
-                        power: this._clampNumber(f.power, 0, 100, 0),
-                        description: String(f.description || '').slice(0, 240),
-                        leverage
-                    });
-                    changes.push('新增势力');
-                    if (leverage.length > 0) changes.push(`筹码 ${leverage.length} 项`);
-                }
-                if (changes.length) {
-                    factionChanged = true;
-                    this._recordStatePatchEvent(scene, '势力变化', `${factionName}：${changes.join('，')}`);
-                }
-            }
+            stopIfEnded('factionsUpdate');
         }
 
         // 4. characterUpdates（仅允许修改关系/警觉/秘密等安全字段）
@@ -660,61 +608,13 @@ const StrategyManager = {
         }
 
         if (!stoppedByEnding && Array.isArray(update.locationUpdate)) {
-            if (!Array.isArray(scene.locations)) scene.locations = [];
-            if (update.locationUpdate.length > MAX_LOCATIONS_PER_UPDATE) {
-                console.warn(`[StrategyManager] locationUpdate 超过单条上限 ${MAX_LOCATIONS_PER_UPDATE}，已截断`);
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.applyLocationUpdates) {
+                const result = WorldEngine.applyLocationUpdates(scene, update.locationUpdate, { source: '状态补丁' });
+                locAdded = !!result.changed;
+            } else {
+                console.warn('[StrategyManager] WorldEngine.applyLocationUpdates 不可用，跳过 locationUpdate');
             }
-            for (const loc of update.locationUpdate.slice(0, MAX_LOCATIONS_PER_UPDATE)) {
-                if (!loc || typeof loc !== 'object' || !loc.id) continue;
-                const locationId = String(loc.id).trim().slice(0, 100);
-                if (!locationId) continue;
-                const existing = scene.locations.find(l => String(l.id) === locationId);
-                const changes = [];
-                if (existing) {
-                    if (loc.name) {
-                        const next = String(loc.name).trim().slice(0, 80);
-                        if (next && next !== existing.name) changes.push(`名称：${next}`);
-                        if (next) existing.name = next;
-                    }
-                    if (loc.description !== undefined) {
-                        const before = String(existing.description || '');
-                        const next = String(loc.description || '').slice(0, 240);
-                        if (next !== before) changes.push('描述更新');
-                        existing.description = next;
-                    }
-                    if (loc.alertLevel !== undefined) {
-                        const before = Number.isFinite(Number(existing.alertLevel)) ? Number(existing.alertLevel) : 0;
-                        const next = this._clampNumber(loc.alertLevel, 0, 100, 0);
-                        if (next !== before) changes.push(`警戒 ${before}→${next}`);
-                        existing.alertLevel = next;
-                    }
-                    if (Array.isArray(loc.connections)) {
-                        const next = this._stringList(loc.connections, 20, 100);
-                        if (!this._sameStringList(existing.connections, next)) changes.push(`出口更新（${next.length}处）`);
-                        existing.connections = next;
-                    }
-                } else {
-                    if (scene.locations.length >= MAX_TOTAL_LOCATIONS) {
-                        console.warn(`[StrategyManager] locations 已达总上限 ${MAX_TOTAL_LOCATIONS}，跳过新增地点：${locationId}`);
-                        continue;
-                    }
-                    const connections = Array.isArray(loc.connections) ? this._stringList(loc.connections, 20, 100) : [];
-                    scene.locations.push({
-                        id: locationId,
-                        name: String(loc.name || locationId).trim().slice(0, 80) || locationId,
-                        description: String(loc.description || '').slice(0, 240),
-                        connections,
-                        alertLevel: this._clampNumber(loc.alertLevel, 0, 100, 0)
-                    });
-                    changes.push('新增地点');
-                    if (connections.length > 0) changes.push(`出口 ${connections.length} 处`);
-                }
-                if (changes.length) {
-                    locAdded = true;
-                    const displayName = String((existing || scene.locations.find(l => l.id === locationId))?.name || locationId);
-                    this._recordStatePatchEvent(scene, '地图变化', `${displayName}：${changes.join('，')}`, 'movement');
-                }
-            }
+            stopIfEnded('locationUpdate');
         }
 
         State.saveCurrentSceneDebounced();
@@ -841,13 +741,6 @@ const StrategyManager = {
             list: current.slice(-totalLimit),
             added
         };
-    },
-
-    _sameStringList(a, b) {
-        const left = this._stringList(a, 200);
-        const right = this._stringList(b, 200);
-        if (left.length !== right.length) return false;
-        return left.every((item, idx) => item === right[idx]);
     },
 
     _formatSignedChange(delta) {

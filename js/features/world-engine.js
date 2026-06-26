@@ -1312,6 +1312,178 @@ const WorldEngine = {
         return { ok: true, loc, msg: options.message !== false ? msg : null };
     },
 
+    applyFactionUpdates(scene, updates, options = {}) {
+        if (!scene || !Array.isArray(updates)) return { changed: false, added: 0, updated: 0, skipped: 0 };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { changed: false, blocked: true, added: 0, updated: 0, skipped: updates.length, message: this.endedSceneMessage(scene) };
+        }
+        if (!Array.isArray(scene.factions)) scene.factions = [];
+
+        const maxPerUpdate = this._clampOr(options.maxPerUpdate ?? 20, 1, 100, 20);
+        const maxTotal = this._clampOr(options.maxTotal ?? 40, 1, 200, 40);
+        if (updates.length > maxPerUpdate) {
+            console.warn(`[WorldEngine] factionsUpdate 超过单条上限 ${maxPerUpdate}，已截断`);
+        }
+
+        let added = 0;
+        let updated = 0;
+        let skipped = Math.max(0, updates.length - maxPerUpdate);
+        updates.slice(0, maxPerUpdate).forEach(raw => {
+            if (!raw || typeof raw !== 'object' || !raw.name) {
+                skipped += 1;
+                return;
+            }
+            const factionName = String(raw.name || '').trim().slice(0, 80);
+            if (!factionName) {
+                skipped += 1;
+                return;
+            }
+
+            const existing = scene.factions.find(item => String(item?.name || '').trim() === factionName);
+            const changes = [];
+            if (existing) {
+                if (raw.attitude !== undefined) {
+                    const before = Number.isFinite(Number(existing.attitude)) ? Number(existing.attitude) : 0;
+                    const next = this._clampOr(raw.attitude, -100, 100, 0);
+                    if (next !== before) changes.push(`态度 ${this._formatSigned(next - before)}（${next}）`);
+                    existing.attitude = next;
+                }
+                if (raw.power !== undefined) {
+                    const before = Number.isFinite(Number(existing.power)) ? Number(existing.power) : 0;
+                    const next = this._clampOr(raw.power, 0, 100, 0);
+                    if (next !== before) changes.push(`实力 ${before}→${next}`);
+                    existing.power = next;
+                }
+                if (raw.description !== undefined) {
+                    const before = String(existing.description || '');
+                    const next = String(raw.description || '').slice(0, 240);
+                    if (next !== before) changes.push('描述更新');
+                    existing.description = next;
+                }
+                if (Array.isArray(raw.leverage)) {
+                    const next = this._limitedUniqueStringList(raw.leverage, 20, 120);
+                    if (!this._sameStringList(existing.leverage, next)) changes.push(`筹码更新（${next.length}项）`);
+                    existing.leverage = next;
+                }
+                if (changes.length > 0) updated += 1;
+            } else {
+                if (scene.factions.length >= maxTotal) {
+                    console.warn(`[WorldEngine] factions 已达总上限 ${maxTotal}，跳过新增势力：${factionName}`);
+                    skipped += 1;
+                    return;
+                }
+                const leverage = Array.isArray(raw.leverage) ? this._limitedUniqueStringList(raw.leverage, 20, 120) : [];
+                scene.factions.push({
+                    name: factionName,
+                    attitude: raw.attitude !== undefined ? this._clampOr(raw.attitude, -100, 100, 0) : 0,
+                    power: raw.power !== undefined ? this._clampOr(raw.power, 0, 100, 0) : 0,
+                    description: String(raw.description || '').slice(0, 240),
+                    leverage
+                });
+                changes.push('新增势力');
+                if (leverage.length > 0) changes.push(`筹码 ${leverage.length} 项`);
+                added += 1;
+            }
+
+            if (changes.length > 0) {
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '势力变化',
+                    text: `${factionName}：${changes.join('，')}`
+                });
+            }
+        });
+
+        return { changed: added > 0 || updated > 0, added, updated, skipped };
+    },
+
+    applyLocationUpdates(scene, updates, options = {}) {
+        if (!scene || !Array.isArray(updates)) return { changed: false, added: 0, updated: 0, skipped: 0 };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { changed: false, blocked: true, added: 0, updated: 0, skipped: updates.length, message: this.endedSceneMessage(scene) };
+        }
+        if (!Array.isArray(scene.locations)) scene.locations = [];
+
+        const maxPerUpdate = this._clampOr(options.maxPerUpdate ?? 20, 1, 100, 20);
+        const maxTotal = this._clampOr(options.maxTotal ?? 80, 1, 300, 80);
+        if (updates.length > maxPerUpdate) {
+            console.warn(`[WorldEngine] locationUpdate 超过单条上限 ${maxPerUpdate}，已截断`);
+        }
+
+        let added = 0;
+        let updated = 0;
+        let skipped = Math.max(0, updates.length - maxPerUpdate);
+        updates.slice(0, maxPerUpdate).forEach(raw => {
+            if (!raw || typeof raw !== 'object' || !raw.id) {
+                skipped += 1;
+                return;
+            }
+            const locationId = String(raw.id || '').trim().slice(0, 100);
+            if (!locationId) {
+                skipped += 1;
+                return;
+            }
+
+            const existing = scene.locations.find(item => String(item?.id || '') === locationId);
+            const changes = [];
+            if (existing) {
+                if (raw.name) {
+                    const next = String(raw.name || '').trim().slice(0, 80);
+                    if (next && next !== existing.name) changes.push(`名称：${next}`);
+                    if (next) existing.name = next;
+                }
+                if (raw.description !== undefined) {
+                    const before = String(existing.description || '');
+                    const next = String(raw.description || '').slice(0, 240);
+                    if (next !== before) changes.push('描述更新');
+                    existing.description = next;
+                }
+                if (raw.alertLevel !== undefined) {
+                    const before = Number.isFinite(Number(existing.alertLevel)) ? Number(existing.alertLevel) : 0;
+                    const next = this._clampOr(raw.alertLevel, 0, 100, 0);
+                    if (next !== before) changes.push(`警戒 ${before}→${next}`);
+                    existing.alertLevel = next;
+                }
+                if (Array.isArray(raw.connections)) {
+                    const next = this._limitedUniqueStringList(raw.connections, 20, 100);
+                    if (!this._sameStringList(existing.connections, next)) changes.push(`出口更新（${next.length}处）`);
+                    existing.connections = next;
+                }
+                if (changes.length > 0) updated += 1;
+            } else {
+                if (scene.locations.length >= maxTotal) {
+                    console.warn(`[WorldEngine] locations 已达总上限 ${maxTotal}，跳过新增地点：${locationId}`);
+                    skipped += 1;
+                    return;
+                }
+                const connections = Array.isArray(raw.connections) ? this._limitedUniqueStringList(raw.connections, 20, 100) : [];
+                scene.locations.push({
+                    id: locationId,
+                    name: String(raw.name || locationId).trim().slice(0, 80) || locationId,
+                    description: String(raw.description || '').slice(0, 240),
+                    connections,
+                    alertLevel: raw.alertLevel !== undefined ? this._clampOr(raw.alertLevel, 0, 100, 0) : 0
+                });
+                changes.push('新增地点');
+                if (connections.length > 0) changes.push(`出口 ${connections.length} 处`);
+                added += 1;
+            }
+
+            if (changes.length > 0) {
+                const target = existing || scene.locations.find(item => item && item.id === locationId);
+                this.recordEvent(scene, {
+                    category: 'movement',
+                    title: '地图变化',
+                    text: `${target?.name || locationId}：${changes.join('，')}`
+                });
+            }
+        });
+
+        return { changed: added > 0 || updated > 0, added, updated, skipped };
+    },
+
     addExistingCharacterToScene(scene, charId, options = {}) {
         if (!scene) return { ok: false, message: '没有可用场景。' };
         this.normalizeScene(scene);
@@ -5115,6 +5287,31 @@ const WorldEngine = {
         return source.map(item => String(item || '').trim()).filter(Boolean).slice(0, limit);
     },
 
+    _limitedUniqueStringList(value, limit = 20, itemLimit = 160) {
+        const seen = new Set();
+        const output = [];
+        const source = Array.isArray(value) ? value : (value ? [value] : []);
+        source.forEach(item => {
+            const text = String(item || '').trim().slice(0, itemLimit);
+            if (!text || seen.has(text)) return;
+            seen.add(text);
+            output.push(text);
+        });
+        return output.slice(0, limit);
+    },
+
+    _sameStringList(a, b) {
+        const left = this._limitedUniqueStringList(a, 200);
+        const right = this._limitedUniqueStringList(b, 200);
+        if (left.length !== right.length) return false;
+        return left.every((item, idx) => item === right[idx]);
+    },
+
+    _formatSigned(delta) {
+        const num = Number(delta) || 0;
+        return `${num > 0 ? '+' : ''}${num}`;
+    },
+
     getPreparationHints(scene, options = {}) {
         if (!scene) return [];
         this.normalizeScene(scene);
@@ -6316,6 +6513,12 @@ const WorldEngine = {
     _clamp(value, min, max) {
         const n = Number(value);
         if (!Number.isFinite(n)) return min;
+        return Math.max(min, Math.min(max, Math.round(n)));
+    },
+
+    _clampOr(value, min, max, fallback = min) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
         return Math.max(min, Math.min(max, Math.round(n)));
     }
 };
