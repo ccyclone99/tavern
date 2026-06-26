@@ -645,10 +645,18 @@ const GroupChat = {
                     createdAt: msg.timestamp
                 });
             }
-            WorldEngine.consumeCheckItems(scene, totals.itemModifiers || []);
-            WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
-            WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
-            if (WorldEngine.resolveCounterStrategies) {
+            const inventoryCountBeforeCheckItems = Array.isArray(scene.inventory) ? scene.inventory.length : null;
+            WorldEngine.consumeCheckItems(scene, totals.itemModifiers || [], { retryPendingRewards: false });
+            const shouldRetryPendingRewards = inventoryCountBeforeCheckItems !== null
+                && Array.isArray(scene.inventory)
+                && scene.inventory.length < inventoryCountBeforeCheckItems;
+            if (scene.gameState === 'playing') {
+                WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
+            }
+            if (scene.gameState === 'playing') {
+                WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+            }
+            if (scene.gameState === 'playing' && WorldEngine.resolveCounterStrategies) {
                 const counterplayResults = WorldEngine.resolveCounterStrategies(scene, {
                     outcome: outcomeInfo.outcome,
                     actionType: check.actionType || '',
@@ -673,7 +681,7 @@ const GroupChat = {
                     }));
                 }
             }
-            if (WorldEngine.resolveRelevantConsequences) {
+            if (scene.gameState === 'playing' && WorldEngine.resolveRelevantConsequences) {
                 const resolvedConsequences = WorldEngine.resolveRelevantConsequences(scene, {
                     outcome: outcomeInfo.outcome,
                     actionType: check.actionType || '',
@@ -692,6 +700,9 @@ const GroupChat = {
                         severity: item.severity
                     }));
                 }
+            }
+            if (shouldRetryPendingRewards && scene.gameState === 'playing') {
+                WorldEngine._retryPendingQuestRewardsAfterInventoryChange?.(scene);
             }
         }
         ActionBar.renderPendingCheck();

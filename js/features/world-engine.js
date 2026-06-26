@@ -2517,11 +2517,19 @@ const WorldEngine = {
         if (approach) {
             this._applyChallengeApproachEffects(scene, challenge, approach, outcome, check);
         }
+        if (!this.isScenePlaying(scene)) {
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            return { challenge, progressDelta, strainDelta, outcome, ended: true };
+        }
         if (approach && outcome === 'critical_success' && Array.isArray(ctx.secondaryApproachIds)) {
             const secondary = (challenge.approaches || [])
                 .filter(a => ctx.secondaryApproachIds.includes(a.id))
                 .slice(0, 1);
             secondary.forEach(item => this._applyChallengeApproachEffects(scene, challenge, item, 'success', check));
+        }
+        if (!this.isScenePlaying(scene)) {
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            return { challenge, progressDelta, strainDelta, outcome, ended: true };
         }
         challenge = scene.sceneChallenges.find(c => c.id === challengeId) || challenge;
         this._settleChallengeStatus(scene, challenge, challenge.lastReason);
@@ -2888,6 +2896,12 @@ const WorldEngine = {
                 delta: reason === 'rest' ? 2 : 1,
                 reason
             }]);
+            if (!this.isScenePlaying(scene)) {
+                this._trimSituation(scene);
+                SidebarRight.renderSituation?.();
+                await State.saveCurrentSceneDebounced();
+                return;
+            }
         }
 
         const offscreenMessages = this.runNpcOffscreenActions(scene);
@@ -3383,7 +3397,7 @@ const WorldEngine = {
             .filter(Boolean);
     },
 
-    consumeCheckItems(scene, modifiers = []) {
+    consumeCheckItems(scene, modifiers = [], options = {}) {
         if (!scene || !Array.isArray(scene.inventory)) return false;
         let consumed = false;
         const inventoryCountBefore = scene.inventory.length;
@@ -3407,7 +3421,7 @@ const WorldEngine = {
         if (consumed) {
             if (!Array.isArray(scene.messages)) scene.messages = [];
             this.addSystemMessage(scene, `【资源消耗】检定投入：${notes.join('，')}`, 'system');
-            if (scene.inventory.length < inventoryCountBefore) {
+            if (scene.inventory.length < inventoryCountBefore && options.retryPendingRewards !== false) {
                 this._retryPendingQuestRewardsAfterInventoryChange(scene);
             }
             if (typeof SidebarRight !== 'undefined') {
@@ -4051,7 +4065,9 @@ const WorldEngine = {
             resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
             consumed = true;
             const costNotes = this._applyCompanionResourceCost(scene, resource);
-            const effectNotes = this._applyCompanionResourceEffect(scene, resource, mod);
+            const effectNotes = this.isScenePlaying(scene)
+                ? this._applyCompanionResourceEffect(scene, resource, mod)
+                : [];
             const detailNotes = [...effectNotes, ...costNotes];
             notes.push(`${resource.name}${detailNotes.length ? `（${detailNotes.join('，')}）` : ''}`);
             if (resource.risk) {
@@ -4092,6 +4108,7 @@ const WorldEngine = {
                 const after = Number(afterClock?.value ?? before);
                 const actual = after - before;
                 if (result.changed && actual) notes.push(`${afterClock?.name || clock.name || '局势时钟'} ${actual >= 0 ? '+' : ''}${actual}`);
+                if (!this.isScenePlaying(scene)) return notes;
             }
         }
 
