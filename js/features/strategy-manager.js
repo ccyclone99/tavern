@@ -679,9 +679,11 @@ const StrategyManager = {
         if (Array.isArray(data.tags)) {
             base.tags = [...new Set([...(base.tags || []), ...data.tags.map(String)])].slice(0, 12);
         }
-        if (Array.isArray(data.effects) && typeof WorldEngine !== 'undefined') {
-            const effects = data.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean);
-            if (effects.length > 0) base.effects = effects.slice(0, 10);
+        if (Array.isArray(data.effects)) {
+            const effects = typeof WorldEngine !== 'undefined'
+                ? data.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean)
+                : [];
+            base.effects = effects.slice(0, 10);
         }
         if (data.uses !== undefined && Number.isFinite(Number(data.uses))) {
             base.uses = Math.max(0, Math.floor(Number(data.uses)));
