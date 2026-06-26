@@ -5,8 +5,19 @@ const CharacterCard = {
     async importFile(file) {
         const char = await PNGMetadata.importFile(file);
 
-        // 如果导入的角色卡有嵌入式世界书，合并到当前场景
-        if (char.character_book && char.character_book.entries && State.scene) {
+        await Storage.saveCharacter(char);
+        State.characters.push(char);
+        State.emit('charactersChanged', State.characters);
+        State.setCurrentCharacter(char.id);
+
+        let addedToScene = false;
+        if (State.scene) {
+            const result = State.addCharacterToScene(char.id);
+            addedToScene = !!result?.ok;
+        }
+
+        // 如果导入的角色卡有嵌入式世界书，仅在角色成功加入当前场景后合并
+        if (addedToScene && char.character_book && char.character_book.entries && State.scene) {
             const existingKeys = new Set(State.scene.lorebookEntries.map(e => e.keys.join(',')));
             for (const entry of char.character_book.entries) {
                 const keyStr = (entry.keys || []).join(',');
@@ -27,21 +38,17 @@ const CharacterCard = {
             }
             await State.saveCurrentScene();
         }
-
-        await Storage.saveCharacter(char);
-        State.characters.push(char);
-        State.emit('charactersChanged', State.characters);
-        State.setCurrentCharacter(char.id);
-        if (State.scene) {
-            State.addCharacterToScene(char.id);
-        }
         return char;
     },
 
     async delete(id) {
         const scene = State.scene;
-        if (scene) {
-            State.removeCharacterFromScene(id);
+        if (scene && Array.isArray(scene.characters) && scene.characters.includes(id)) {
+            const result = State.removeCharacterFromScene(id);
+            if (result && !result.ok) {
+                if (typeof showToast !== 'undefined') showToast(result.message || '角色仍在当前场景，无法删除。');
+                return;
+            }
         }
         await Storage.deleteCharacter(id);
         State.characters = State.characters.filter(c => c.id !== id);

@@ -410,19 +410,59 @@ const State = {
 
     addCharacterToScene(charId) {
         const scene = this.scene;
-        if (!scene) return;
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        if (!Array.isArray(scene.characters)) scene.characters = [];
+
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.addExistingCharacterToScene) {
+            const result = WorldEngine.addExistingCharacterToScene(scene, charId);
+            if (result.ok) {
+                this.saveCurrentScene().catch(e => console.warn('添加角色保存失败:', e));
+                this.emit('sceneChanged', scene);
+            } else if (!result.duplicate && typeof showToast !== 'undefined') {
+                showToast(result.message || '角色未加入场景。');
+            }
+            return result;
+        }
+
+        if (scene.gameState && scene.gameState !== 'playing') {
+            const message = '当前冒险已经结束，不能改变在场角色。';
+            if (typeof showToast !== 'undefined') showToast(message);
+            return { ok: false, message };
+        }
         if (!scene.characters.includes(charId)) {
             scene.characters.push(charId);
             this.saveCurrentScene().catch(e => console.warn('添加角色保存失败:', e));
             this.emit('sceneChanged', scene);
+            return { ok: true, charId };
         }
+        return { ok: false, duplicate: true, message: '角色已经在场。' };
     },
 
     removeCharacterFromScene(charId) {
         const scene = this.scene;
-        if (!scene) return;
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        if (!Array.isArray(scene.characters)) scene.characters = [];
+
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.removeCharacterFromScene) {
+            const result = WorldEngine.removeCharacterFromScene(scene, charId);
+            if (result.ok) {
+                this.saveCurrentScene().catch(e => console.warn('移除角色保存失败:', e));
+                this.emit('sceneChanged', scene);
+            } else if (!result.duplicate && typeof showToast !== 'undefined') {
+                showToast(result.message || '角色未离开场景。');
+            }
+            return result;
+        }
+
+        if (scene.gameState && scene.gameState !== 'playing') {
+            const message = '当前冒险已经结束，不能改变在场角色。';
+            if (typeof showToast !== 'undefined') showToast(message);
+            return { ok: false, message };
+        }
+        if (!scene.characters.includes(charId)) return { ok: false, duplicate: true, message: '角色不在当前场景。' };
         scene.characters = scene.characters.filter(id => id !== charId);
         this.saveCurrentScene().catch(e => console.warn('移除角色保存失败:', e));
         this.emit('sceneChanged', scene);
+        return { ok: true, charId };
     }
 };
