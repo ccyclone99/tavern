@@ -242,7 +242,7 @@
 }
 ```
 
-主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点和任务手动操作都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
+主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
 
 剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
@@ -466,6 +466,8 @@ scene.evidenceLedger = [
 
 `StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，并夹紧 `risk`/`progress`/`exposure` 到 0-100。
 `WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名，`WorldEngine.consumeStrategyItemResources()` 会扣除一次，并把物品 id/name 写入 `consumedItemResourceIds` 防止重复扣除。
+
+计策创建、更新和放弃属于玩法状态变更，必须在 `scene.gameState` 为 `playing` 时才允许。结局后右侧计策面板只保留回顾和切换查看，不显示放弃或重新规划入口，也不能再通过 `<state_update>` 修改计策或消耗计策物品。
 
 ### Intel
 

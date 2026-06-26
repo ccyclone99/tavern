@@ -9,6 +9,7 @@ const StrategyManager = {
     createStrategy(data = {}) {
         const scene = State.scene;
         if (!scene) return null;
+        if (!this._canMutateGameplay(scene, '创建计策')) return null;
 
         const now = Date.now();
         const strategy = this.normalizeStrategy({
@@ -47,6 +48,7 @@ const StrategyManager = {
     updateStrategy(id, patch) {
         const scene = State.scene;
         if (!scene || !scene.strategies) return null;
+        if (!this._canMutateGameplay(scene, '更新计策')) return null;
         const idx = scene.strategies.findIndex(s => s.id === id);
         if (idx === -1) return null;
 
@@ -94,6 +96,7 @@ const StrategyManager = {
     abandonStrategy(id) {
         const scene = State.scene;
         if (!scene || !scene.strategies) return;
+        if (!this._canMutateGameplay(scene, '放弃计策')) return;
         const strategy = scene.strategies.find(s => s.id === id);
         if (!strategy) return;
         if (!confirm(`确定要放弃计策「${String(strategy.title).replace(/</g, ' ').replace(/>/g, ' ')}」吗？`)) return;
@@ -150,6 +153,19 @@ const StrategyManager = {
         return strategy;
     },
 
+    _canMutateGameplay(scene, actionLabel = '修改计策') {
+        const playing = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? WorldEngine.isScenePlaying(scene)
+            : !!scene && (!scene.gameState || scene.gameState === 'playing');
+        if (playing) return true;
+        const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+            ? WorldEngine.endedSceneMessage(scene)
+            : '当前冒险已经结束，不能继续改变游戏状态。';
+        console.warn(`[StrategyManager] ${actionLabel} 被阻止：${message}`);
+        if (typeof showToast !== 'undefined') showToast(message);
+        return false;
+    },
+
     /**
      * 解析并白名单应用 AI 的状态补丁
      * 不支持 AI 任意覆盖 State，禁止修改 settings、apiKey、DOM 字段等
@@ -158,6 +174,7 @@ const StrategyManager = {
         const scene = State.scene;
         if (!scene) return;
         if (!update || typeof update !== 'object') return;
+        if (!this._canMutateGameplay(scene, '应用状态补丁')) return;
 
         // 单条补丁上限，防止 AI 回复胀大存储
         const MAX_INTEL_PER_UPDATE = 10;

@@ -1082,6 +1082,9 @@ const SidebarRight = {
 
         const active = scene.strategies.find(s => s.id === scene.activeStrategyId) || scene.strategies[0];
         const others = scene.strategies.filter(s => s.id !== active.id);
+        const canMutateStrategy = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? WorldEngine.isScenePlaying(scene)
+            : (!scene.gameState || scene.gameState === 'playing');
 
         const riskPct = Math.min(100, Math.max(0, active.risk || 0));
         const progressPct = Math.min(100, Math.max(0, active.progress || 0));
@@ -1181,10 +1184,10 @@ const SidebarRight = {
                 ${participantsHtml ? `<div class="st-section"><h4>参与 NPC</h4><div class="st-participants">${participantsHtml}</div></div>` : ''}
                 ${cluesHtml ? `<div class="st-section"><h4>情报</h4><div class="st-clues">${cluesHtml}</div></div>` : ''}
                 ${active.latestOutcome ? `<div class="st-section"><h4>最近结果</h4><div class="st-outcome">${Renderer.escapeHtml(active.latestOutcome)}</div></div>` : ''}
-                <div class="st-actions">
+                ${canMutateStrategy ? `<div class="st-actions">
                     <button class="btn btn-secondary" id="stAbandonBtn">放弃</button>
                     <button class="btn btn-primary" id="stReplanBtn">重新规划</button>
-                </div>
+                </div>` : '<div class="st-outcome">冒险已结束，计策仅供回顾。</div>'}
             </div>
             ${othersHtml}
         `;
