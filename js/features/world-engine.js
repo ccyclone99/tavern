@@ -3863,6 +3863,20 @@ const WorldEngine = {
             if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
             if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
             scene.currentSituation.recentRisks.push(`同伴协助耗时：${resource.name} 占用约 ${timeCost} 分钟`);
+            const clock = this._selectClockForTick(scene, 'companion_time_cost');
+            if (clock) {
+                const before = Number(clock.value || 0);
+                const delta = this._clamp(Math.ceil(timeCost / 30), 1, 3);
+                const result = this.applyClockUpdate(scene, [{
+                    id: clock.id,
+                    delta,
+                    reason: `同伴协助耗时：${resource.name}`
+                }]);
+                const afterClock = (scene.clocks || []).find(c => c.id === clock.id);
+                const after = Number(afterClock?.value ?? before);
+                const actual = after - before;
+                if (result.changed && actual) notes.push(`${afterClock?.name || clock.name || '局势时钟'} ${actual >= 0 ? '+' : ''}${actual}`);
+            }
         }
         return notes;
     },
