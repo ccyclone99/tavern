@@ -184,9 +184,20 @@ const StrategyManager = {
         let factionChanged = false;
         let relationChanged = false;
         let questChanged = false;
+        let stoppedByEnding = false;
+        const scenePlaying = () => {
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) return WorldEngine.isScenePlaying(scene);
+            return !scene.gameState || scene.gameState === 'playing';
+        };
+        const stopIfEnded = label => {
+            if (scenePlaying()) return false;
+            stoppedByEnding = true;
+            console.warn(`[StrategyManager] ${label} 后场景已结束，跳过后续 state_update 字段`);
+            return true;
+        };
 
         // 1. strategies.create / update
-        if (update.strategies && typeof update.strategies === 'object') {
+        if (!stoppedByEnding && update.strategies && typeof update.strategies === 'object') {
             if (Array.isArray(update.strategies.create)) {
                 for (const st of update.strategies.create) {
                     if (st && typeof st === 'object') this.createStrategy(st);
@@ -202,7 +213,7 @@ const StrategyManager = {
         }
 
         // 2. knowledgeAdd / intelAdd
-        if (Array.isArray(update.knowledgeAdd)) {
+        if (!stoppedByEnding && Array.isArray(update.knowledgeAdd)) {
             if (update.knowledgeAdd.length > MAX_INTEL_PER_UPDATE) {
                 console.warn(`[StrategyManager] knowledgeAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
             }
@@ -213,7 +224,7 @@ const StrategyManager = {
             }
         }
 
-        if (Array.isArray(update.intelAdd)) {
+        if (!stoppedByEnding && Array.isArray(update.intelAdd)) {
             if (update.intelAdd.length > MAX_INTEL_PER_UPDATE) {
                 console.warn(`[StrategyManager] intelAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
             }
@@ -244,7 +255,7 @@ const StrategyManager = {
             }
         }
 
-        if (Array.isArray(update.discoveryUpdate)) {
+        if (!stoppedByEnding && Array.isArray(update.discoveryUpdate)) {
             const validStates = ['locked', 'hinted', 'suspected', 'confirmed'];
             for (const item of update.discoveryUpdate.slice(0, MAX_INTEL_PER_UPDATE)) {
                 if (!item || typeof item !== 'object' || !item.characterId || !item.factId) continue;
@@ -261,56 +272,62 @@ const StrategyManager = {
         }
 
         // 2.5 clocks / story arcs / counter strategies / NPC agenda
-        if (Array.isArray(update.clockUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.clockUpdate) && typeof WorldEngine !== 'undefined') {
             const result = WorldEngine.applyClockUpdate(scene, update.clockUpdate);
             clockChanged = !!result.changed;
             if (result.triggered?.length) knowledgeAdded = true;
+            stopIfEnded('clockUpdate');
         }
 
-        if (Array.isArray(update.storyArcUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.storyArcUpdate) && typeof WorldEngine !== 'undefined') {
             storyChanged = WorldEngine.applyStoryArcUpdate(scene, update.storyArcUpdate);
         }
 
-        if (Array.isArray(update.storyPhaseUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.storyPhaseUpdate) && typeof WorldEngine !== 'undefined') {
             phaseChanged = WorldEngine.applyStoryPhaseUpdate(scene, update.storyPhaseUpdate);
+            stopIfEnded('storyPhaseUpdate');
         }
 
-        if (Array.isArray(update.clueUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.clueUpdate) && typeof WorldEngine !== 'undefined') {
             clueChanged = WorldEngine.applyClueUpdate(scene, update.clueUpdate);
         }
 
-        if (Array.isArray(update.failureStateUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.failureStateUpdate) && typeof WorldEngine !== 'undefined') {
             failureChanged = WorldEngine.applyFailureStateUpdate(scene, update.failureStateUpdate);
+            stopIfEnded('failureStateUpdate');
         }
 
-        if (Array.isArray(update.counterStrategyUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.counterStrategyUpdate) && typeof WorldEngine !== 'undefined') {
             counterChanged = WorldEngine.applyCounterStrategyUpdate(scene, update.counterStrategyUpdate);
             if (counterChanged && typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'counter' });
+            stopIfEnded('counterStrategyUpdate');
         }
 
-        if (Array.isArray(update.npcAgendaUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.npcAgendaUpdate) && typeof WorldEngine !== 'undefined') {
             agendaChanged = WorldEngine.applyNpcAgendaUpdate(update.npcAgendaUpdate);
         }
 
-        if (Array.isArray(update.challengeUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.challengeUpdate) && typeof WorldEngine !== 'undefined') {
             challengeChanged = WorldEngine.applyChallengeUpdate(scene, update.challengeUpdate);
+            stopIfEnded('challengeUpdate');
         }
 
-        if (Array.isArray(update.evidenceAdd) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.evidenceAdd) && typeof WorldEngine !== 'undefined') {
             evidenceChanged = WorldEngine.applyEvidenceAdd(scene, update.evidenceAdd);
             if (evidenceChanged) knowledgeAdded = true;
+            stopIfEnded('evidenceAdd');
         }
 
-        if (Array.isArray(update.revelationUpdate) && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && Array.isArray(update.revelationUpdate) && typeof WorldEngine !== 'undefined') {
             revelationChanged = WorldEngine.applyRevelationUpdate(scene, update.revelationUpdate);
         }
 
-        if (update.flowGraphUpdate && typeof update.flowGraphUpdate === 'object' && typeof WorldEngine !== 'undefined') {
+        if (!stoppedByEnding && update.flowGraphUpdate && typeof update.flowGraphUpdate === 'object' && typeof WorldEngine !== 'undefined') {
             flowGraphChanged = WorldEngine.applyFlowGraphUpdate(scene, update.flowGraphUpdate);
         }
 
         // 3. factionsUpdate
-        if (Array.isArray(update.factionsUpdate)) {
+        if (!stoppedByEnding && Array.isArray(update.factionsUpdate)) {
             if (!Array.isArray(scene.factions)) scene.factions = [];
             if (update.factionsUpdate.length > MAX_FACTIONS_PER_UPDATE) {
                 console.warn(`[StrategyManager] factionsUpdate 超过单条上限 ${MAX_FACTIONS_PER_UPDATE}，已截断`);
@@ -365,7 +382,7 @@ const StrategyManager = {
         }
 
         // 4. characterUpdates（仅允许修改关系/警觉/秘密等安全字段）
-        if (Array.isArray(update.characterUpdates)) {
+        if (!stoppedByEnding && Array.isArray(update.characterUpdates)) {
             for (const cu of update.characterUpdates) {
                 if (!cu || typeof cu !== 'object' || !cu.characterId) continue;
                 const char = State.characters.find(c => c.id === cu.characterId);
@@ -450,23 +467,24 @@ const StrategyManager = {
         }
 
         // 5. scene 字段（仅白名单）
-        if (update.scene && typeof update.scene === 'object') {
+        if (!stoppedByEnding && update.scene && typeof update.scene === 'object') {
             if (typeof update.scene.worldTensionDelta === 'number') {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.addWorldTension) {
                     const result = WorldEngine.addWorldTension(scene, update.scene.worldTensionDelta, { source: '状态补丁', silent: true });
                     tensionChanged = !!result.ok;
+                    stopIfEnded('scene.worldTensionDelta');
                 } else {
                     console.warn('[StrategyManager] WorldEngine.addWorldTension 不可用，跳过 worldTensionDelta');
                 }
             }
-            if (typeof update.scene.activeStrategyId === 'string') {
+            if (!stoppedByEnding && typeof update.scene.activeStrategyId === 'string') {
                 const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
                 if (target) scene.activeStrategyId = update.scene.activeStrategyId;
             }
         }
 
         // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
-        if (Array.isArray(update.questsUpdate)) {
+        if (!stoppedByEnding && Array.isArray(update.questsUpdate)) {
             if (typeof WorldEngine !== 'undefined' && WorldEngine.applyQuestUpdates) {
                 const result = WorldEngine.applyQuestUpdates(scene, update.questsUpdate, { stateUpdate: true });
                 questChanged = !!result.changed;
@@ -475,9 +493,10 @@ const StrategyManager = {
             }
             if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'quest' });
             if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+            stopIfEnded('questsUpdate');
         }
 
-        if (Array.isArray(update.itemAdd)) {
+        if (!stoppedByEnding && Array.isArray(update.itemAdd)) {
             if (update.itemAdd.length > MAX_ITEMS_PER_UPDATE) {
                 console.warn(`[StrategyManager] itemAdd 超过单条上限 ${MAX_ITEMS_PER_UPDATE}，已截断`);
             }
@@ -501,7 +520,7 @@ const StrategyManager = {
             }
         }
 
-        if (Array.isArray(update.locationUpdate)) {
+        if (!stoppedByEnding && Array.isArray(update.locationUpdate)) {
             if (!Array.isArray(scene.locations)) scene.locations = [];
             if (update.locationUpdate.length > MAX_LOCATIONS_PER_UPDATE) {
                 console.warn(`[StrategyManager] locationUpdate 超过单条上限 ${MAX_LOCATIONS_PER_UPDATE}，已截断`);
