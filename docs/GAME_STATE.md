@@ -370,6 +370,7 @@ scene.evidenceLedger = [
 - 检定投入的消耗品扣除后会生成 `【资源消耗】检定投入` 系统消息，并写入 `eventLog.resource`，方便右侧局势和通关回顾追溯。
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
 - `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
+- `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。
 - `buyBasicSupply()` 会先确认背包可合并或仍有空位，成功扣金币后再走 `grantInventoryItem()`；金币不足或背包满时不会改变金币或背包。
 

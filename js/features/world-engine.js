@@ -942,6 +942,15 @@ const WorldEngine = {
         const questName = String(options.questName || quest.name || '任务').trim().slice(0, 120) || '任务';
         const entries = this._parseQuestRewardEntries(rewardText);
         const rewards = [];
+        const itemRewards = entries
+            .filter(entry => entry?.type === 'item')
+            .map(entry => ({ entry, item: this.createInventoryItemFromReward(entry.name, entry.quantity) }))
+            .filter(data => data.item);
+        if (!this._canAddInventoryItems(scene, itemRewards.map(data => data.item))) {
+            const message = `背包空间不足，无法发放任务奖励：${questName}。`;
+            this.addSystemMessage(scene, `【任务奖励未发放：${questName}】${message}`, 'system');
+            return { ok: false, rewards: [], blocked: true, message };
+        }
 
         entries.forEach(entry => {
             if (!entry) return;
@@ -961,16 +970,11 @@ const WorldEngine = {
                 return;
             }
             if (entry.type === 'item') {
-                const item = this.createInventoryItemFromReward(entry.name, entry.quantity);
-                const added = this._addOrMergeInventoryItem(scene, item);
-                if (!added) return;
+                const item = itemRewards.find(data => data.entry === entry)?.item || this.createInventoryItemFromReward(entry.name, entry.quantity);
+                const added = this.grantInventoryItem(scene, item, { source: `任务奖励：${questName}` });
+                if (!added.ok) return;
                 const qtyText = entry.quantity > 1 ? ` x${entry.quantity}` : '';
                 rewards.push(`${item.name}${qtyText}`);
-                this.recordEvent(scene, {
-                    category: 'inventory',
-                    title: '获得物品',
-                    text: `任务奖励：${questName}，获得 ${item.name}${qtyText}`
-                });
             }
         });
 
@@ -987,6 +991,28 @@ const WorldEngine = {
             SidebarRight.markTabNew?.('inventory');
         }
         return { ok: true, rewards, messageId: msg?.id || '', questName };
+    },
+
+    _canAddInventoryItems(scene, items = []) {
+        if (!scene || !Array.isArray(scene.inventory)) return false;
+        let projected = scene.inventory.length;
+        const planned = [];
+        for (const rawItem of items) {
+            const item = this.normalizeItem({ ...rawItem });
+            if (!item) return false;
+            const canMergeExisting = scene.inventory.some(existing =>
+                existing && ((item.id && existing.id === item.id) || existing.name === item.name)
+            );
+            const canMergePlanned = planned.some(existing =>
+                existing && ((item.id && existing.id === item.id) || existing.name === item.name)
+            );
+            if (!canMergeExisting && !canMergePlanned) {
+                projected += 1;
+                if (projected > 200) return false;
+            }
+            planned.push(item);
+        }
+        return true;
     },
 
     completeQuestObjective(scene, quest, objectiveIdx, options = {}) {
