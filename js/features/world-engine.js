@@ -1458,7 +1458,9 @@ const WorldEngine = {
         for (const [itemRef, quantity] of itemTotals.entries()) {
             const item = this._findInventoryItem(scene, itemRef);
             if (!item) return { ok: false, message: `绕过阶段需要物品「${itemRef}」，但背包中没有。` };
-            const available = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+            const available = item.uses !== undefined
+                ? Math.max(0, Number(item.uses || 0))
+                : Math.max(1, Number(item.quantity || 1));
             if (available < quantity) {
                 return { ok: false, message: `绕过阶段需要 ${item.name} x${quantity}，当前只有 ${available}。` };
             }
@@ -2097,10 +2099,15 @@ const WorldEngine = {
         this.normalizeItem(item);
         const itemName = item.name || ref;
         const requested = this._clamp(Number(quantity || 1), 1, 20);
-        const currentQty = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+        const currentQty = item.uses !== undefined
+            ? Math.max(0, Number(item.uses || 0))
+            : Math.max(1, Number(item.quantity || 1));
+        if (currentQty <= 0) return { ok: false, message: `${itemName} 已经用完。` };
         const removed = Math.min(requested, currentQty);
 
-        if (item.uses === undefined && currentQty > requested) {
+        if (item.uses !== undefined && currentQty > requested) {
+            item.uses = currentQty - requested;
+        } else if (item.uses === undefined && currentQty > requested) {
             item.quantity = currentQty - requested;
         } else {
             this._clearEquipmentForItem(scene, item);
@@ -2122,7 +2129,7 @@ const WorldEngine = {
             SidebarRight.renderDetail?.();
             SidebarRight.markTabNew?.('inventory');
         }
-        return { ok: true, itemName, quantity: removed, removedAll: item.uses !== undefined || currentQty <= requested };
+        return { ok: true, itemName, quantity: removed, removedAll: currentQty <= requested };
     },
 
     sellInventoryItem(scene, itemRef, quantity = 1, options = {}) {
@@ -2133,7 +2140,10 @@ const WorldEngine = {
         if (item.type === 'quest') return { ok: false, message: `${item.name} 是关键物品，不能直接出售。` };
         if (item.equipped) return { ok: false, message: `${item.name} 已装备，请先卸下再出售。` };
 
-        const available = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+        const available = item.uses !== undefined
+            ? Math.max(0, Number(item.uses || 0))
+            : Math.max(1, Number(item.quantity || 1));
+        if (available <= 0) return { ok: false, message: `${item.name} 已经用完。` };
         const requested = options.all === true
             ? available
             : this._clamp(Number(quantity || 1), 1, available);
@@ -2177,8 +2187,8 @@ const WorldEngine = {
             else if (effect.type === 'strategy_leverage') unit += 5;
         });
         if (item.uses !== undefined) {
-            unit += Math.max(0, Math.min(10, Number(item.uses || 0) * 2));
-            return this._clamp(Math.floor(unit), 1, 9999);
+            unit += 2;
+            return this._clamp(Math.floor(unit * qty), 1, 9999);
         }
         return this._clamp(Math.floor(unit * qty), 1, 9999);
     },
