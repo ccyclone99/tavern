@@ -13,9 +13,12 @@ const QuestTracker = {
         const scene = State.scene;
         const quests = scene ? scene.quests : [];
         const active = quests.filter(q => q.status === 'active');
+        const canMutateQuest = this._canMutateGameplay(scene);
 
         if (active.length === 0) {
-            this.el.innerHTML = '<p class="placeholder">暂无活跃任务</p>';
+            this.el.innerHTML = canMutateQuest
+                ? '<p class="placeholder">暂无活跃任务</p>'
+                : '<p class="placeholder">暂无活跃任务<br>冒险已结束，任务仅供回顾</p>';
             return;
         }
 
@@ -25,16 +28,16 @@ const QuestTracker = {
         this.el.innerHTML = `
             ${mains.length > 0 ? `<div class="quest-section">
                 <div class="quest-section-title">★ 主线</div>
-                ${mains.map(q => this._renderQuest(q)).join('')}
+                ${mains.map(q => this._renderQuest(q, canMutateQuest)).join('')}
             </div>` : ''}
             ${sides.length > 0 ? `<div class="quest-section">
                 <div class="quest-section-title">支线</div>
-                ${sides.map(q => this._renderQuest(q)).join('')}
+                ${sides.map(q => this._renderQuest(q, canMutateQuest)).join('')}
             </div>` : ''}
         `;
 
         // 绑定点击目标事件
-        this.el.querySelectorAll('.quest-obj').forEach(el => {
+        this.el.querySelectorAll('.quest-obj[data-mutable="true"]').forEach(el => {
             el.addEventListener('click', () => {
                 const questId = el.dataset.questId;
                 const objIdx = parseInt(el.dataset.objIdx);
@@ -43,16 +46,18 @@ const QuestTracker = {
         });
     },
 
-    _renderQuest(q) {
+    _renderQuest(q, canMutateQuest = true) {
         const completedCount = q.objectives.filter(o => o.completed).length;
         const totalCount = q.objectives.length;
         return `
-            <div class="quest-card ${q.type === 'main' ? 'quest-main' : 'quest-side'}">
+            <div class="quest-card ${q.type === 'main' ? 'quest-main' : 'quest-side'} ${canMutateQuest ? '' : 'quest-readonly'}">
                 <div class="quest-name">${Renderer.escapeHtml(q.name)}</div>
                 <div class="quest-desc">${Renderer.escapeHtml(q.description)}</div>
                 <div class="quest-objectives">
                     ${q.objectives.map((o, i) => `
-                        <div class="quest-obj ${o.completed ? 'completed' : ''}"
+                        <div class="quest-obj ${o.completed ? 'completed' : ''} ${canMutateQuest ? '' : 'readonly'}"
+                             data-mutable="${canMutateQuest ? 'true' : 'false'}"
+                             aria-disabled="${canMutateQuest ? 'false' : 'true'}"
                              data-quest-id="${Renderer.escapeAttr(q.id)}" data-obj-idx="${i}">
                             ${o.completed ? '☑' : '☐'} ${Renderer.escapeHtml(o.text)}
                         </div>
@@ -67,9 +72,24 @@ const QuestTracker = {
         `;
     },
 
+    _canMutateGameplay(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return WorldEngine.isScenePlaying(scene);
+        }
+        return !scene.gameState || scene.gameState === 'playing';
+    },
+
     _toggleObjective(questId, objIdx) {
         const scene = State.scene;
         if (!scene) return;
+        if (!this._canMutateGameplay(scene)) {
+            const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+                ? WorldEngine.endedSceneMessage(scene)
+                : '当前冒险已经结束，不能继续改变任务状态。';
+            if (typeof showToast !== 'undefined') showToast(message);
+            return;
+        }
         const quest = scene.quests.find(q => q.id === questId);
         if (!quest) return;
         const objective = quest.objectives[objIdx];

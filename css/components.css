@@ -1102,6 +1102,13 @@
     background: var(--bg-card-hover);
     border-color: var(--border);
 }
+.quest-obj.readonly {
+    cursor: default;
+}
+.quest-obj.readonly:hover {
+    background: transparent;
+    border-color: transparent;
+}
 .quest-obj.completed {
     color: var(--text-muted);
     text-decoration: line-through;

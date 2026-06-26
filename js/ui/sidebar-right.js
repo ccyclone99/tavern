@@ -754,6 +754,9 @@ const SidebarRight = {
         const scene = State.scene;
         const inventory = scene ? scene.inventory || [] : [];
         const equipment = scene ? scene.equipment || {} : {};
+        const canMutateInventory = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? WorldEngine.isScenePlaying(scene)
+            : !!scene && (!scene.gameState || scene.gameState === 'playing');
         const eqEl = document.getElementById('equipmentDisplay');
         const listEl = document.getElementById('inventoryList');
         if (!eqEl || !listEl) return;
@@ -765,7 +768,7 @@ const SidebarRight = {
             return `<div class="eq-slot ${item ? 'occupied' : ''}">
                 <div class="eq-slot-label">${label}</div>
                 <div class="eq-slot-item">${item ? Renderer.escapeHtml(item.name) : '空'}</div>
-                ${item ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : ''}
+                ${item && canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : ''}
             </div>`;
         }).join('');
 
@@ -809,10 +812,10 @@ const SidebarRight = {
                     ? WorldEngine.canEquipInventoryItem(item)
                     : item.type !== 'consumable';
                 const actionHtml = item.equipped
-                    ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>`
+                    ? (canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : '<span class="inv-hint">已装备</span>')
                     : `<span class="inv-actions">
-                        ${canUse ? `<button class="text-btn inv-use-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">使用</button>` : ''}
-                        ${canEquip ? `<button class="text-btn inv-equip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>` : (!canUse ? `<span class="inv-hint">${depleted ? '已用尽' : '检定时可用'}</span>` : '')}
+                        ${canMutateInventory && canUse ? `<button class="text-btn inv-use-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">使用</button>` : ''}
+                        ${canMutateInventory && canEquip ? `<button class="text-btn inv-equip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>` : (!canMutateInventory ? '<span class="inv-hint">回顾</span>' : (!canUse ? `<span class="inv-hint">${depleted ? '已用尽' : '检定时可用'}</span>` : ''))}
                     </span>`;
                 return `<div class="inventory-item ${item.equipped ? 'equipped' : ''}">
                     <span class="inv-icon">${icon}</span>
@@ -885,6 +888,9 @@ const SidebarRight = {
         const st = scene?.playerStats;
         const equipment = scene?.equipment;
         const inventory = scene?.inventory || [];
+        const canMutatePlayer = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? WorldEngine.isScenePlaying(scene)
+            : !!scene && (!scene.gameState || scene.gameState === 'playing');
 
         if (!persona) {
             this.detailEl.innerHTML = '<div class="detail-placeholder"><p>尚未创建玩家角色</p></div>';
@@ -907,9 +913,11 @@ const SidebarRight = {
         ];
         const attrPts = scene?.attrPoints || 0;
         const statsHtml = st ? statDefs.map(d =>
-            `<span class="detail-stat-row">${Icons.get(d.icon, { size: 13 })}<span>${Renderer.escapeHtml(d.label)} ${st[d.key]}(${m(st[d.key])})</span>${attrPts > 0 ? `<button class="stat-plus-btn" data-stat="${d.key}" title="分配 1 点">+</button>` : ''}</span>`
+            `<span class="detail-stat-row">${Icons.get(d.icon, { size: 13 })}<span>${Renderer.escapeHtml(d.label)} ${st[d.key]}(${m(st[d.key])})</span>${attrPts > 0 && canMutatePlayer ? `<button class="stat-plus-btn" data-stat="${d.key}" title="分配 1 点">+</button>` : ''}</span>`
         ).join('') : '';
-        const attrPtsHtml = attrPts > 0 ? `<div class="attr-pts-hint">可分配属性点：${attrPts}</div>` : '';
+        const attrPtsHtml = attrPts > 0
+            ? `<div class="attr-pts-hint">${canMutatePlayer ? '可分配属性点' : '未分配属性点'}：${attrPts}${canMutatePlayer ? '' : '（冒险已结束）'}</div>`
+            : '';
 
         const eqSlots = equipment ? [
             `⚔ ${Renderer.escapeHtml(equipment.weapon || '无')}`,
