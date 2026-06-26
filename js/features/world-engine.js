@@ -6154,12 +6154,40 @@ const WorldEngine = {
     _effectMatches(effect, ctx) {
         if (!effect) return false;
         if (effect.stat && effect.stat !== ctx.stat) return false;
-        if (effect.actionType && effect.actionType !== ctx.actionType) return false;
+        if (effect.actionType && effect.actionType !== ctx.actionType) {
+            const haystack = [
+                ctx.intent,
+                effect.when,
+                effect.tag
+            ].join(' ').toLowerCase();
+            const aliases = this._actionTypeMatchTerms(effect.actionType);
+            if (!aliases.some(term => term && haystack.includes(term))) return false;
+        }
         if (effect.when) {
             const haystack = `${ctx.intent} ${(ctx.item.tags || []).join(' ')}`.toLowerCase();
             if (!haystack.includes(effect.when.toLowerCase())) return false;
         }
         return true;
+    },
+
+    _actionTypeMatchTerms(actionType) {
+        const key = String(actionType || '').toLowerCase();
+        const map = {
+            combat: ['combat', '攻击', '战斗', '武器', '近战', '射击', '开枪', '制服'],
+            force: ['force', '强行', '破门', '撞开', '砸开', '拖住', '夺走', '护甲', '防具'],
+            sneak: ['sneak', '潜行', '偷偷', '撬锁', '开锁', '躲开', '跟踪', '藏'],
+            lie: ['lie', '撒谎', '欺骗', '伪装', '冒充'],
+            threaten: ['threaten', '威胁', '恐吓', '逼问', '胁迫'],
+            persuade: ['persuade', '说服', '谈判', '请求', '拉拢', '安抚'],
+            probe: ['probe', '试探', '套话', '旁敲侧击', '观察反应'],
+            investigate: ['investigate', '调查', '研究', '分析', '破解', '解读', '搜索', '检索', '排查', '线索'],
+            observe: ['observe', '观察', '察看', '查看', '留意', '扫描', '探测', '侦测', '检测', '感知'],
+            ask: ['ask', '询问', '问问', '打听', '请教'],
+            trade: ['trade', '交易', '购买', '出售', '交换'],
+            use_item: ['use_item', '使用', '道具', '工具', '设备', '修复', '维修', '修理', '调试', '校准', '接线', '启动', '操作', '控制台', '终端'],
+            rest: ['rest', '休息', '睡觉', '扎营', '疗伤', '恢复']
+        };
+        return map[key] || [key].filter(Boolean);
     },
 
     _consequenceMatchScore(item, context = {}) {

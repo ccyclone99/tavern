@@ -37,11 +37,11 @@ const ActionPlanner = {
         { type: 'threaten', stat: 'charisma', baseRisk: 60, baseDc: 16, keywords: ['威胁', '恐吓', '逼问', '胁迫', '勒索'] },
         { type: 'persuade', stat: 'charisma', baseRisk: 42, baseDc: 14, keywords: ['说服', '劝', '谈判', '请求', '拉拢', '安抚', '讨价还价'] },
         { type: 'probe', stat: 'wisdom', baseRisk: 38, baseDc: 14, keywords: ['试探', '套话', '旁敲侧击', '引诱他说', '观察反应'] },
-        { type: 'investigate', stat: 'intelligence', baseRisk: 36, baseDc: 14, keywords: ['调查', '研究', '分析', '破解', '解读', '查资料', '搜查', '翻找'] },
-        { type: 'observe', stat: 'wisdom', baseRisk: 26, baseDc: 13, keywords: ['观察', '察看', '查看', '留意', '倾听', '嗅', '感知'] },
+        { type: 'investigate', stat: 'intelligence', baseRisk: 36, baseDc: 14, keywords: ['调查', '研究', '分析', '破解', '解读', '查资料', '搜查', '搜索', '检索', '排查', '追查', '翻找'] },
+        { type: 'observe', stat: 'wisdom', baseRisk: 26, baseDc: 13, keywords: ['观察', '察看', '查看', '留意', '倾听', '嗅', '感知', '扫描', '探测', '侦测', '检测'] },
         { type: 'ask', stat: 'charisma', baseRisk: 20, baseDc: 12, keywords: ['询问', '问问', '打听', '请教'] },
         { type: 'trade', stat: 'charisma', baseRisk: 24, baseDc: 12, keywords: ['交易', '购买', '出售', '交换', '买', '卖'] },
-        { type: 'use_item', stat: 'intelligence', baseRisk: 30, baseDc: 13, keywords: ['使用', '拿出', '装备', '点燃', '喝下', '打开道具'] },
+        { type: 'use_item', stat: 'intelligence', baseRisk: 36, baseDc: 14, keywords: ['使用', '用', '拿出', '装备', '点燃', '喝下', '打开道具', '修复', '维修', '修理', '调试', '校准', '接线', '启动', '操作设备', '控制台', '终端'] },
         { type: 'rest', stat: 'constitution', baseRisk: 12, baseDc: 10, keywords: ['休息', '睡觉', '扎营', '疗伤', '恢复'] }
     ],
 

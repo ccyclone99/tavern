@@ -455,6 +455,44 @@ const GroupChat = {
         return parsed;
     },
 
+    _latestPlayerCheckSource(scene) {
+        return [...(scene?.messages || [])].reverse().find(msg => {
+            if (!msg || msg.role !== 'user') return false;
+            const type = String(msg.type || '');
+            if (type === 'action_intent' || type === 'talk' || !type) return true;
+            return false;
+        }) || null;
+    },
+
+    _inferCheckContext(scene, sourceMessage, parsed) {
+        const actionData = sourceMessage?.type === 'action_intent' ? sourceMessage.actionData : null;
+        if (actionData) {
+            return {
+                actionType: actionData.type || '',
+                intent: actionData.intent || '',
+                stakes: actionData.stakes || '',
+                challengeContext: actionData.challengeContext || null
+            };
+        }
+
+        const intent = String(sourceMessage?.content || '').trim().slice(0, 800);
+        let planned = null;
+        if (intent && typeof ActionPlanner !== 'undefined' && ActionPlanner.create) {
+            try {
+                planned = ActionPlanner.create(scene, intent);
+            } catch (err) {
+                console.warn('[GroupChat] 检定上下文推断失败（非致命）:', err.message || err);
+            }
+        }
+        return {
+            actionType: planned?.type || '',
+            intent,
+            stakes: planned?.stakes || '',
+            challengeContext: planned?.challengeContext || null,
+            inferredStat: planned?.suggestedCheck?.stat || parsed?.key || ''
+        };
+    },
+
     /**
      * 处理 [check:属性名|DC]：创建待掷骰检定卡
      */
@@ -467,7 +505,8 @@ const GroupChat = {
             return scene.pendingCheck;
         }
 
-        const latestAction = [...(scene.messages || [])].reverse().find(m => m.type === 'action_intent' && m.actionData);
+        const checkSource = this._latestPlayerCheckSource(scene);
+        const latestAction = checkSource?.type === 'action_intent' ? checkSource : null;
         const actionParsed = this._parseActionAdjudication(latestAction?.actionData);
         const aiParsed = this._parseCheckRaw(raw);
         const parsed = actionParsed || aiParsed;
@@ -478,32 +517,22 @@ const GroupChat = {
                 local: { stat: actionParsed.key, dc: actionParsed.dc }
             });
         }
+        const checkContext = this._inferCheckContext(scene, checkSource, parsed);
+        const checkContextPayload = {
+            key: parsed.key,
+            stat: parsed.key,
+            actionType: checkContext.actionType || '',
+            intent: checkContext.intent || '',
+            stakes: checkContext.stakes || ''
+        };
         const itemBonus = typeof WorldEngine !== 'undefined'
-            ? WorldEngine.getCheckItemBonus(scene, {
-                key: parsed.key,
-                stat: parsed.key,
-                actionType: latestAction?.actionData?.type || '',
-                intent: latestAction?.actionData?.intent || '',
-                stakes: latestAction?.actionData?.stakes || ''
-            })
+            ? WorldEngine.getCheckItemBonus(scene, checkContextPayload)
             : { bonus: 0, modifiers: [] };
         const availableItems = typeof WorldEngine !== 'undefined'
-            ? WorldEngine.getAvailableCheckItems(scene, {
-                key: parsed.key,
-                stat: parsed.key,
-                actionType: latestAction?.actionData?.type || '',
-                intent: latestAction?.actionData?.intent || '',
-                stakes: latestAction?.actionData?.stakes || ''
-            })
+            ? WorldEngine.getAvailableCheckItems(scene, checkContextPayload)
             : [];
         const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
-            ? WorldEngine.getAvailableCompanionResources(scene, {
-                key: parsed.key,
-                stat: parsed.key,
-                actionType: latestAction?.actionData?.type || '',
-                intent: latestAction?.actionData?.intent || '',
-                stakes: latestAction?.actionData?.stakes || ''
-            })
+            ? WorldEngine.getAvailableCompanionResources(scene, checkContextPayload)
             : [];
         const totalMod = parsed.mod + Number(itemBonus.bonus || 0);
         scene.pendingCheck = {
@@ -518,10 +547,10 @@ const GroupChat = {
             dc: parsed.dc,
             source: actionParsed ? '本地行动裁决' : 'AI 要求检定',
             sourceMessageId,
-            actionType: latestAction?.actionData?.type || '',
-            intent: latestAction?.actionData?.intent || '',
-            challengeContext: latestAction?.actionData?.challengeContext
-                ? JSON.parse(JSON.stringify(latestAction.actionData.challengeContext))
+            actionType: checkContext.actionType || '',
+            intent: checkContext.intent || '',
+            challengeContext: checkContext.challengeContext
+                ? JSON.parse(JSON.stringify(checkContext.challengeContext))
                 : null,
             adjudicationReason: parsed.adjudicationReason || '',
             adjudicationSource: parsed.adjudicationSource || (actionParsed ? 'local' : 'ai'),
@@ -530,7 +559,7 @@ const GroupChat = {
             availableCompanionModifiers: availableCompanions,
             selectedItemModifierIds: [],
             selectedCompanionResourceIds: [],
-            stakes: latestAction?.actionData?.stakes || '',
+            stakes: checkContext.stakes || '',
             risks: latestAction?.actionData?.risks || [],
             createdAt: Date.now()
         };
