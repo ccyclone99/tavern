@@ -314,6 +314,18 @@ const PromptBuilder = {
         const clueBlock = this.buildClueGraphContext(scene);
         if (clueBlock) parts.push(clueBlock);
 
+        const failureBlock = this.buildFailureStateContext(scene);
+        if (failureBlock) parts.push(failureBlock);
+
+        const gameplayBlock = this.buildGameplayFlowContext(scene);
+        if (gameplayBlock) parts.push(gameplayBlock);
+
+        const challengeBlock = this.buildChallengeContext(scene);
+        if (challengeBlock) parts.push(challengeBlock);
+
+        const evidenceBlock = this.buildEvidenceContext(scene);
+        if (evidenceBlock) parts.push(evidenceBlock);
+
         const pressureBlock = this.buildWorldPressureContext(scene);
         if (pressureBlock) parts.push(pressureBlock);
 
@@ -427,6 +439,63 @@ const PromptBuilder = {
         return `【线索图 · 私密结构】\n${lines}\n\n线索规则：\n- DM私密真相只能用于组织剧情，不能直接说给玩家听。\n- 玩家通过观察、询问、交易、潜入、检定、物证或 NPC 承认推进线索。\n- 当玩家取得新线索时，同时使用 knowledgeAdd 记录玩家已知信息；如推进了线索链，使用 clueUpdate 更新 status/currentStage/evidenceAdd。\n- 即使失败，也应给出片面信息、代价或新问题，而不是让调查停住。`;
     },
 
+    buildFailureStateContext(scene) {
+        const failures = Array.isArray(scene?.failureStates)
+            ? scene.failureStates.filter(f => f && f.status !== 'disabled')
+            : [];
+        if (failures.length === 0) return '';
+        const clockName = id => (scene.clocks || []).find(c => c.id === id)?.name || id;
+        const questName = id => (scene.quests || []).find(q => q.id === id)?.name || id;
+        const lines = failures.slice(0, 8).map(f => {
+            const t = f.trigger || {};
+            let triggerText = '手动触发';
+            if (t.type === 'clock') triggerText = `时钟「${clockName(t.clockId || '')}」达到 ${t.at === 'max' ? '满格' : t.at}`;
+            if (t.type === 'quest') triggerText = `任务「${questName(t.questId || '')}」变为 ${t.status || 'failed'}`;
+            if (t.type === 'counter') triggerText = `反制进度达到 ${t.at === 'max' ? '100%' : t.at}`;
+            if (t.type === 'worldTension') triggerText = `世界紧张度达到 ${t.at || 100}`;
+            return `- ${f.title}（${f.status || 'armed'}）：${triggerText}。${f.hint || f.message || ''}`;
+        }).join('\n');
+        return `【失败结局条件】\n${lines}\n\n失败规则：\n- 这些条件是剧本级坏结局，不是普通挫折。\n- 玩家仍应有机会通过调查、谈判、计策、消耗资源或完成阶段目标降低/禁用风险。\n- 当条件实际达成，系统会自动进入 defeated；如由叙事直接导致，可用 failureStateUpdate 触发或禁用对应失败状态。\n- 绑定隐藏时钟或未公开真相的失败条件属于 DM 私密信息，只能用环境异象、NPC 回避或局势压力暗示，不要把失败名称、满格条件或真相直接告诉玩家。\n- 不要把失败当作惩罚玩家，而要把它写成由拖延、错误代价或未解决危机自然造成的结局。`;
+    },
+
+    buildGameplayFlowContext(scene) {
+        const profile = scene?.gameplayProfile;
+        if (!profile || typeof profile !== 'object') return '';
+        const density = profile.checkDensity || {};
+        const target = Array.isArray(density.targetPerRun) ? density.targetPerRun.join('-') : '8-12';
+        const maxAuto = density.maxAutoQuestAdvances ?? 2;
+        const revelations = Array.isArray(scene?.flowGraph?.revelations) ? scene.flowGraph.revelations : [];
+        const revLines = revelations.slice(0, 6).map(r =>
+            `- ${r.conclusion || r.id}（${r.status || 'unknown'}，核心=${r.core !== false ? '是' : '否'}，线索：${(r.clueIds || []).slice(0, 4).join('、') || '—'}）`
+        ).join('\n');
+        return `【剧本挑战与玩法密度】\n- 本副本目标检定密度：${target} 次有意义检定；每个主阶段至少 ${density.minPerMainPhase ?? 1} 次检定或等价代价。\n- 当前阶段至少需要完成一个可玩挑战，不能只用叙事自动跳过。\n- 玩家行动若推进主线、核心线索、NPC 重大让步、危险探索或支线物证，必须要求检定、资源代价或挑战进度结算。\n- 谨慎行动可以降低 DC、降低后果或增加预警，但不能跳过重大挑战。\n- 核心线索不能被失败检定锁死；失败时给出片面线索、代价或新节点。\n- 连续自动完成任务目标不得超过 ${maxAuto} 次；支线目标必须有明确证据、物品、地点、NPC承认或检定结果。\n- NPC 不能说出自己不知道的信息。全局环境、挑战结算、证据链和阶段回顾由旁白/系统承担。${revLines ? `\n\n关键结论：\n${revLines}` : ''}`;
+    },
+
+    buildChallengeContext(scene) {
+        const challenges = Array.isArray(scene?.sceneChallenges) ? scene.sceneChallenges : [];
+        if (challenges.length === 0) return '';
+        const active = typeof WorldEngine !== 'undefined' && WorldEngine.getActiveChallenge
+            ? WorldEngine.getActiveChallenge(scene)
+            : challenges.find(c => c.status === 'active') || challenges.find(c => c.status === 'locked') || challenges[0];
+        const lines = challenges.slice(0, 8).map(ch => {
+            const mark = active && ch.id === active.id ? '当前' : (ch.status || 'locked');
+            const approaches = (ch.approaches || []).slice(0, 4).map(a =>
+                `${a.label}(${a.statName || a.stat}/DC${a.dc})`
+            ).join('；');
+            return `- [${mark}] ${ch.title}：进度 ${ch.progress || 0}/${ch.targetProgress || 3}，压力 ${ch.strain || 0}/${ch.maxStrain || 3}\n  目标：${ch.goal || '—'}\n  赌注：${ch.stakes || '—'}\n  可用方向：${approaches || '由玩家提出合理方案'}\n  失败推进：${(ch.failForward || []).slice(0, 2).join('；') || '给出代价并打开新局势'}`;
+        }).join('\n');
+        return `【场景挑战】\n${lines}\n\n挑战规则：\n- 当玩家行动命中当前挑战方向，优先使用该方向的属性和 DC；若系统已给出 [check:auto]，沿用本地裁决。\n- 大成功/成功推进挑战；部分成功推进但增加压力；失败增加压力并给核心线索代价或新节点。\n- 挑战未完成前，不要直接叙述阶段目标彻底达成；可以给“有限许可、部分证据、附带条件”的阶段性结果。\n- 挑战完成或失败时，可在 <state_update> 中写 challengeUpdate/evidenceAdd/revelationUpdate。`;
+    },
+
+    buildEvidenceContext(scene) {
+        const evidence = Array.isArray(scene?.evidenceLedger) ? scene.evidenceLedger.filter(e => e.visible !== false) : [];
+        if (evidence.length === 0) return '';
+        const lines = evidence.slice(-10).map(e =>
+            `- [${e.reliability || 'partial'}] ${e.title}（标签：${(e.tags || []).join('、') || '—'}；支持：${(e.supports || []).join('、') || '—'}）`
+        ).join('\n');
+        return `【证据账本】\n${lines}\n\n证据规则：\n- 主线目标最好由挑战完成、关键结论 confirmed 或证据 supports/tags 支撑。\n- 支线目标必须有明确证据标签、物品、地点抵达、NPC 承认或检定结果；不要只因叙事中出现相似词就宣布完成。\n- 新证据用 evidenceAdd，同时可用 knowledgeAdd 记录玩家已知信息。`;
+    },
+
     /**
      * 计策主持人协议：让 AI 像 DM 一样引导玩家制定并执行计策
      */
@@ -440,7 +509,7 @@ const PromptBuilder = {
             `- ${s.title}：${s.goal || '无目标'}（${s.status || 'draft'}，${s.phase || '—'}，风险${s.risk || 0}%，暴露${s.exposure || 0}%）`
         ).join('\n') || '无';
 
-        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100，同时记录 requiredIntel/usedIntel/exposure/counterplay。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖玩家已知情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 私密设定不是玩家已知；只有当玩家观察、调查、套话、取得证据或满足关系门槛时，才可以把它转化为 knowledgeAdd。\n6. 后果必须具体影响关系、警觉、任务、资源、地点、时钟或世界局势。\n7. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n8. 当创建或更新计策、添加玩家已知情报、推进剧情弧/时钟、调整 NPC 日程或反制时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "knowledgeAdd": [], "discoveryUpdate": [], "intelAdd": [], "factionsUpdate": [], "characterUpdates": [], "clockUpdate": [], "storyArcUpdate": [], "counterStrategyUpdate": [], "npcAgendaUpdate": [], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
+        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100，同时记录 requiredIntel/usedIntel/exposure/counterplay。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖玩家已知情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 私密设定不是玩家已知；只有当玩家观察、调查、套话、取得证据或满足关系门槛时，才可以把它转化为 knowledgeAdd。\n6. 后果必须具体影响关系、警觉、任务、资源、地点、时钟或世界局势。\n7. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n8. 当创建或更新计策、添加玩家已知情报、推进剧情弧/剧情阶段/线索/失败状态/时钟、调整 NPC 日程或反制时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "knowledgeAdd": [], "discoveryUpdate": [], "intelAdd": [], "factionsUpdate": [], "characterUpdates": [], "clockUpdate": [], "storyArcUpdate": [], "storyPhaseUpdate": [], "clueUpdate": [], "failureStateUpdate": [], "counterStrategyUpdate": [], "npcAgendaUpdate": [], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
     },
 
     buildNpcAgendaBlock(character) {
@@ -637,6 +706,14 @@ const PromptBuilder = {
         if (phaseBlock) systemParts.push(phaseBlock);
         const clueBlock = this.buildClueGraphContext(scene);
         if (clueBlock) systemParts.push(clueBlock);
+        const failureBlock = this.buildFailureStateContext(scene);
+        if (failureBlock) systemParts.push(failureBlock);
+        const gameplayBlock = this.buildGameplayFlowContext(scene);
+        if (gameplayBlock) systemParts.push(gameplayBlock);
+        const challengeBlock = this.buildChallengeContext(scene);
+        if (challengeBlock) systemParts.push(challengeBlock);
+        const evidenceBlock = this.buildEvidenceContext(scene);
+        if (evidenceBlock) systemParts.push(evidenceBlock);
         const pressureBlock = this.buildWorldPressureContext(scene);
         if (pressureBlock) systemParts.push(pressureBlock);
 

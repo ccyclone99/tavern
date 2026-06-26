@@ -2,6 +2,8 @@
 
 本文档定义“剧本与角色深化”的实现规格。目标是在现有单输入框、检定、线索账本和局势时钟之上，让预设剧本形成更稳定的故事循环：玩家通过行动发现线索，线索解锁 NPC 私密信息，NPC 和局势根据玩家选择推进，最终导向分支性的高潮。
 
+更新：下一阶段的完整执行规格已整理到 `docs/SCENARIO_GAMEPLAY_FLOW_SPEC.md`。该文档在本 SPEC 的阶段、线索图和失败态基础上，新增 `gameplayProfile`、`flowGraph`、`sceneChallenges`、`evidenceLedger` 和 `companionResources`，用于提升检定密度、证据闸门和副本游戏性。
+
 ## 1. 目标
 
 ### 1.1 秘密必须有发现路径
@@ -121,6 +123,36 @@ scene.consequenceLedger = [
 
 本阶段先做字段兼容和 Prompt 约束，UI 可后续扩展为完整日志。
 
+### 2.4 `scene.failureStates`
+
+```js
+scene.failureStates = [
+  {
+    id: "fail_blackship_suspicion",
+    title: "强化审讯",
+    status: "armed", // armed | triggered | disabled
+    severity: "major",
+    trigger: {
+      type: "clock", // clock | quest | counter | worldTension | manual
+      clockId: "clock_blackship_suspicion",
+      at: "max"
+    },
+    message: "审判庭怀疑达到临界，玩家被转入无法逃脱的强化审讯。",
+    aftermath: "故事进入失败结局。可以读取存档，或从更早的调查路线重来。",
+    recoverable: false
+  }
+]
+```
+
+规则：
+
+- `armed` 状态会被系统自动判定。
+- `triggered` 后系统将 `scene.gameState` 设为 `defeated`，并插入 `gameover` 消息。
+- `disabled` 用于玩家已经拆除对应风险，例如封印遗物后禁用“遗物腐化”失败。
+- `trigger.type = "clock"` 时，`at: "max"` 表示对应时钟满格。
+- `trigger.type = "quest"` 时，主线任务 `failed/abandoned` 可触发失败。
+- AI 可以通过 `failureStateUpdate` 手动触发或禁用失败状态，但仍受白名单限制。
+
 ## 3. Prompt 规则
 
 PromptBuilder 必须注入：
@@ -161,6 +193,7 @@ AI 输出 `<state_update>` 时可以使用：
 - 三个预设剧本补 `storyPhases`。
 - 三个预设剧本补 `clueGraph`。
 - 三个预设剧本补专属 `clocks` 和初始 `counterStrategies`。
+- 三个预设剧本补 `failureStates`，把关键时钟满格转化为剧本坏结局。
 - 运行时兼容新字段：normalize、保存、读档、Prompt 注入、局势面板展示。
 
 本阶段暂不做：
@@ -176,5 +209,6 @@ AI 输出 `<state_update>` 时可以使用：
 - 推荐行动包含阶段行动或线索追查行动。
 - Prompt 中包含阶段和线索图上下文。
 - AI 状态补丁可安全应用 `clueUpdate`。
+- 关键失败时钟满格后会进入 `defeated` 并显示剧本专属失败消息。
 - 未确认的 `clueGraph.truth` 不出现在局势 UI。
 - 旧存档缺少新字段时不会报错。

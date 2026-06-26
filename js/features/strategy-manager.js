@@ -167,8 +167,13 @@ const StrategyManager = {
         let storyChanged = false;
         let phaseChanged = false;
         let clueChanged = false;
+        let failureChanged = false;
         let counterChanged = false;
         let agendaChanged = false;
+        let challengeChanged = false;
+        let evidenceChanged = false;
+        let revelationChanged = false;
+        let flowGraphChanged = false;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -264,12 +269,34 @@ const StrategyManager = {
             clueChanged = WorldEngine.applyClueUpdate(scene, update.clueUpdate);
         }
 
+        if (Array.isArray(update.failureStateUpdate) && typeof WorldEngine !== 'undefined') {
+            failureChanged = WorldEngine.applyFailureStateUpdate(scene, update.failureStateUpdate);
+        }
+
         if (Array.isArray(update.counterStrategyUpdate) && typeof WorldEngine !== 'undefined') {
             counterChanged = WorldEngine.applyCounterStrategyUpdate(scene, update.counterStrategyUpdate);
+            if (counterChanged && typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'counter' });
         }
 
         if (Array.isArray(update.npcAgendaUpdate) && typeof WorldEngine !== 'undefined') {
             agendaChanged = WorldEngine.applyNpcAgendaUpdate(update.npcAgendaUpdate);
+        }
+
+        if (Array.isArray(update.challengeUpdate) && typeof WorldEngine !== 'undefined') {
+            challengeChanged = WorldEngine.applyChallengeUpdate(scene, update.challengeUpdate);
+        }
+
+        if (Array.isArray(update.evidenceAdd) && typeof WorldEngine !== 'undefined') {
+            evidenceChanged = WorldEngine.applyEvidenceAdd(scene, update.evidenceAdd);
+            if (evidenceChanged) knowledgeAdded = true;
+        }
+
+        if (Array.isArray(update.revelationUpdate) && typeof WorldEngine !== 'undefined') {
+            revelationChanged = WorldEngine.applyRevelationUpdate(scene, update.revelationUpdate);
+        }
+
+        if (update.flowGraphUpdate && typeof update.flowGraphUpdate === 'object' && typeof WorldEngine !== 'undefined') {
+            flowGraphChanged = WorldEngine.applyFlowGraphUpdate(scene, update.flowGraphUpdate);
         }
 
         // 3. factionsUpdate
@@ -360,6 +387,7 @@ const StrategyManager = {
                 const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
                 if (target) scene.activeStrategyId = update.scene.activeStrategyId;
             }
+            if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'worldTension' });
         }
 
         // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
@@ -370,10 +398,24 @@ const StrategyManager = {
                 const quest = scene.quests.find(q => q.id === qu.questId);
                 if (!quest) continue;
                 if (qu.objectiveIdx !== undefined && quest.objectives[qu.objectiveIdx]) {
-                    quest.objectives[qu.objectiveIdx].completed = true;
+                    const objective = quest.objectives[qu.objectiveIdx];
+                    const allowed = typeof WorldEngine === 'undefined' || !WorldEngine._objectiveAllowedByProgressGates ||
+                        WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, qu.objectiveIdx, '', { stateUpdate: true });
+                    if (allowed) {
+                        quest.objectives[qu.objectiveIdx].completed = true;
+                    } else {
+                        WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果或证据支持。`, 'system');
+                    }
                 }
-                if (qu.status && validQuestStatuses.includes(qu.status)) quest.status = qu.status;
+                if (qu.status && validQuestStatuses.includes(qu.status)) {
+                    const structured = (scene.sceneChallenges || []).length > 0 || (scene.evidenceLedger || []).length > 0 || (scene.flowGraph?.revelations || []).length > 0;
+                    if (qu.status !== 'completed' || !structured || (quest.objectives || []).every(o => o.completed)) {
+                        quest.status = qu.status;
+                    }
+                }
             }
+            if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'quest' });
+            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
         }
 
         if (Array.isArray(update.itemAdd)) {
@@ -459,6 +501,6 @@ const StrategyManager = {
         if (discoveryChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || phaseChanged || clueChanged || counterChanged || agendaChanged) SidebarRight.markTabNew('situation');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged) SidebarRight.markTabNew('situation');
     }
 };

@@ -47,18 +47,37 @@ const ActionPlanner = {
 
     create(scene, intent) {
         const text = String(intent || '').trim().slice(0, 800);
-        const profile = this._classify(text);
+        const baseProfile = this._classify(text);
+        const challengeMatch = typeof WorldEngine !== 'undefined' && WorldEngine.matchChallengeApproach
+            ? WorldEngine.matchChallengeApproach(scene, text, baseProfile.type)
+            : null;
+        const challengeApproach = challengeMatch?.approach || null;
+        const secondaryApproaches = Array.isArray(challengeMatch?.secondaryApproaches)
+            ? challengeMatch.secondaryApproaches
+            : [];
+        const profile = challengeApproach
+            ? {
+                ...baseProfile,
+                type: challengeApproach.actionType || baseProfile.type || 'investigate',
+                stat: challengeApproach.stat || baseProfile.stat,
+                baseRisk: Number(challengeApproach.risk || 45),
+                baseDc: Number(challengeApproach.dc || baseProfile.baseDc),
+                keywords: [...(baseProfile.keywords || []), challengeApproach.label, ...(challengeApproach.tags || []), ...(challengeApproach.keywords || [])]
+            }
+            : baseProfile;
         const modifiers = this._buildModifiers(scene, profile, text);
         const riskDelta = modifiers.reduce((sum, m) => sum + (m.riskDelta || 0), 0);
         const dcDelta = modifiers.reduce((sum, m) => sum + (m.dcDelta || 0), 0);
         const risk = this._clamp(profile.baseRisk + riskDelta, 5, 95);
         const dc = this._clamp(profile.baseDc + dcDelta + (risk >= 75 ? 2 : risk <= 25 ? -1 : 0), 8, 25);
-        const needsCheck = risk >= 20 || profile.type !== 'talk';
+        const needsCheck = !!challengeMatch || risk >= 20 || profile.type !== 'talk';
 
         const suggestedCheck = needsCheck ? {
             stat: profile.stat,
             statName: this.statLabels[profile.stat] || profile.stat,
-            dc
+            dc,
+            challengeId: challengeMatch?.challenge?.id || '',
+            approachId: challengeApproach?.id || ''
         } : null;
 
         return {
@@ -81,6 +100,15 @@ const ActionPlanner = {
             modifiers,
             risks: this._risksFor(profile.type, risk),
             stakes: this._stakesFor(profile.type, risk),
+            challengeContext: challengeMatch ? {
+                challengeId: challengeMatch.challenge.id,
+                challengeTitle: challengeMatch.challenge.title,
+                approachId: challengeApproach?.id || '',
+                approachLabel: challengeApproach?.label || '',
+                secondaryApproachIds: secondaryApproaches.map(a => a.id).filter(Boolean),
+                secondaryApproachLabels: secondaryApproaches.map(a => a.label).filter(Boolean).slice(0, 3),
+                phaseId: challengeMatch.challenge.phaseId || ''
+            } : null,
             createdAt: Date.now()
         };
     },
@@ -94,10 +122,13 @@ const ActionPlanner = {
             ? action.modifiers.map(m => `- ${m.source}：${m.label}`).join('\n')
             : '- 无明显本地修正';
         const risks = (action.risks || []).map(r => `- ${r}`).join('\n') || '- 风险较低';
+        const challenge = action.challengeContext
+            ? `\n当前挑战：${action.challengeContext.challengeTitle}${action.challengeContext.approachLabel ? ` / ${action.challengeContext.approachLabel}` : ''}${(action.challengeContext.secondaryApproachLabels || []).length ? `\n复合行动还覆盖：${action.challengeContext.secondaryApproachLabels.join('、')}` : ''}`
+            : '';
         return `目标：${action.intent}
 行动类型：${action.typeLabel || action.type}
 风险预览：${action.risk}%（${action.riskLevel}）
-建议检定：${check}
+建议检定：${check}${challenge}
 风险来源：
 ${modifiers}
 失败推进：
@@ -118,6 +149,14 @@ ${risks}
 
     _buildModifiers(scene, profile, intent = '') {
         const modifiers = [];
+        if (this._isCautious(intent)) {
+            modifiers.push({
+                source: '谨慎行动',
+                label: '风险 -8，DC -1，但重大挑战仍需检定',
+                riskDelta: -8,
+                dcDelta: -1
+            });
+        }
         const stats = scene?.playerStats || {};
         const statVal = stats[profile.stat] || 10;
         const statMod = Math.floor((statVal - 10) / 2);
@@ -214,6 +253,11 @@ ${risks}
         }
 
         return modifiers;
+    },
+
+    _isCautious(intent = '') {
+        const text = String(intent || '');
+        return ['谨慎', '小心', '慢慢', '先观察', '先检查', '保持距离', '低风险', '安全', '不冒进', '验证', '备份', '记录'].some(k => text.includes(k));
     },
 
     _riskLevel(risk) {

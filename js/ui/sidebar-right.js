@@ -94,6 +94,7 @@ const SidebarRight = {
 
     /** 标记某 tab 有新内容（AI 驱动/被动获得时调用） */
     markTabNew(tab, n = 1) {
+        if (!this.el || !this.tabBtns) return;
         // 当前正在看的 tab 不标记
         const activeBtn = this.el.querySelector('.tab-btn.active');
         if (activeBtn && activeBtn.dataset.tab === tab) return;
@@ -154,6 +155,8 @@ const SidebarRight = {
         const quest = situation.activeQuest;
         const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
         const phase = situation.storyPhase;
+        const challenge = situation.activeChallenge;
+        const runRecordHtml = this._buildRunRecordHtml(scene.runRecord);
         const phaseHtml = phase ? `
             <div class="situation-section">
                 <h4>当前阶段</h4>
@@ -173,6 +176,38 @@ const SidebarRight = {
                 </div>
             </div>
         ` : '';
+        const challengeHtml = challenge ? (() => {
+            const progressPct = Math.min(100, Math.max(0, (Number(challenge.progress || 0) / Math.max(1, Number(challenge.targetProgress || 1))) * 100));
+            const strainPct = Math.min(100, Math.max(0, (Number(challenge.strain || 0) / Math.max(1, Number(challenge.maxStrain || 1))) * 100));
+            const approaches = (challenge.approaches || []).slice(0, 3).map(a =>
+                `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(a.label)}" aria-label="尝试：${Renderer.escapeAttr(a.label)}">${Renderer.escapeHtml(a.label)}<small>${Renderer.escapeHtml(a.statName || a.stat || '')} DC${a.dc || '?'}</small></button>`
+            ).join('');
+            const evidence = (situation.challengeEvidence || []).slice(0, 3).map(e =>
+                `<span title="${Renderer.escapeAttr(e.text || e.title || '')}">${Renderer.escapeHtml(e.title || '证据')}</span>`
+            ).join('');
+            return `
+                <div class="situation-section situation-challenge">
+                    <h4>当前挑战</h4>
+                    <div class="situation-main-goal">
+                        <strong>${Renderer.escapeHtml(challenge.title || '挑战')}</strong>
+                        ${challenge.goal ? `<span>${Renderer.escapeHtml(challenge.goal)}</span>` : ''}
+                        ${challenge.stakes ? `<p class="situation-stakes">${Renderer.escapeHtml(challenge.stakes)}</p>` : ''}
+                    </div>
+                    <div class="situation-challenge-meters">
+                        <div class="situation-meter">
+                            <div class="situation-row"><span>进度</span><strong>${challenge.progress || 0}/${challenge.targetProgress || 0}</strong></div>
+                            <div class="situation-bar"><div class="situation-bar-fill" style="width:${progressPct}%"></div></div>
+                        </div>
+                        <div class="situation-meter situation-meter-strain">
+                            <div class="situation-row"><span>压力</span><strong>${challenge.strain || 0}/${challenge.maxStrain || 0}</strong></div>
+                            <div class="situation-bar"><div class="situation-bar-fill" style="width:${strainPct}%"></div></div>
+                        </div>
+                    </div>
+                    ${approaches ? `<div class="situation-actions situation-challenge-actions">${approaches}</div>` : ''}
+                    ${evidence ? `<div class="situation-tags situation-evidence-tags">${evidence}</div>` : ''}
+                </div>
+            `;
+        })() : '';
 
         const clocksHtml = situation.clocks.length > 0
             ? situation.clocks.map(clock => {
@@ -190,6 +225,20 @@ const SidebarRight = {
             : '<p class="placeholder">暂无公开时钟</p>';
         const hiddenHtml = situation.hiddenPressure > 0
             ? `<div class="situation-hidden-pressure">有 ${situation.hiddenPressure} 股未公开压力正在暗处推进</div>`
+            : '';
+        const failureWarningsHtml = (situation.failureWarnings || []).length > 0
+            ? situation.failureWarnings.map(failure => {
+                const pct = Math.min(100, Math.max(0, (failure.value / Math.max(1, failure.max)) * 100));
+                const cls = pct >= 80 ? 'danger' : pct >= 50 ? 'warn' : 'calm';
+                return `<div class="situation-failure situation-failure-${cls}">
+                    <div class="situation-row">
+                        <span>${Renderer.escapeHtml(failure.title || '失败临界')}</span>
+                        <strong>${failure.value}/${failure.max}</strong>
+                    </div>
+                    <div class="situation-bar"><div class="situation-bar-fill" style="width:${pct}%"></div></div>
+                    <p>${Renderer.escapeHtml(failure.text || '公开危机满格会导致失败结局。')}</p>
+                </div>`;
+            }).join('')
             : '';
 
         const countersHtml = situation.counterStrategies.length > 0
@@ -234,13 +283,21 @@ const SidebarRight = {
                 ${locationDesc ? `<p>${Renderer.escapeHtml(locationDesc)}</p>` : ''}
                 <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
             </div>
+            ${runRecordHtml}
             ${phaseHtml}
             ${questHtml}
+            ${challengeHtml}
             <div class="situation-section">
                 <h4>局势时钟</h4>
                 ${clocksHtml}
                 ${hiddenHtml}
             </div>
+            ${failureWarningsHtml ? `
+            <div class="situation-section situation-failure-section">
+                <h4>失败临界</h4>
+                ${failureWarningsHtml}
+            </div>
+            ` : ''}
             <div class="situation-section">
                 <h4>反制与压力</h4>
                 ${countersHtml}
@@ -278,6 +335,69 @@ const SidebarRight = {
                 }
             };
         });
+    },
+
+    _buildRunRecordHtml(record) {
+        if (!record || typeof record !== 'object') return '';
+        const outcomeLabel = record.outcome === 'victorious' ? '通关' : (record.outcome === 'defeated' ? '失败' : '记录');
+        const outcomeCls = record.outcome === 'victorious' ? 'victory' : (record.outcome === 'defeated' ? 'defeat' : 'neutral');
+        const moments = (record.keyMoments || []).slice(-6).map(m => `
+            <li>
+                <strong>${Renderer.escapeHtml(m.title || '事件')}</strong>
+                <span>${Renderer.escapeHtml(m.text || '')}</span>
+            </li>
+        `).join('');
+        const phases = (record.phaseSummaries || []).slice(0, 5).map(p => `
+            <li>
+                <strong>${Renderer.escapeHtml(p.title || '阶段')}</strong>
+                <span>${Renderer.escapeHtml(p.summary || '')}</span>
+            </li>
+        `).join('');
+        const quests = (record.quests || []).slice(0, 6).map(q => `
+            <span>${Renderer.escapeHtml(q.name || '任务')}：${Renderer.escapeHtml(q.status || 'active')} ${q.completed || 0}/${q.total || 0}</span>
+        `).join('');
+        const discoveries = (record.discoveries || []).slice(-6).map(d => `
+            <span>${Renderer.escapeHtml(d.title || d.text || '线索')}</span>
+        `).join('');
+        const clocks = (record.clocks || []).slice(0, 6).map(c => `
+            <span>${Renderer.escapeHtml(c.name || '时钟')} ${c.value || 0}/${c.max || 0}</span>
+        `).join('');
+        const challenges = (record.challenges || []).slice(0, 6).map(c => `
+            <span>${Renderer.escapeHtml(c.title || '挑战')}：${Renderer.escapeHtml(c.status || '')} ${c.progress || 0}/${c.targetProgress || 0}</span>
+        `).join('');
+        const evidence = (record.evidence || []).slice(-6).map(e => `
+            <span>${Renderer.escapeHtml(e.title || '证据')}：${Renderer.escapeHtml(e.reliability || '')}</span>
+        `).join('');
+        const checks = (record.checks || []).slice(-6).map(c => `
+            <span>${Renderer.escapeHtml(c.statName || '检定')} ${c.total || 0}/DC${c.dc || 0} ${Renderer.escapeHtml(c.outcome || '')}</span>
+        `).join('');
+        return `
+            <div class="situation-section run-record run-record-${outcomeCls}">
+                <div class="run-record-head">
+                    <div>
+                        <div class="situation-kicker">冒险回顾</div>
+                        <h4>${Renderer.escapeHtml(record.title || '本次冒险')}</h4>
+                    </div>
+                    <span class="run-record-outcome">${outcomeLabel}</span>
+                </div>
+                <p>${Renderer.escapeHtml(record.summary || record.ending || '暂无摘要')}</p>
+                ${record.ending ? `<blockquote>${Renderer.escapeHtml(record.ending)}</blockquote>` : ''}
+                <div class="run-record-meta">
+                    <span>${Renderer.escapeHtml(record.player?.name || '旅人')}</span>
+                    <span>回合 ${record.turns || 0}</span>
+                    <span>Lv.${record.player?.level || 1}</span>
+                    <span>HP ${record.player?.hp || 0}/${record.player?.maxHp || 0}</span>
+                </div>
+                ${phases ? `<ol class="run-record-phases">${phases}</ol>` : ''}
+                ${moments ? `<ol class="run-record-moments">${moments}</ol>` : ''}
+                ${quests ? `<div class="situation-tags run-record-tags">${quests}</div>` : ''}
+                ${challenges ? `<div class="situation-tags run-record-tags">${challenges}</div>` : ''}
+                ${evidence ? `<div class="situation-tags run-record-tags">${evidence}</div>` : ''}
+                ${checks ? `<div class="situation-tags run-record-tags">${checks}</div>` : ''}
+                ${discoveries ? `<div class="situation-tags run-record-tags">${discoveries}</div>` : ''}
+                ${clocks ? `<div class="situation-tags run-record-tags">${clocks}</div>` : ''}
+            </div>
+        `;
     },
 
     renderStatusSummary(situation) {

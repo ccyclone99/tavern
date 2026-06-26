@@ -72,6 +72,10 @@ const ActionBar = {
         const checkHtml = action.suggestedCheck
             ? `${Renderer.escapeHtml(action.suggestedCheck.statName)} DC${Renderer.escapeHtml(action.suggestedCheck.dc)}`
             : '通常无需检定';
+        const secondaryLabels = action.challengeContext?.secondaryApproachLabels || [];
+        const secondaryHtml = secondaryLabels.length
+            ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">同时尝试</span><div class="pending-action-factors">${secondaryLabels.slice(0, 3).map(label => `<span class="pending-action-factor pending-action-factor-neutral">${Renderer.escapeHtml(label)}</span>`).join('')}</div></div>`
+            : '';
         const modifierChip = (m) => {
             const riskDelta = Number(m.riskDelta || 0);
             const dcDelta = Number(m.dcDelta || 0);
@@ -114,6 +118,7 @@ const ActionBar = {
             ${positiveHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">优势</span><div class="pending-action-factors">${positiveHtml}</div></div>` : ''}
             ${negativeHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">压力</span><div class="pending-action-factors">${negativeHtml}</div></div>` : ''}
             ${neutralHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">其他</span><div class="pending-action-factors">${neutralHtml}</div></div>` : ''}
+            ${secondaryHtml}
             ${!positiveHtml && !negativeHtml && !neutralHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">修正</span><div class="pending-action-factors"><span class="pending-action-factor pending-action-factor-neutral">本地未发现显著修正</span></div></div>` : ''}
             ${risksHtml ? `<ul class="pending-action-risks">${risksHtml}</ul>` : ''}
             <div class="pending-action-actions">
@@ -162,6 +167,12 @@ const ActionBar = {
         const sourceText = check.intent
             ? `来自行动：${Renderer.escapeHtml(check.intent)}`
             : Renderer.escapeHtml(check.source || '系统要求检定');
+        const challengeText = check.challengeContext?.challengeTitle
+            ? `挑战：${Renderer.escapeHtml(check.challengeContext.challengeTitle)}${check.challengeContext.approachLabel ? ` · ${Renderer.escapeHtml(check.challengeContext.approachLabel)}` : ''}`
+            : '';
+        const secondaryText = (check.challengeContext?.secondaryApproachLabels || []).length
+            ? `同时尝试：${check.challengeContext.secondaryApproachLabels.slice(0, 3).map(label => Renderer.escapeHtml(label)).join('、')}`
+            : '';
 
         el.classList.remove('hidden');
         el.innerHTML = `
@@ -170,6 +181,8 @@ const ActionBar = {
                     <div class="pending-action-kicker">检定</div>
                     <div class="pending-check-title">${iconHtml}<span>${Renderer.escapeHtml(check.statName || '属性')}检定</span></div>
                     <div class="pending-action-note">${sourceText}。点击或输入“掷骰”继续；待掷状态不会提前推进世界。</div>
+                    ${challengeText ? `<div class="pending-action-note pending-check-challenge">${challengeText}</div>` : ''}
+                    ${secondaryText ? `<div class="pending-action-note pending-check-challenge">${secondaryText}</div>` : ''}
                 </div>
                 <span class="pending-check-dc">DC ${dc}</span>
             </div>

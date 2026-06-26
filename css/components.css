@@ -1849,6 +1849,7 @@
 
 .situation-clock,
 .situation-counter,
+.situation-failure,
 .situation-unknown {
     border: 1px solid var(--border);
     background: var(--bg-input);
@@ -1894,6 +1895,170 @@
 
 .situation-clock-warn .situation-bar-fill { background: var(--amber); }
 .situation-clock-danger .situation-bar-fill { background: var(--red); }
+
+.situation-challenge {
+    border-color: rgba(245, 158, 11, 0.32);
+}
+
+.situation-challenge-meters {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.situation-meter-strain .situation-bar-fill {
+    background: linear-gradient(90deg, var(--amber), var(--red));
+}
+
+.situation-challenge-actions {
+    margin-top: 10px;
+}
+
+.situation-evidence-tags {
+    margin-top: 10px;
+}
+
+.situation-failure-section {
+    border-color: rgba(239,68,68,0.34);
+}
+
+.situation-failure {
+    border-color: rgba(239,68,68,0.28);
+    background: rgba(127,29,29,0.14);
+}
+
+.situation-failure .situation-row span {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.situation-failure .situation-row strong {
+    color: var(--red);
+}
+
+.situation-failure .situation-bar-fill {
+    background: var(--red);
+}
+
+.situation-failure-warn .situation-bar-fill {
+    background: var(--amber);
+}
+
+.situation-failure-calm .situation-bar-fill {
+    background: var(--gold-dim);
+}
+
+.run-record {
+    border-color: rgba(251,191,36,0.35);
+    background: linear-gradient(180deg, rgba(251,191,36,0.08), rgba(255,255,255,0.02));
+}
+
+.run-record-defeat {
+    border-color: rgba(239,68,68,0.32);
+}
+
+.run-record-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.run-record-head h4 {
+    margin-bottom: 0;
+}
+
+.run-record-outcome {
+    flex-shrink: 0;
+    border: 1px solid var(--border-gold);
+    border-radius: 5px;
+    padding: 3px 7px;
+    color: var(--text-gold);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.run-record-defeat .run-record-outcome {
+    border-color: rgba(239,68,68,0.45);
+    color: var(--red);
+}
+
+.run-record blockquote {
+    margin: 8px 0 0;
+    padding: 8px 9px;
+    border-left: 2px solid var(--gold-dim);
+    background: rgba(0,0,0,0.16);
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.run-record-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 9px;
+}
+
+.run-record-meta span {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.run-record-phases,
+.run-record-moments {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.run-record-phases {
+    padding-left: 0;
+    list-style: none;
+}
+
+.run-record-phases li {
+    border: 1px solid rgba(251,191,36,0.16);
+    border-radius: 7px;
+    padding: 7px 8px;
+    background: rgba(0,0,0,0.14);
+}
+
+.run-record-phases strong {
+    display: block;
+    color: var(--text-gold);
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+
+.run-record-phases span {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.run-record-moments li {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.run-record-moments strong {
+    display: block;
+    color: var(--text-main);
+    font-size: 12px;
+}
+
+.run-record-tags {
+    margin-top: 8px;
+}
 
 .situation-hidden-pressure {
     margin-top: 8px;
@@ -1967,6 +2132,14 @@
     min-height: 28px;
     padding: 5px 7px;
     font-size: 11px;
+}
+
+.situation-action small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 2px;
 }
 
 .st-exposure {

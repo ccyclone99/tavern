@@ -427,7 +427,7 @@ const ChatUI = {
             div.innerHTML = this._renderCheckCard(msg.checkData);
         } else if (parsed.type === 'gameover') {
             div.className = 'rp-message rp-ending rp-ending-defeat';
-            div.innerHTML = `<div class="ending-icon">💀</div><div class="ending-title">你倒下了</div><div class="ending-desc">${Renderer.renderRP(parsed.content)}</div>`;
+            div.innerHTML = `<div class="ending-icon">💀</div><div class="ending-title">失败结局</div><div class="ending-desc">${Renderer.renderRP(parsed.content)}</div>`;
         } else if (parsed.type === 'victory') {
             div.className = 'rp-message rp-ending rp-ending-victory';
             div.innerHTML = `<div class="ending-icon">🏆</div><div class="ending-title">冒险完成</div><div class="ending-desc">${Renderer.renderRP(parsed.content)}</div>`;

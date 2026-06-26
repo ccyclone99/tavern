@@ -225,6 +225,14 @@ const QuestTracker = {
         if (!quest) return;
         const idx = (parseInt(objIdx) || 1) - 1;
         if (idx >= 0 && idx < quest.objectives.length) {
+            const objective = quest.objectives[idx];
+            if (typeof WorldEngine !== 'undefined' &&
+                WorldEngine._objectiveAllowedByProgressGates &&
+                !WorldEngine._objectiveAllowedByProgressGates(scene, quest, objective, idx, '', { explicitMarker: true })) {
+                WorldEngine.addSystemMessage?.(scene, `【任务进展待确认：${quest.name}】${objective.text} 需要明确挑战结果或证据支持。`, 'system');
+                SidebarRight.renderSituation?.();
+                return;
+            }
             quest.objectives[idx].completed = true;
             if (quest.objectives.every(o => o.completed)) {
                 quest.status = 'completed';

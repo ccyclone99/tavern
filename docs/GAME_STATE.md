@@ -139,6 +139,15 @@
 | `gameState` | string | `playing` / `defeated` / `victorious` |
 | `storyArcs` | StoryArc[] | 剧情弧 prompt 上下文 |
 | `clocks` | Clock[] | 局势时钟，支持 hidden/hinted/known 可见性 |
+| `failureStates` | FailureState[] | 剧本级失败结局条件，支持时钟/任务/反制/世界紧张度触发 |
+| `gameplayProfile` | object | 副本玩法密度、核心线索和 NPC 边界策略 |
+| `flowGraph` | object | 剧本节点图和关键结论 revelations |
+| `sceneChallenges` | SceneChallenge[] | 当前阶段可玩的挑战、进度、压力和检定方向 |
+| `evidenceLedger` | Evidence[] | 玩家已取得的证据，用于任务/结论推进闸门 |
+| `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟 |
+| `questProgressGuards` | object | 连续自动任务推进保护，防止无挑战/无证据跳目标 |
+| `runRecord` | RunRecord/null | 当前冒险的结局回顾，胜利或失败时自动生成 |
+| `runHistory` | RunRecord[] | 最近通关/失败记录，便于玩家回看多次尝试 |
 | `counterStrategies` | CounterStrategy[] | NPC/敌方反制计划 |
 | `flowGuide` | object | 剧本流程指南：openingMoves/sessionGoals/stalledPrompts/failForward/completedMoves |
 | `currentSituation` | object | 当前局势摘要：recentRisks/recommendedActions |
@@ -227,6 +236,44 @@
 ```
 
 主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会把 `scene.gameState` 设为 `victorious` 并插入胜利消息。
+
+剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。
+
+结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定和公开时钟。右侧“局势”面板会展示这份冒险回顾。
+
+### SceneChallenge / Evidence
+
+```js
+scene.sceneChallenges = [
+  {
+    id: "challenge_shelter_committee_trust",
+    phaseId: "phase_shelter_permission",
+    title: "委员会最低信任",
+    status: "active",       // locked | active | completed | failed | bypassed
+    progress: 0,
+    targetProgress: 3,
+    strain: 0,
+    maxStrain: 3,
+    approaches: [
+      { id: "present_route_data", label: "提交路线和辐射读数", stat: "intelligence", dc: 13, effect: 1 }
+    ],
+    supports: ["q_main:1"],
+    coreRevelations: ["rev_player_is_not_contagious"]
+  }
+];
+
+scene.evidenceLedger = [
+  {
+    id: "ev_no_contagion",
+    title: "无传染性体检结论",
+    tags: ["medical", "no_contagion"],
+    reliability: "confirmed", // rumor | partial | confirmed | contested
+    supports: ["q_side2:1", "rev_player_is_not_contagious"]
+  }
+];
+```
+
+`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。
 
 ### Location
 
@@ -600,7 +647,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 | `check` | 玩家点击检定卡“掷骰”或输入“掷骰” | 检定结果消息，带 `checkData` |
 | `system` | 关系/奖励/伤害等系统反馈 | UI 系统消息 |
 | `divider` | 世界初始化 | “故事开始”等分割线 |
-| `gameover` | HP 归零 | 失败结局 |
+| `gameover` | HP 归零或 `failureStates` 触发 | 失败结局 |
 | `victory` | 主线任务全完成 | 胜利结局 |
 
 `checkData` 结构：
