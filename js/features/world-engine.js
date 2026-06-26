@@ -3776,6 +3776,64 @@ const WorldEngine = {
         return partial.length === 1 ? partial[0] : null;
     },
 
+    resolveCharacterHiddenFact(scene, ref = {}) {
+        const character = this.resolveCharacterReference(scene, ref);
+        if (!character) return null;
+        const facts = Array.isArray(character.profile?.hiddenFacts)
+            ? character.profile.hiddenFacts.filter(Boolean)
+            : [];
+        if (facts.length === 0) return null;
+
+        const rawId = String(ref.factId || ref.hiddenFactId || ref.fact || '').trim();
+        if (rawId) {
+            const byId = facts.find(fact => String(fact.id || '') === rawId);
+            if (byId) return { character, fact: byId };
+        }
+
+        const refs = [
+            ref.factTitle,
+            ref.title,
+            ref.factName,
+            ref.hiddenFact,
+            ref.hint,
+            ref.truth,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const fact = this._findHiddenFactByRef(facts, value);
+            if (fact) return { character, fact };
+        }
+
+        const type = String(ref.factType || ref.type || '').trim();
+        if (type) {
+            const normalizedType = this._normalizeQuestText(type);
+            const matches = facts.filter(fact => this._normalizeQuestText(fact.type || '') === normalizedType);
+            if (matches.length === 1) return { character, fact: matches[0] };
+        }
+
+        return null;
+    },
+
+    _findHiddenFactByRef(facts, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return null;
+        const idMatches = facts.filter(fact => this._normalizeQuestText(fact.id || '') === normalized);
+        if (idMatches.length > 0) return idMatches.length === 1 ? idMatches[0] : null;
+
+        const exact = facts.filter(fact => {
+            const fields = [fact.title, fact.hint, fact.truth].map(value => this._normalizeQuestText(value || ''));
+            return fields.some(value => value && value === normalized);
+        });
+        if (exact.length > 0) return exact.length === 1 ? exact[0] : null;
+
+        const partial = facts.filter(fact => {
+            const fields = [fact.title, fact.hint, fact.truth].map(value => this._normalizeQuestText(value || ''));
+            return fields.some(value => value.length >= 2 && normalized.length >= 2 && (value.includes(normalized) || normalized.includes(value)));
+        });
+        return partial.length === 1 ? partial[0] : null;
+    },
+
     applyNpcAgendaUpdate(updates) {
         if (!Array.isArray(updates)) return false;
         const scene = typeof State !== 'undefined' ? State.scene : null;

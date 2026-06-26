@@ -772,7 +772,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 
 - `creed`、`redLines`、`values` 是人格锚点，`PromptBuilder.buildCreedBlock()` 会以高优先级注入。
 - `motives`、`fears`、`secrets`、`leverage` 属于 NPC 私密设定，用于扮演和计策裁决，不等于玩家已知。
-- `profile.public` 是玩家初见可见档案；`profile.hiddenFacts` 需要通过 `knowledgeAdd` / `discoveryUpdate` 逐步解锁。
+- `profile.public` 是玩家初见可见档案；`profile.hiddenFacts` 需要通过 `knowledgeAdd` / `discoveryUpdate` 逐步解锁。`discoveryUpdate` 优先使用 `characterId + factId`，也可用当前场景内唯一角色名和该角色下唯一的档案标题、类型、hint 或 truth 片段匹配；不唯一时必须跳过，不能猜测解锁。
 - 旧角色或生成角色缺少 `profile.public.firstImpression` 时，UI/生成器应显示非剧透占位或标签化印象，不应从完整 `description` 摘取公开印象。
 - `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；旧字段 `relationshipUpdate` 仅作为兼容别名。关系补丁优先用 `characterId`，也可用当前场景内唯一的 `characterName/name/actorName/targetName` 匹配角色；重名或模糊不唯一时跳过，避免误改。公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。关系补丁会对筹码、共同记忆、心情和秘密做截断去重：单角色单次最多追加 8 条筹码、8 条共同记忆和 1 条秘密，列表只保留最近上限。
 - 普通玩家详情页不显示完整角色卡或编辑入口；只有 `State.canShowDebugSpoilers()` 为 true 时才显示作者/调试剧透入口。该开关支持 `?debug=1`、`?spoilers=1`、`localStorage.tavern_show_character_spoilers=1`、`localStorage.tavern_debug=1` 或运行时 settings 标记。

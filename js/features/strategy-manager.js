@@ -378,11 +378,17 @@ const StrategyManager = {
         if (!stoppedByEnding && Array.isArray(update.discoveryUpdate)) {
             const validStates = ['locked', 'hinted', 'suspected', 'confirmed'];
             for (const item of update.discoveryUpdate.slice(0, MAX_INTEL_PER_UPDATE)) {
-                if (!item || typeof item !== 'object' || !item.characterId || !item.factId) continue;
+                if (!item || typeof item !== 'object') continue;
+                const resolved = typeof WorldEngine !== 'undefined' && WorldEngine.resolveCharacterHiddenFact
+                    ? WorldEngine.resolveCharacterHiddenFact(scene, item)
+                    : null;
+                const characterId = resolved?.character?.id || item.characterId;
+                const factId = resolved?.fact?.id || item.factId;
+                if (!characterId || !factId) continue;
                 if (!scene.discoveries) scene.discoveries = { characters: {} };
                 if (!scene.discoveries.characters) scene.discoveries.characters = {};
-                if (!scene.discoveries.characters[item.characterId]) scene.discoveries.characters[item.characterId] = {};
-                scene.discoveries.characters[item.characterId][item.factId] = {
+                if (!scene.discoveries.characters[characterId]) scene.discoveries.characters[characterId] = {};
+                scene.discoveries.characters[characterId][factId] = {
                     state: validStates.includes(item.state) ? item.state : 'hinted',
                     evidence: Array.isArray(item.evidence) ? item.evidence.map(String).slice(0, 10) : [],
                     discoveredAt: Date.now()
@@ -628,7 +634,7 @@ const StrategyManager = {
         SidebarRight.renderSituation?.();
         SidebarLeft.render();
         // 被动获得：标记角标
-        if (knowledgeAdded) SidebarRight.markTabNew('knowledge');
+        if (knowledgeAdded || discoveryChanged) SidebarRight.markTabNew('knowledge');
         if (discoveryChanged || relationChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
