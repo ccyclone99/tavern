@@ -411,6 +411,10 @@ const StrategyManager = {
                     const structured = (scene.sceneChallenges || []).length > 0 || (scene.evidenceLedger || []).length > 0 || (scene.flowGraph?.revelations || []).length > 0;
                     if (qu.status !== 'completed' || !structured || (quest.objectives || []).every(o => o.completed)) {
                         quest.status = qu.status;
+                        if (qu.status === 'completed' && typeof WorldEngine !== 'undefined' && WorldEngine.grantQuestReward) {
+                            quest.completedAt = quest.completedAt || Date.now();
+                            WorldEngine.grantQuestReward(scene, quest);
+                        }
                     }
                 }
             }
@@ -424,40 +428,33 @@ const StrategyManager = {
             }
             for (const it of update.itemAdd.slice(0, MAX_ITEMS_PER_UPDATE)) {
                 if (!it || typeof it !== 'object' || !it.name) continue;
-                const existing = scene.inventory.find(i => i.name === it.name);
                 const qtyRaw = Number(it.quantity);
                 const qty = Number.isFinite(qtyRaw) && qtyRaw >= 0 ? qtyRaw : 1;
-                if (existing) {
-                    existing.quantity += qty;
-                    if (Array.isArray(it.tags)) existing.tags = [...new Set([...(existing.tags || []), ...it.tags.map(String)])].slice(0, 12);
-                    if (Array.isArray(it.effects) && typeof WorldEngine !== 'undefined') {
-                        existing.effects = [
-                            ...(existing.effects || []),
-                            ...it.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean)
-                        ].slice(0, 10);
+                if (qty <= 0) continue;
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.grantInventoryItem) {
+                    const item = this._buildStateUpdateItem(it, qty);
+                    const result = WorldEngine.grantInventoryItem(scene, item, { source: '状态补丁' });
+                    if (!result.ok) {
+                        console.warn(`[StrategyManager] ${result.message || `背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`}`);
+                        break;
                     }
-                    if (it.uses !== undefined && Number.isFinite(Number(it.uses))) existing.uses = Math.max(0, Math.floor(Number(it.uses)));
-                    if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(existing);
-                } else if (qty <= 0) {
-                    continue;
-                } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
-                    scene.inventory.push({
-                        id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                        name: String(it.name),
-                        description: String(it.description || ''),
-                        type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
-                        quantity: qty,
-                        equipped: false,
-                        tags: Array.isArray(it.tags) ? it.tags.map(String).slice(0, 12) : [],
-                        effects: Array.isArray(it.effects) && typeof WorldEngine !== 'undefined'
-                            ? it.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean).slice(0, 10)
-                            : [],
-                        uses: it.uses !== undefined && Number.isFinite(Number(it.uses)) ? Math.max(0, Math.floor(Number(it.uses))) : undefined
-                    });
-                    if (typeof WorldEngine !== 'undefined') WorldEngine.normalizeItem(scene.inventory[scene.inventory.length - 1]);
                 } else {
-                    console.warn(`[StrategyManager] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
-                    break;
+                    const existing = scene.inventory.find(i => i.name === it.name);
+                    if (existing) {
+                        existing.quantity += qty;
+                    } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
+                        scene.inventory.push({
+                            id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                            name: String(it.name),
+                            description: String(it.description || ''),
+                            type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
+                            quantity: qty,
+                            equipped: false
+                        });
+                    } else {
+                        console.warn(`[StrategyManager] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
+                        break;
+                    }
                 }
                 itemAdded = true;
             }
@@ -502,5 +499,38 @@ const StrategyManager = {
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
         if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged) SidebarRight.markTabNew('situation');
+    },
+
+    _buildStateUpdateItem(data, quantity) {
+        const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
+        const type = validTypes.includes(data.type) ? data.type : 'misc';
+        const description = String(data.description || '').slice(0, 180);
+        const qty = Math.max(1, Math.min(20, Number(quantity || 1)));
+        const base = typeof WorldEngine !== 'undefined' && WorldEngine.createInventoryItemFromReward
+            ? WorldEngine.createInventoryItemFromReward(data.name, qty, { description, type })
+            : {
+                id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                name: String(data.name),
+                description,
+                type,
+                quantity: qty,
+                equipped: false,
+                tags: [],
+                effects: []
+            };
+        if (Array.isArray(data.tags)) {
+            base.tags = [...new Set([...(base.tags || []), ...data.tags.map(String)])].slice(0, 12);
+        }
+        if (Array.isArray(data.effects) && typeof WorldEngine !== 'undefined') {
+            const effects = data.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean);
+            base.effects = [...(base.effects || []), ...effects].slice(0, 10);
+        }
+        if (data.uses !== undefined && Number.isFinite(Number(data.uses))) {
+            base.uses = Math.max(0, Math.floor(Number(data.uses)));
+            base.quantity = 1;
+        }
+        return typeof WorldEngine !== 'undefined' && WorldEngine.normalizeItem
+            ? WorldEngine.normalizeItem(base)
+            : base;
     }
 };

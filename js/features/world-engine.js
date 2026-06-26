@@ -654,7 +654,7 @@ const WorldEngine = {
         if (!added) return { ok: false, message: '背包已满，无法获得物品。' };
 
         const quantity = normalized.uses !== undefined
-            ? Number(normalized.uses || 1)
+            ? Number(normalized.uses ?? 1)
             : Number(normalized.quantity || 1);
         const qtyText = quantity > 1 ? ` x${quantity}` : '';
         const source = String(options.source || '').trim().slice(0, 120);
