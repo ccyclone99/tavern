@@ -58,10 +58,58 @@ const WorldEngine = {
         scene.flowGraph = this.normalizeFlowGraph(scene.flowGraph);
         scene.sceneChallenges = scene.sceneChallenges.map((c, idx) => this.normalizeSceneChallenge(c, idx)).filter(Boolean).slice(0, 24);
         scene.evidenceLedger = scene.evidenceLedger.map(e => this.normalizeEvidence(e)).filter(Boolean).slice(-120);
-        scene.companionResources = scene.companionResources.map(r => this.normalizeCompanionResource(r)).filter(Boolean).slice(0, 24);
+        scene.companionResources = scene.companionResources
+            .map(r => this._repairCompanionResourceLink(scene, r))
+            .map(r => this.normalizeCompanionResource(r))
+            .filter(Boolean)
+            .slice(0, 24);
         scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
+    },
+
+    _repairCompanionResourceLink(scene, resource) {
+        if (!scene || !resource || typeof resource !== 'object') return resource;
+        const chars = this._sceneCharacters(scene);
+        if (chars.length === 0) return resource;
+
+        const rawId = String(resource.characterId || '').trim();
+        const findByName = value => {
+            const name = String(value || '').trim();
+            if (!name) return null;
+            return chars.find(char => String(char.name || '').trim() === name) || null;
+        };
+
+        let matched = null;
+        if (rawId) {
+            matched = chars.find(char => char.id === rawId) || findByName(rawId);
+        }
+        const explicitName = String(resource.characterName || resource.character || resource.actorName || '').trim();
+        if (!matched) {
+            matched = findByName(explicitName);
+        }
+        const resourceName = String(resource.name || '').trim();
+        if (!matched && resourceName) {
+            matched = chars.find(char => {
+                const name = String(char.name || '').trim();
+                return name && resourceName.includes(name);
+            }) || null;
+        }
+        const mentionsAnyKnownCharacter = resourceName && typeof State !== 'undefined' && Array.isArray(State.characters)
+            ? State.characters.some(char => {
+                const name = String(char?.name || '').trim();
+                return name && resourceName.includes(name);
+            })
+            : false;
+        if (!matched && chars.length === 1 && !rawId && !explicitName && !mentionsAnyKnownCharacter) matched = chars[0];
+        if (!matched || resource.characterId === matched.id) return resource;
+        return { ...resource, characterId: matched.id };
+    },
+
+    _sceneCharacters(scene) {
+        if (typeof State === 'undefined' || !Array.isArray(State.characters)) return [];
+        const sceneIds = new Set(Array.isArray(scene?.characters) ? scene.characters.map(String) : []);
+        return State.characters.filter(char => char && (!sceneIds.size || sceneIds.has(String(char.id))));
     },
 
     normalizeStoryTexture(texture = {}) {
