@@ -529,6 +529,7 @@ UI 要求：
 
 - `storyPhaseUpdate` 激活下一阶段或完成当前 active 阶段时，必须满足：当前阶段至少完成 1 个挑战；或当前阶段失败并触发替代路线；或玩家绕过阶段但付出明确资源、关系、时钟、金币、后果等代价。
 - 当前实现会在 `WorldEngine.applyStoryPhaseUpdate()` 中强制以上规则；不满足时不改阶段状态，只记录“剧情阶段待确认”。
+- 通过绕过代价推进阶段时，结构化代价必须真实结算：`goldCost` 会扣金币，`worldTensionDelta` 会改变世界紧张度，`clockDelta` 搭配 `clockId/clockTag/clockName` 会推进时钟，`costs` 中的 `item` 会移除背包物品，`consequence` 会写入后果账本。
 
 ### 4.16 冒险日志
 

@@ -1175,9 +1175,14 @@ const WorldEngine = {
                         changed = true;
                         return;
                     }
-                    currentActive.status = 'completed';
-                    currentActive.lastReason = gate.reason;
-                    currentActive.updatedAt = Date.now();
+                    const currentActiveId = currentActive.id;
+                    const targetPhaseId = phase.id;
+                    if (gate.cost === true) this._applyStoryPhaseCosts(scene, currentActive, update, gate);
+                    const activeRef = scene.storyPhases.find(p => p.id === currentActiveId) || currentActive;
+                    phase = scene.storyPhases.find(p => p.id === targetPhaseId) || phase;
+                    activeRef.status = 'completed';
+                    activeRef.lastReason = gate.reason;
+                    activeRef.updatedAt = Date.now();
                 }
                 scene.storyPhases.forEach(p => {
                     if (p.id !== phase.id && p.status === 'active') p.status = 'completed';
@@ -1200,6 +1205,9 @@ const WorldEngine = {
                     changed = true;
                     return;
                 }
+                const targetPhaseId = phase.id;
+                if (gate.cost === true) this._applyStoryPhaseCosts(scene, phase, update, gate);
+                phase = scene.storyPhases.find(p => p.id === targetPhaseId) || phase;
                 phase.status = 'completed';
                 phase.lastReason = gate.reason;
                 this.recordEvent(scene, {
@@ -1236,7 +1244,11 @@ const WorldEngine = {
         if (failed && reason) return { ok: true, reason: `失败推进：${reason}` };
 
         const cost = this._storyPhaseCostText(update);
-        if (cost && reason) return { ok: true, reason: `绕过代价：${cost}；${reason}` };
+        if (cost && reason) {
+            const validation = this._validateStoryPhaseCosts(scene, update);
+            if (!validation.ok) return { ok: false, message: validation.message };
+            return { ok: true, reason: `绕过代价：${cost}；${reason}`, cost: true, costText: cost };
+        }
 
         const title = phase?.title || '当前阶段';
         return {
@@ -1255,9 +1267,30 @@ const WorldEngine = {
         });
         if (Array.isArray(update.costs)) {
             update.costs.slice(0, 4).forEach(item => {
-                const text = typeof item === 'object'
-                    ? String(item.label || item.text || item.type || JSON.stringify(item)).replace(/\s+/g, ' ').trim().slice(0, 120)
-                    : String(item || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+                let text = '';
+                if (item && typeof item === 'object') {
+                    const type = String(item.type || item.kind || '').replace(/[-_\s]/g, '').toLowerCase();
+                    if (['gold', 'money', 'coin', 'coins'].includes(type)) {
+                        text = `金币 ${Math.abs(Number(item.amount ?? item.value ?? item.cost ?? 0)) || ''}`.trim();
+                    } else if (['item', 'resource', 'inventory'].includes(type)) {
+                        const name = item.itemName || item.name || item.itemId || item.id || '物品';
+                        const quantity = Number(item.quantity || item.amount || 1);
+                        text = `${name}${quantity > 1 ? ` x${quantity}` : ''}`;
+                    } else if (['worldtension', 'tension', 'pressure'].includes(type)) {
+                        const delta = Number(item.delta ?? item.amount ?? item.value ?? 0);
+                        text = `世界紧张度 ${delta >= 0 ? '+' : ''}${delta}`;
+                    } else if (['clock', 'timer'].includes(type)) {
+                        const delta = Number(item.delta ?? item.clockDelta ?? item.amount ?? 0);
+                        text = `${item.name || item.clockName || item.id || item.clockId || '时钟'} ${delta >= 0 ? '+' : ''}${delta}`;
+                    } else if (['consequence', 'debt', 'injury', 'complication'].includes(type)) {
+                        text = String(item.text || item.effect || item.title || item.label || '持续后果');
+                    } else {
+                        text = String(item.label || item.text || item.type || JSON.stringify(item));
+                    }
+                } else {
+                    text = String(item || '');
+                }
+                text = text.replace(/\s+/g, ' ').trim().slice(0, 120);
                 if (text) parts.push(text);
             });
         }
@@ -1267,6 +1300,201 @@ const WorldEngine = {
             }
         });
         return [...new Set(parts)].slice(0, 4).join('；');
+    },
+
+    _validateStoryPhaseCosts(scene, update = {}) {
+        const costs = this._extractStoryPhaseCosts(update);
+        const gold = Number(costs.gold || 0);
+        if (gold > 0 && Number(scene?.gold || 0) < gold) {
+            return { ok: false, message: `绕过阶段需要 ${gold} 金币，当前只有 ${Number(scene?.gold || 0)}。` };
+        }
+        const itemTotals = new Map();
+        costs.items.forEach(itemCost => {
+            const ref = String(itemCost.itemRef || '').trim();
+            if (!ref) return;
+            itemTotals.set(ref, (itemTotals.get(ref) || 0) + Number(itemCost.quantity || 1));
+        });
+        for (const [itemRef, quantity] of itemTotals.entries()) {
+            const item = this._findInventoryItem(scene, itemRef);
+            if (!item) return { ok: false, message: `绕过阶段需要物品「${itemRef}」，但背包中没有。` };
+            const available = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+            if (available < quantity) {
+                return { ok: false, message: `绕过阶段需要 ${item.name} x${quantity}，当前只有 ${available}。` };
+            }
+        }
+        return { ok: true };
+    },
+
+    _applyStoryPhaseCosts(scene, phase, update = {}, gate = {}) {
+        if (!scene) return false;
+        const costs = this._extractStoryPhaseCosts(update);
+        const phaseName = phase?.title || '剧情阶段';
+        const summary = [];
+
+        if (costs.gold > 0) {
+            const result = this.addGold(scene, -costs.gold, { source: `阶段代价：${phaseName}`, silent: true });
+            if (result.ok) summary.push(`金币 -${Math.abs(result.amount)}`);
+        }
+        if (costs.worldTension !== 0) {
+            const result = this.addWorldTension(scene, costs.worldTension, { source: `阶段代价：${phaseName}`, silent: true });
+            if (result.ok) summary.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+        }
+        costs.clocks.forEach(clockCost => {
+            const clock = this._findStoryPhaseCostClock(scene, clockCost);
+            if (!clock) {
+                if (clockCost.label) costs.notes.push(clockCost.label);
+                return;
+            }
+            const result = this.applyClockUpdate(scene, [{
+                id: clock.id,
+                delta: clockCost.delta,
+                reason: `阶段代价：${phaseName}`
+            }]);
+            if (result.changed) summary.push(`${clock.name || '局势时钟'} ${clockCost.delta >= 0 ? '+' : ''}${clockCost.delta}`);
+        });
+        costs.items.forEach(itemCost => {
+            const result = this.removeInventoryItem(scene, itemCost.itemRef, itemCost.quantity, {
+                source: `阶段代价：${phaseName}`,
+                record: true
+            });
+            if (result.ok) summary.push(`${result.itemName} -${result.quantity}`);
+        });
+        costs.consequences.forEach(item => {
+            const consequence = this.recordConsequence(scene, {
+                title: item.title || `${phaseName}的绕过代价`,
+                cause: `阶段代价：${phaseName}`,
+                effect: item.effect || item.text || item.title || gate.costText || '绕过阶段产生了持续后果。',
+                severity: item.severity || 'medium',
+                category: 'story_phase',
+                tags: ['story_phase', phase?.id].filter(Boolean)
+            });
+            if (consequence) summary.push(`后果：${consequence.title}`);
+        });
+
+        const notes = [...new Set(costs.notes.map(item => String(item || '').trim()).filter(Boolean))].slice(0, 4);
+        if (notes.length > 0) {
+            this.recordEvent(scene, {
+                category: 'progress',
+                title: '阶段代价',
+                text: `${phaseName}：${notes.join('；')}`
+            });
+        }
+        if (summary.length > 0 || notes.length > 0) {
+            this.addSystemMessage(scene, `【阶段代价：${phaseName}】${[...summary, ...notes].slice(0, 6).join('，') || gate.costText || '代价已记录。'}`, 'system');
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderInventory?.();
+                SidebarRight.renderDetail?.();
+                SidebarRight.renderSituation?.();
+            }
+            return true;
+        }
+        return false;
+    },
+
+    _extractStoryPhaseCosts(update = {}) {
+        const result = { gold: 0, worldTension: 0, clocks: [], items: [], consequences: [], notes: [] };
+        const pushNote = value => {
+            const text = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+            if (text) result.notes.push(text);
+        };
+        const addGoldCost = value => {
+            const amount = Math.abs(Math.trunc(Number(value || 0)));
+            if (Number.isFinite(amount) && amount > 0) result.gold += this._clamp(amount, 1, 9999);
+        };
+        const addWorldTension = value => {
+            const delta = Math.trunc(Number(value || 0));
+            if (Number.isFinite(delta) && delta !== 0) result.worldTension += this._clamp(delta, -100, 100);
+        };
+        const addClock = data => {
+            const delta = Math.trunc(Number(data?.delta ?? data?.clockDelta ?? data?.amount ?? 0));
+            if (!Number.isFinite(delta) || delta === 0) return;
+            result.clocks.push({
+                id: String(data.id || data.clockId || '').trim(),
+                tag: String(data.tag || data.clockTag || '').trim(),
+                name: String(data.name || data.clockName || '').trim(),
+                delta: this._clamp(delta, -12, 12),
+                label: String(data.label || data.text || '').trim()
+            });
+        };
+        const addItem = data => {
+            const itemRef = String(data.itemRef || data.itemId || data.itemName || data.name || data.id || '').trim();
+            if (!itemRef) {
+                pushNote(data.label || data.text || data.resource || '');
+                return;
+            }
+            const rawQuantity = Number(data.quantity || data.amount || 1);
+            const quantity = Math.max(1, Math.min(20, Number.isFinite(rawQuantity) ? Math.trunc(rawQuantity) : 1));
+            result.items.push({ itemRef, quantity });
+        };
+        const addConsequence = data => {
+            if (typeof data === 'string') {
+                const text = data.trim();
+                if (text) result.consequences.push({ title: '阶段绕过代价', effect: text, severity: 'medium' });
+                return;
+            }
+            if (!data || typeof data !== 'object') return;
+            result.consequences.push({
+                title: String(data.title || data.label || '阶段绕过代价').slice(0, 120),
+                effect: String(data.effect || data.text || data.description || data.label || data.title || '绕过阶段产生了持续后果。').slice(0, 260),
+                severity: ['low', 'medium', 'high', 'critical'].includes(data.severity) ? data.severity : 'medium'
+            });
+        };
+
+        addGoldCost(update.goldCost);
+        addWorldTension(update.worldTensionDelta);
+        if (Number.isFinite(Number(update.clockDelta)) && Number(update.clockDelta) !== 0) {
+            addClock({
+                id: update.clockId,
+                tag: update.clockTag,
+                name: update.clockName,
+                delta: update.clockDelta,
+                label: update.clockCost
+            });
+        }
+        ['cost', 'bypassCost', 'resourceCost', 'relationCost', 'clockCost'].forEach(key => pushNote(update[key]));
+        if (update.consequence !== undefined) addConsequence(update.consequence);
+
+        if (Array.isArray(update.costs)) {
+            update.costs.slice(0, 8).forEach(cost => {
+                if (!cost) return;
+                if (typeof cost === 'string') {
+                    pushNote(cost);
+                    return;
+                }
+                if (typeof cost !== 'object') return;
+                const type = String(cost.type || cost.kind || '').replace(/[-_\s]/g, '').toLowerCase();
+                if (['gold', 'money', 'coin', 'coins'].includes(type)) addGoldCost(cost.amount ?? cost.value ?? cost.cost);
+                else if (['item', 'resource', 'inventory'].includes(type)) addItem(cost);
+                else if (['worldtension', 'tension', 'pressure'].includes(type)) addWorldTension(cost.delta ?? cost.amount ?? cost.value);
+                else if (['clock', 'timer'].includes(type)) addClock(cost);
+                else if (['consequence', 'debt', 'injury', 'complication'].includes(type)) addConsequence(cost);
+                else pushNote(cost.label || cost.text || cost.description || JSON.stringify(cost));
+            });
+        }
+
+        result.gold = this._clamp(result.gold, 0, 9999);
+        result.worldTension = this._clamp(result.worldTension, -100, 100);
+        return result;
+    },
+
+    _findStoryPhaseCostClock(scene, clockCost = {}) {
+        const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
+        const id = String(clockCost.id || '').trim();
+        const tag = String(clockCost.tag || '').trim();
+        const name = String(clockCost.name || '').trim();
+        if (id) {
+            const byId = clocks.find(clock => clock.id === id);
+            if (byId) return byId;
+        }
+        if (tag) {
+            const byTag = clocks.find(clock => clock.tag === tag);
+            if (byTag) return byTag;
+        }
+        if (name) {
+            const byName = clocks.find(clock => clock.name === name);
+            if (byName) return byName;
+        }
+        return null;
     },
 
     _recordStoryPhaseGateBlocked(scene, fromPhase, toPhase, message) {

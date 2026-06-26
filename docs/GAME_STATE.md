@@ -286,6 +286,8 @@ scene.evidenceLedger = [
 - 或存在失败推进/替代路线：阶段挑战 `failed`，或补丁写明 `failForward` / `alternative` / `outcome: "failed"`，且带 `reason`。
 - 或玩家绕过阶段但付出明确代价：补丁写明 `cost`、`bypassCost`、`resourceCost`、`relationCost`、`clockCost`、`consequence`、`costs`、`worldTensionDelta`、`clockDelta` 或 `goldCost`，且带 `reason`。
 
+绕过代价不只是文字依据。`goldCost` 会先校验金币是否足够并扣除；`worldTensionDelta` 会调用 `WorldEngine.addWorldTension()`；`clockDelta` 搭配 `clockId` / `clockTag` / `clockName` 会调用 `applyClockUpdate()`；`costs` 可写 `{ type: "item", itemName, quantity }`、`{ type: "gold", amount }`、`{ type: "worldTension", delta }`、`{ type: "clock", id, delta }` 或 `{ type: "consequence", text }`，分别进入背包、经济、时钟和后果账本。
+
 不满足闸门时，阶段状态保持不变，系统写入 `eventLog` 的 `progress` 事件“剧情阶段待确认”，并在当前局势最近风险里提示阶段待确认。
 
 ### CompanionResource
