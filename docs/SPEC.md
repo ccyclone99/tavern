@@ -492,6 +492,7 @@ UI 要求：
 - 当前等级所需经验为 `level * 100`；升级后扣除所需经验，等级 +1，获得 2 点属性点。
 - 升级会按等级和体质重新计算最大生命，并回满生命。
 - 属性点可在玩家详情面板分配，也可通过单输入框命令分配（如“加一点敏捷”“体质+1”）；每次 +1 后立刻刷新顶部属性、检定修正和 HP。
+- 属性点分配必须调用 `WorldEngine.allocateStatPoint()`；UI 和输入命令不能直接改写 `scene.playerStats` 或 `scene.attrPoints`。
 - 体质加点会重新计算最大生命，最大生命提升时同步增加当前生命。
 - 当前属性点分配上限为单项 20；超过上限需要后续专门的突破/装备规则。
 
@@ -558,7 +559,7 @@ UI 要求：
 - 后续相关行动检定成功或大成功时，可按行动类型、属性、挑战和意图匹配并解除 1-2 条活跃后果；解除后不再影响风险预览。
 - 右侧“局势”面板展示未解决后果，帮助玩家理解哪些代价还在生效。
 - `eventLog` 记录“发生过什么”，`consequenceLedger` 记录“仍在影响什么”；两者不能混用。
-- 结构化副本中，`[quest_update]`、`questsUpdate` 和任务面板手动点击不能绕过任务推进闸门；只有普通叙事自动识别可在 `maxAutoQuestAdvances` 内有限 fallback。
+- 结构化副本中，`[quest_update]`、`questsUpdate` 和任务面板手动点击不能绕过任务推进闸门；任务面板手动回退必须走 `WorldEngine.reopenQuestObjective()` 留痕；只有普通叙事自动识别可在 `maxAutoQuestAdvances` 内有限 fallback。
 
 ## 5. Prompt 规格
 

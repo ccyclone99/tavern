@@ -1027,6 +1027,34 @@ const WorldEngine = {
         return { ok: true, questCompleted, objectiveIdx: idx, questId: quest.id };
     },
 
+    reopenQuestObjective(scene, quest, objectiveIdx, options = {}) {
+        if (!scene || !quest || !Array.isArray(quest.objectives)) {
+            return { ok: false, message: '没有可回退的任务目标。' };
+        }
+        this.normalizeScene(scene);
+        const idx = Math.trunc(Number(objectiveIdx));
+        if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
+            return { ok: false, message: '任务目标不存在。' };
+        }
+        const objective = quest.objectives[idx];
+        if (!objective) return { ok: false, message: '任务目标不存在。' };
+        if (!objective.completed) return { ok: false, duplicate: true, message: '任务目标尚未完成。' };
+
+        objective.completed = false;
+        if (quest.status === 'completed') quest.status = 'active';
+        const reason = String(options.reason || '').trim().slice(0, 160);
+        if (options.message !== false) {
+            this.addSystemMessage(scene, `【任务回退：${quest.name}】${objective.text}${reason ? `（${reason}）` : ''}`, 'system');
+        }
+        if (scene.questProgressGuards) {
+            scene.questProgressGuards.autoAdvanceStreak = 0;
+            scene.questProgressGuards.lastAdvancedAt = Date.now();
+        }
+        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+        return { ok: true, questReopened: true, objectiveIdx: idx, questId: quest.id };
+    },
+
     applyQuestUpdates(scene, updates, options = {}) {
         if (!scene || !Array.isArray(updates)) return { changed: false, results: [] };
         this.normalizeScene(scene);

@@ -946,9 +946,8 @@ const SidebarRight = {
         if (typeof WorldEngine !== 'undefined' && WorldEngine.allocateStatPoint) {
             result = WorldEngine.allocateStatPoint(scene, key);
         } else {
-            scene.playerStats[key] = (scene.playerStats[key] || 10) + 1;
-            scene.attrPoints -= 1;
-            result = { ok: true, label: ({strength:'力量',dexterity:'敏捷',constitution:'体质',intelligence:'智力',wisdom:'感知',charisma:'魅力'})[key] || key };
+            console.warn('[SidebarRight] WorldEngine.allocateStatPoint 不可用，跳过属性点分配');
+            result = { ok: false, message: '属性点系统不可用。' };
         }
         if (result.ok) {
             State.saveCurrentSceneDebounced();

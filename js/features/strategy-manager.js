@@ -456,41 +456,22 @@ const StrategyManager = {
                     const result = WorldEngine.addWorldTension(scene, update.scene.worldTensionDelta, { source: '状态补丁', silent: true });
                     tensionChanged = !!result.ok;
                 } else {
-                    const base = Number.isFinite(Number(scene.worldTension)) ? Number(scene.worldTension) : 0;
-                    const delta = Number.isFinite(Number(update.scene.worldTensionDelta)) ? Number(update.scene.worldTensionDelta) : 0;
-                    scene.worldTension = base + delta;
-                    tensionChanged = delta !== 0;
+                    console.warn('[StrategyManager] WorldEngine.addWorldTension 不可用，跳过 worldTensionDelta');
                 }
             }
             if (typeof update.scene.activeStrategyId === 'string') {
                 const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
                 if (target) scene.activeStrategyId = update.scene.activeStrategyId;
             }
-            if (typeof WorldEngine !== 'undefined' && !WorldEngine.addWorldTension) {
-                WorldEngine.checkFailureStates(scene, { type: 'worldTension' });
-            }
         }
 
         // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
-        const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
         if (Array.isArray(update.questsUpdate)) {
             if (typeof WorldEngine !== 'undefined' && WorldEngine.applyQuestUpdates) {
                 const result = WorldEngine.applyQuestUpdates(scene, update.questsUpdate, { stateUpdate: true });
                 questChanged = !!result.changed;
             } else {
-                for (const qu of update.questsUpdate) {
-                    if (!qu || typeof qu !== 'object' || !qu.questId) continue;
-                    const quest = scene.quests.find(q => q.id === qu.questId);
-                    if (!quest) continue;
-                    if (qu.objectiveIdx !== undefined && quest.objectives[qu.objectiveIdx]) {
-                        quest.objectives[qu.objectiveIdx].completed = true;
-                        questChanged = true;
-                    }
-                    if (qu.status && validQuestStatuses.includes(qu.status)) {
-                        quest.status = qu.status;
-                        questChanged = true;
-                    }
-                }
+                console.warn('[StrategyManager] WorldEngine.applyQuestUpdates 不可用，跳过 questsUpdate');
             }
             if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'quest' });
             if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
@@ -513,22 +494,8 @@ const StrategyManager = {
                         break;
                     }
                 } else {
-                    const existing = scene.inventory.find(i => i.name === it.name);
-                    if (existing) {
-                        existing.quantity += qty;
-                    } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
-                        scene.inventory.push({
-                            id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                            name: String(it.name),
-                            description: String(it.description || ''),
-                            type: ['weapon', 'armor', 'consumable', 'quest', 'misc'].includes(it.type) ? it.type : 'misc',
-                            quantity: qty,
-                            equipped: false
-                        });
-                    } else {
-                        console.warn(`[StrategyManager] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
-                        break;
-                    }
+                    console.warn('[StrategyManager] WorldEngine.grantInventoryItem 不可用，跳过 itemAdd');
+                    continue;
                 }
                 itemAdded = true;
             }

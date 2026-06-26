@@ -89,33 +89,18 @@ const QuestTracker = {
             if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
             return;
         }
-        objective.completed = nextCompleted;
-        if (!nextCompleted && quest.status === 'completed') quest.status = 'active';
-
-        // 检查是否所有目标都完成
-        if (quest.objectives.every(o => o.completed)) {
-            quest.status = 'completed';
-            this._grantReward(quest);
-            if (typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
-            // 插入任务完成消息
-            const msg = {
-                id: 'msg_' + Date.now(),
-                role: 'user',
-                content: `【任务完成：${quest.name}】`,
-                type: 'action',
-                timestamp: Date.now()
-            };
-            scene.messages.push(msg);
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-                WorldEngine.recordEvent(scene, {
-                    category: 'quest',
-                    title: '任务完成',
-                    text: `任务完成：${quest.name}`,
-                    messageId: msg.id,
-                    timestamp: msg.timestamp
-                });
+        if (!nextCompleted && typeof WorldEngine !== 'undefined' && WorldEngine.reopenQuestObjective) {
+            const result = WorldEngine.reopenQuestObjective(scene, quest, objIdx, {
+                reason: '手动取消'
+            });
+            if (!result.ok) {
+                if (typeof showToast !== 'undefined') showToast(result.message || '任务目标未更新');
+                return;
             }
-            ChatUI.onMessageAdded(msg);
+        } else {
+            console.warn('[QuestTracker] 任务目标更新需要 WorldEngine.completeQuestObjective/reopenQuestObjective');
+            if (typeof showToast !== 'undefined') showToast('任务系统不可用。');
+            return;
         }
 
         State.saveCurrentScene().catch(e => console.warn('任务状态保存失败:', e));
@@ -200,12 +185,8 @@ const QuestTracker = {
                 if (!result.ok) return;
                 if (result.questCompleted && typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
             } else {
-                quest.objectives[idx].completed = true;
-                if (quest.objectives.every(o => o.completed)) {
-                    quest.status = 'completed';
-                    this._grantReward(quest);
-                    if (typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
-                }
+                console.warn('[QuestTracker] WorldEngine.completeQuestObjective 不可用，跳过任务目标更新');
+                return;
             }
             State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
             this.render();
