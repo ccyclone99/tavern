@@ -81,6 +81,7 @@
   summary: "",
   transcriptLog: [],
   eventLog: [],
+  pendingExplorationRewards: [],
 
   strategies: [],
   intel: [],
@@ -150,6 +151,7 @@
 | `evidenceLedger` | Evidence[] | 玩家已取得的证据，用于任务/结论推进闸门 |
 | `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟 |
 | `explorationRewardLog` | string[] | 已发放探索奖励的证据 id 记录，防止重复刷经验/物资 |
+| `pendingExplorationRewards` | PendingExplorationReward[] | 背包满时暂存的探索奖励物品，腾出背包格后自动补发 |
 | `questProgressGuards` | object | 连续自动任务推进保护，防止无挑战/无证据跳目标 |
 | `runRecord` | RunRecord/null | 当前冒险的结局回顾，胜利或失败时自动生成 |
 | `runHistory` | RunRecord[] | 最近通关/失败记录，便于玩家回看多次尝试 |
@@ -177,7 +179,7 @@
 
 如果旧存档或简化自定义世界已有任务、冲突种子、剧情弧或线索，但缺少 `storyPhases`、`sceneChallenges` 或 `flowGuide`，`WorldEngine.normalizeScene()` 会补一个轻量可玩骨架：至少一个 active phase、一个 active challenge 和基础卡住提示。完全空白的新场景不会被强行补成副本；`completed/failed/bypassed` 等终态阶段不会被重新激活，也不会再补活新的挑战。
 
-`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致探索奖励重复发放、输入状态错乱或 DM 叙事人格丢失。
+`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致探索奖励重复发放、待领取探索物品丢失、输入状态错乱或 DM 叙事人格丢失。
 
 ## 三、子结构
 
@@ -387,7 +389,7 @@ scene.evidenceLedger = [
 - 主线奖励未领取时不会进入胜利结局；清理背包触发补领成功后会重新检查通关，避免结局锁死未发奖励。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。
 - `buyBasicSupply()` 会先确认背包可合并或仍有空位，成功扣金币后再走 `grantInventoryItem()`；金币不足或背包满时不会改变金币或背包。
-- 探索奖励生成的一次性物品也走 `grantInventoryItem()`；背包满且无法合并时，探索收获消息会明确说明未获得该物品。
+- 探索奖励生成的一次性物品也走 `grantInventoryItem()`；背包满且无法合并时，物品进入 `pendingExplorationRewards`，探索收获消息会明确说明已记录待领取。玩家出售、移除或消耗物品腾出背包格后，系统会自动补发待领取探索奖励。
 
 ### 成长字段
 

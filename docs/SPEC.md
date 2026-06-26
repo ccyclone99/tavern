@@ -477,7 +477,7 @@ UI 要求：
 - 首次取得可见证据会获得少量经验：confirmed 证据更多，partial 证据较少。
 - 路线、医疗、设备、封印、协议等主题证据会额外生成一次性补给或工具，进入背包并可在后续检定卡点选消耗。
 - `explorationRewardLog` 记录已发放奖励的证据，防止重复刷取。
-- 探索奖励生成的物品必须走 `WorldEngine.grantInventoryItem()`；背包已满且无法合并时，探索收获消息必须明确说明未获得物品，不能静默丢失。
+- 探索奖励生成的物品必须走 `WorldEngine.grantInventoryItem()`；背包已满且无法合并时，必须写入 `pendingExplorationRewards`，探索收获消息明确说明已记录待领取，玩家出售、移除或消耗物品腾出背包格后自动补发，不能静默丢失。
 - `scene.gameState` 不是 `playing` 时，`evidenceAdd` 和探索奖励不得继续改变证据账本、知识账本、经验或背包。
 
 这些奖励不代表自动胜利；它们只把玩家的准备转化为后续检定、谈判或探索中的实际优势。
@@ -565,7 +565,7 @@ UI 要求：
 - `factionsUpdate` 和 `locationUpdate` 必须同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。HP 归零、剧本失败和主线通关的结局消息统一由规则层写入，不能由 UI 或聊天层直接改写 `scene.gameState`。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
-- 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志丢失，避免重复刷经验或物资。
+- 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志或待领取探索物品丢失，避免重复刷经验、物资丢失或输入状态错乱。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
 

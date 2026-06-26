@@ -164,6 +164,7 @@ const State = {
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
+        if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         if (!scene.gameplayProfile || typeof scene.gameplayProfile !== 'object') scene.gameplayProfile = {};
         if (!scene.storyTexture || typeof scene.storyTexture !== 'object') {
@@ -316,6 +317,7 @@ const State = {
             evidenceLedger: [],
             companionResources: [],
             explorationRewardLog: [],
+            pendingExplorationRewards: [],
             questProgressGuards: { autoAdvanceStreak: 0, lastAdvancedAt: 0 },
             runRecord: null,
             runHistory: [],

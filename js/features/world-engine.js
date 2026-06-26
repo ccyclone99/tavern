@@ -24,6 +24,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
+        if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         scene.gameplayProfile = this.normalizeGameplayProfile(scene.gameplayProfile);
         scene.storyTexture = this.normalizeStoryTexture(scene.storyTexture);
@@ -64,6 +65,10 @@ const WorldEngine = {
             .filter(Boolean)
             .slice(0, 24);
         scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
+        scene.pendingExplorationRewards = scene.pendingExplorationRewards
+            .map((reward, idx) => this.normalizePendingExplorationReward(reward, idx))
+            .filter(Boolean)
+            .slice(-40);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
     },
@@ -785,6 +790,21 @@ const WorldEngine = {
             item.uses = Number.isFinite(uses) ? Math.max(0, Math.floor(uses)) : undefined;
         }
         return item;
+    },
+
+    normalizePendingExplorationReward(reward = {}, index = 0) {
+        if (!reward || typeof reward !== 'object' || !reward.item) return null;
+        const item = this.normalizeItem({ ...reward.item });
+        if (!item || !item.name) return null;
+        const evidenceId = String(reward.evidenceId || reward.refId || item.id || `pending_${index}`).slice(0, 100);
+        return {
+            id: String(reward.id || `explore_reward_${evidenceId}`).slice(0, 120),
+            evidenceId,
+            evidenceTitle: String(reward.evidenceTitle || reward.title || '探索收获').slice(0, 140),
+            item,
+            createdAt: Number.isFinite(Number(reward.createdAt)) ? Number(reward.createdAt) : Date.now(),
+            attempts: this._clamp(Number(reward.attempts || 0), 0, 20)
+        };
     },
 
     normalizeItemEffect(effect = {}) {
@@ -2089,7 +2109,8 @@ const WorldEngine = {
             const result = this.removeInventoryItem(scene, itemCost.itemRef, itemCost.quantity, {
                 source: `阶段代价：${phaseName}`,
                 record: true,
-                retryQuestRewards: false
+                retryQuestRewards: false,
+                retryExplorationRewards: false
             });
             if (result.ok) {
                 summary.push(`${result.itemName} -${result.quantity}`);
@@ -2118,7 +2139,10 @@ const WorldEngine = {
         }
         if (summary.length > 0 || notes.length > 0) {
             this.addSystemMessage(scene, `【阶段代价：${phaseName}】${[...summary, ...notes].slice(0, 6).join('，') || gate.costText || '代价已记录。'}`, 'system');
-            if (freedInventorySpace) this._retryPendingQuestRewardsAfterInventoryChange(scene);
+            if (freedInventorySpace) {
+                this._retryPendingQuestRewardsAfterInventoryChange(scene);
+                this._retryPendingExplorationRewardsAfterInventoryChange(scene);
+            }
             if (typeof SidebarRight !== 'undefined') {
                 SidebarRight.renderInventory?.();
                 SidebarRight.renderDetail?.();
@@ -2556,9 +2580,14 @@ const WorldEngine = {
             ? this.grantInventoryItem(scene, item, { source: `探索收获：${evidence.title}` })
             : { ok: false };
         const itemAdded = !!itemResult.ok;
+        const itemQueued = item && !itemAdded
+            ? this._queuePendingExplorationReward(scene, evidence, item)
+            : false;
         const expText = expResult.ok ? `经验 +${exp}` : '经验未变化';
         const itemText = item
-            ? (itemAdded ? `，获得 ${item.name}` : `，${itemResult.message || '背包已满'}，未获得 ${item.name}`)
+            ? (itemAdded
+                ? `，获得 ${item.name}`
+                : `，${itemResult.message || '背包已满'}，${itemQueued ? `已记录待领取 ${item.name}` : `未获得 ${item.name}`}`)
             : '';
         this.addSystemMessage(
             scene,
@@ -2572,6 +2601,82 @@ const WorldEngine = {
         }
         if (typeof SidebarRight !== 'undefined') SidebarRight.markTabNew?.('knowledge');
         return true;
+    },
+
+    _queuePendingExplorationReward(scene, evidence, item) {
+        if (!scene || !evidence || !item) return false;
+        if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
+        const normalized = this.normalizePendingExplorationReward({
+            evidenceId: evidence.id,
+            evidenceTitle: evidence.title,
+            item,
+            createdAt: Date.now()
+        }, scene.pendingExplorationRewards.length);
+        if (!normalized) return false;
+        const duplicate = scene.pendingExplorationRewards.some(entry =>
+            entry && (entry.id === normalized.id || entry.evidenceId === normalized.evidenceId)
+        );
+        if (duplicate) return false;
+        scene.pendingExplorationRewards.push(normalized);
+        scene.pendingExplorationRewards = scene.pendingExplorationRewards.slice(-40);
+        this.recordEvent(scene, {
+            category: 'inventory',
+            title: '探索奖励待领取',
+            text: `${normalized.evidenceTitle}：${normalized.item.name}`,
+            refId: normalized.evidenceId
+        });
+        return true;
+    },
+
+    retryPendingExplorationRewards(scene, options = {}) {
+        if (!scene || !Array.isArray(scene.pendingExplorationRewards)) return [];
+        if (scene._retryingExplorationRewards) return [];
+        this.normalizeScene(scene);
+        if (options.onlyWhenPlaying !== false && !this.isScenePlaying(scene)) return [];
+
+        scene._retryingExplorationRewards = true;
+        const settled = [];
+        try {
+            const remaining = [];
+            scene.pendingExplorationRewards.forEach(raw => {
+                const reward = this.normalizePendingExplorationReward(raw);
+                if (!reward) return;
+                const result = this.grantInventoryItem(scene, reward.item, {
+                    source: `探索补发：${reward.evidenceTitle}`,
+                    record: true
+                });
+                if (result.ok) {
+                    settled.push({
+                        evidenceId: reward.evidenceId,
+                        evidenceTitle: reward.evidenceTitle,
+                        itemName: result.itemName || reward.item.name
+                    });
+                } else {
+                    reward.attempts = Number(reward.attempts || 0) + 1;
+                    remaining.push(reward);
+                }
+            });
+            scene.pendingExplorationRewards = remaining.slice(-40);
+        } finally {
+            delete scene._retryingExplorationRewards;
+        }
+
+        if (settled.length > 0) {
+            const names = settled.map(item => item.itemName).filter(Boolean).join('、');
+            if (options.message !== false) {
+                this.addSystemMessage(scene, `【探索奖励补发】获得 ${names}。`, 'system');
+            }
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderInventory?.();
+                SidebarRight.markTabNew?.('inventory');
+                SidebarRight.markTabNew?.('situation');
+            }
+        }
+        return settled;
+    },
+
+    _retryPendingExplorationRewardsAfterInventoryChange(scene) {
+        return this.retryPendingExplorationRewards(scene, { message: true });
     },
 
     _buildExplorationRewardItem(evidence) {
@@ -2733,12 +2838,15 @@ const WorldEngine = {
         const retriedRewards = removedAll && options.retryQuestRewards !== false
             ? this._retryPendingQuestRewardsAfterInventoryChange(scene)
             : [];
+        const retriedExplorationRewards = removedAll && options.retryExplorationRewards !== false
+            ? this._retryPendingExplorationRewardsAfterInventoryChange(scene)
+            : [];
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
             SidebarRight.renderDetail?.();
             SidebarRight.markTabNew?.('inventory');
         }
-        return { ok: true, itemName, quantity: removed, removedAll, retriedRewards };
+        return { ok: true, itemName, quantity: removed, removedAll, retriedRewards, retriedExplorationRewards };
     },
 
     sellInventoryItem(scene, itemRef, quantity = 1, options = {}) {
@@ -2763,7 +2871,8 @@ const WorldEngine = {
         const removed = this.removeInventoryItem(scene, item.id || item.name, requested, {
             source: '出售',
             record: true,
-            retryQuestRewards: false
+            retryQuestRewards: false,
+            retryExplorationRewards: false
         });
         if (!removed.ok) return removed;
         const payment = this.addGold(scene, price, { source: `出售${item.name}`, silent: true });
@@ -2774,13 +2883,16 @@ const WorldEngine = {
         const retriedRewards = removed.removedAll
             ? this._retryPendingQuestRewardsAfterInventoryChange(scene)
             : [];
+        const retriedExplorationRewards = removed.removedAll
+            ? this._retryPendingExplorationRewardsAfterInventoryChange(scene)
+            : [];
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
             SidebarRight.renderDetail?.();
             SidebarRight.markTabNew?.('inventory');
         }
-        return { ok: true, itemName: item.name, quantity: removed.quantity, gold: payment.amount, currentGold: scene.gold, retriedRewards };
+        return { ok: true, itemName: item.name, quantity: removed.quantity, gold: payment.amount, currentGold: scene.gold, retriedRewards, retriedExplorationRewards };
     },
 
     _inventoryItemSalePrice(item, quantity = 1) {
@@ -3916,6 +4028,7 @@ const WorldEngine = {
             this.addSystemMessage(scene, `【资源消耗】检定投入：${notes.join('，')}`, 'system');
             if (scene.inventory.length < inventoryCountBefore && options.retryPendingRewards !== false) {
                 this._retryPendingQuestRewardsAfterInventoryChange(scene);
+                this._retryPendingExplorationRewardsAfterInventoryChange(scene);
             }
             if (typeof SidebarRight !== 'undefined') {
                 SidebarRight.renderInventory?.();
@@ -4090,6 +4203,7 @@ const WorldEngine = {
         this.addSystemMessage(scene, text, 'system');
         if (scene.inventory.length < inventoryCountBefore) {
             this._retryPendingQuestRewardsAfterInventoryChange(scene);
+            this._retryPendingExplorationRewardsAfterInventoryChange(scene);
         }
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
@@ -4315,6 +4429,9 @@ const WorldEngine = {
         const retriedRewards = consumed && scene.inventory.length < inventoryCountBefore
             ? this._retryPendingQuestRewardsAfterInventoryChange(scene)
             : [];
+        const retriedExplorationRewards = consumed && scene.inventory.length < inventoryCountBefore
+            ? this._retryPendingExplorationRewardsAfterInventoryChange(scene)
+            : [];
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
@@ -4322,7 +4439,7 @@ const WorldEngine = {
             if (consumed) SidebarRight.markTabNew?.('inventory');
             SidebarRight.markTabNew?.('situation');
         }
-        return { ok: true, itemName: item.name, applied, consumed, retriedRewards };
+        return { ok: true, itemName: item.name, applied, consumed, retriedRewards, retriedExplorationRewards };
     },
 
     async restPlayer(scene, options = {}) {
