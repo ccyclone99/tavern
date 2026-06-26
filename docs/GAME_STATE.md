@@ -242,7 +242,7 @@
 }
 ```
 
-主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点和任务手动操作都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
+主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点和任务手动操作都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
 
 剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
@@ -376,6 +376,7 @@ scene.evidenceLedger = [
 - `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
 - `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
 - 出售、移除、直接使用、检定投入和计策资源消耗如果真实腾出背包格子，会静默重试已完成但未领取的任务奖励；成功时写入正常任务奖励摘要。
+- 主线奖励未领取时不会进入胜利结局；清理背包触发补领成功后会重新检查通关，避免结局锁死未发奖励。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。
 - `buyBasicSupply()` 会先确认背包可合并或仍有空位，成功扣金币后再走 `grantInventoryItem()`；金币不足或背包满时不会改变金币或背包。
 - 探索奖励生成的一次性物品也走 `grantInventoryItem()`；背包满且无法合并时，探索收获消息会明确说明未获得该物品。

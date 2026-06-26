@@ -1006,6 +1006,41 @@ const WorldEngine = {
         return { ok: true, rewards, messageId: msg?.id || '', questName };
     },
 
+    settleCompletedQuestRewards(scene, quests = [], options = {}) {
+        if (!scene || !Array.isArray(quests)) return { ok: true, settled: [], blocked: [] };
+        this.normalizeScene(scene);
+        const settled = [];
+        const blocked = [];
+        quests
+            .filter(quest =>
+                quest &&
+                quest.status === 'completed' &&
+                quest.rewardGranted !== true &&
+                String(quest.reward || '').trim()
+            )
+            .slice(0, 12)
+            .forEach(quest => {
+                const result = this.grantQuestReward(scene, quest, {
+                    questName: quest.name,
+                    suppressBlockedMessage: options.suppressBlockedMessage === true
+                });
+                if (result.ok) {
+                    settled.push({
+                        questId: quest.id || '',
+                        questName: result.questName || quest.name || '任务',
+                        rewards: result.rewards || []
+                    });
+                } else if (result.blocked) {
+                    blocked.push({
+                        questId: quest.id || '',
+                        questName: quest.name || '任务',
+                        message: result.message || '任务奖励被背包容量阻塞。'
+                    });
+                }
+            });
+        return { ok: blocked.length === 0, settled, blocked };
+    },
+
     retryPendingQuestRewards(scene, options = {}) {
         if (!scene || !Array.isArray(scene.quests)) return [];
         if (scene._retryingQuestRewards) return [];
@@ -1046,6 +1081,9 @@ const WorldEngine = {
             SidebarRight.renderDetail?.();
             SidebarRight.markTabNew?.('quests');
             SidebarRight.markTabNew?.('inventory');
+        }
+        if (results.length > 0 && typeof GroupChat !== 'undefined' && GroupChat._checkVictory) {
+            GroupChat._checkVictory();
         }
         return results;
     },

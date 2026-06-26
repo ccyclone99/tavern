@@ -1013,11 +1013,32 @@ const GroupChat = {
         if (mainQuests.length === 0) return;
         const allDone = mainQuests.every(q => q.status === 'completed');
         if (!allDone) return;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.settleCompletedQuestRewards) {
+            const rewardSettlement = WorldEngine.settleCompletedQuestRewards(scene, mainQuests, { suppressBlockedMessage: true });
+            if (rewardSettlement.blocked?.length) {
+                const names = rewardSettlement.blocked.map(item => item.questName).filter(Boolean).join('、') || '主线任务';
+                const content = `【通关待结算】${names} 的任务奖励因背包空间不足暂未发放。请先清理或消耗物品；奖励补发后会自动完成通关。`;
+                const alreadyNotified = (scene.messages || []).slice(-5).some(msg => msg.content === content);
+                if (!alreadyNotified) {
+                    WorldEngine.addSystemMessage(scene, content, 'system');
+                }
+                if (typeof SidebarRight !== 'undefined') {
+                    SidebarRight.renderInventory?.();
+                    SidebarRight.renderSituation?.();
+                    SidebarRight.markTabNew?.('inventory');
+                    SidebarRight.markTabNew?.('situation');
+                }
+                State.saveCurrentSceneDebounced();
+                showToast('主线奖励待领取：请先清理背包');
+                return;
+            }
+        }
         scene.gameState = 'victorious';
+        const sceneName = scene.name || scene.title || '这个世界';
         const msg = {
             id: 'msg_' + Date.now() + '_victory',
             role: 'assistant',
-            content: `所有主线任务已完成！${scene.name} 的故事迎来了它的结局。恭喜你，冒险者。`,
+            content: `所有主线任务已完成！${sceneName}的故事迎来了它的结局。恭喜你，冒险者。`,
             type: 'victory',
             visibility: typeof WorldEngine !== 'undefined'
                 ? WorldEngine.createVisibility({ public: true })
