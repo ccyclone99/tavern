@@ -293,7 +293,7 @@ scene.evidenceLedger = [
 ];
 ```
 
-`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。复合行动命中同一挑战的次级方法时，主检定仍只采用一个属性和 DC；大成功会让一个或多个次级方法完整生效，成功会追加挑战进展，部分成功或失败会追加挑战压力和持续后果，并把 `secondaryResults` 写入检定结果供 DM 续写。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。`[quest:]` 必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addQuest()` 新增、去重、限制数量和写系统留痕。`[quest_update]`、`questsUpdate` 和任务面板手动点击完成都会调用 `WorldEngine.completeQuestObjective()` / `WorldEngine.applyQuestUpdates()` 同一闸门，任务面板手动回退调用 `WorldEngine.reopenQuestObjective()`，并由规则层写任务进展、发放任务奖励和防重复；主线只有普通叙事自动识别允许在 `maxAutoQuestAdvances` 内做有限 fallback，显式协议不能靠相似叙事直接完成目标。
+`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。复合行动命中同一挑战的次级方法时，主检定仍只采用一个属性和 DC；大成功会让一个或多个次级方法完整生效，成功会追加挑战进展，部分成功或失败会追加挑战压力和持续后果，并把 `secondaryResults` 写入检定结果供 DM 续写。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。`[quest:]` 必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addQuest()` 新增、去重、限制数量和写系统留痕。`[quest_update]`、`questsUpdate` 和任务面板手动点击完成都会调用 `WorldEngine.completeQuestObjective()` / `WorldEngine.applyQuestUpdates()` 同一闸门；`questsUpdate` 优先用 `questId + objectiveIdx/objectiveNumber`，也可用当前场景唯一任务名和唯一目标文本定位，但只负责定位，不放松闸门。任务面板手动回退调用 `WorldEngine.reopenQuestObjective()`，并由规则层写任务进展、发放任务奖励和防重复；主线只有普通叙事自动识别允许在 `maxAutoQuestAdvances` 内做有限 fallback，显式协议不能靠相似叙事直接完成目标。
 
 `storyPhaseUpdate` 不能直接跳阶段。`WorldEngine.applyStoryPhaseUpdate()` 会在激活下一阶段或完成当前 active 阶段时检查闸门：
 

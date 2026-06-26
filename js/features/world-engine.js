@@ -1890,15 +1890,13 @@ const WorldEngine = {
         let changed = false;
 
         updates.slice(0, 12).forEach(update => {
-            if (!update || typeof update !== 'object' || !update.questId) return;
-            const quest = (scene.quests || []).find(q => q.id === update.questId);
+            if (!update || typeof update !== 'object') return;
+            const quest = this.resolveQuestReference(scene, update);
             if (!quest) return;
             const reason = update.reason || options.reason || '';
 
-            if (update.objectiveIdx !== undefined || update.objectiveNumber !== undefined) {
-                const idx = update.objectiveIdx !== undefined
-                    ? Math.trunc(Number(update.objectiveIdx))
-                    : Math.trunc(Number(update.objectiveNumber)) - 1;
+            const idx = this.resolveQuestObjectiveIndex(quest, update);
+            if (idx !== null) {
                 const result = this.completeQuestObjective(scene, quest, idx, {
                     reason,
                     gateOptions: { stateUpdate: options.stateUpdate !== false }
@@ -1944,6 +1942,97 @@ const WorldEngine = {
             this.checkVictory(scene);
         }
         return { changed, results };
+    },
+
+    resolveQuestReference(scene, ref = {}) {
+        const quests = Array.isArray(scene?.quests) ? scene.quests.filter(Boolean) : [];
+        if (quests.length === 0) return null;
+
+        const rawId = String(ref.questId || ref.id || '').trim();
+        if (rawId) {
+            const byId = quests.find(quest => String(quest.id || '') === rawId);
+            if (byId) return byId;
+        }
+
+        const refs = [
+            ref.questName,
+            ref.name,
+            ref.title,
+            ref.questTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findQuestByNameRef(quests, value);
+            if (match) return match;
+        }
+        return null;
+    },
+
+    _findQuestByNameRef(quests, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return null;
+        const exact = quests.filter(quest => this._normalizeQuestText(quest.name || '') === normalized);
+        if (exact.length > 0) return exact.length === 1 ? exact[0] : null;
+
+        const partial = quests.filter(quest => {
+            const name = this._normalizeQuestText(quest.name || '');
+            return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
+        });
+        return partial.length === 1 ? partial[0] : null;
+    },
+
+    resolveQuestObjectiveIndex(quest, ref = {}) {
+        const objectives = Array.isArray(quest?.objectives) ? quest.objectives : [];
+        if (objectives.length === 0) return null;
+
+        if (ref.objectiveIdx !== undefined || ref.objectiveNumber !== undefined) {
+            const idx = ref.objectiveIdx !== undefined
+                ? Math.trunc(Number(ref.objectiveIdx))
+                : Math.trunc(Number(ref.objectiveNumber)) - 1;
+            return Number.isInteger(idx) ? idx : null;
+        }
+
+        const rawId = String(ref.objectiveId || ref.targetId || '').trim();
+        if (rawId) {
+            const matches = objectives
+                .map((objective, idx) => ({ objective, idx }))
+                .filter(({ objective }) => String(objective.id || '') === rawId);
+            if (matches.length === 1) return matches[0].idx;
+        }
+
+        const refs = [
+            ref.objectiveText,
+            ref.objective,
+            ref.target,
+            ref.targetText,
+            ref.text,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const idx = this._findQuestObjectiveByTextRef(objectives, value);
+            if (idx !== null) return idx;
+        }
+
+        return null;
+    },
+
+    _findQuestObjectiveByTextRef(objectives, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return null;
+        const exact = objectives
+            .map((objective, idx) => ({ objective, idx }))
+            .filter(({ objective }) => this._normalizeQuestText(objective.text || objective.title || '') === normalized);
+        if (exact.length > 0) return exact.length === 1 ? exact[0].idx : null;
+
+        const partial = objectives
+            .map((objective, idx) => ({ objective, idx }))
+            .filter(({ objective }) => {
+                const text = this._normalizeQuestText(objective.text || objective.title || '');
+                return text.length >= 2 && normalized.length >= 2 && (text.includes(normalized) || normalized.includes(text));
+            });
+        return partial.length === 1 ? partial[0].idx : null;
     },
 
     _parseQuestRewardEntries(rewardText) {
