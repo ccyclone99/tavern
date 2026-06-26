@@ -159,8 +159,11 @@ const ActionBar = {
         const dc = totals.dc;
         const sign = mod >= 0 ? `+${mod}` : String(mod);
         const statMod = totals.statMod;
-        const itemBonus = Number(check.itemBonus || 0);
-        const itemModsHtml = (check.itemModifiers || []).slice(0, 4).map(m =>
+        const itemBonus = Number(totals.itemBonus || 0);
+        const passiveItemModifiers = Array.isArray(check.itemModifiers) && check.itemModifiers.length > 0
+            ? check.itemModifiers
+            : (Array.isArray(totals.itemModifiers) ? totals.itemModifiers.filter(m => !m.consume) : []);
+        const itemModsHtml = passiveItemModifiers.slice(0, 4).map(m =>
             `<span class="pending-action-factor">${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`
         ).join('');
         const selectedItemIds = new Set(Array.isArray(check.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);

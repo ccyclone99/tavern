@@ -647,7 +647,7 @@ const GroupChat = {
                     ? JSON.parse(JSON.stringify(check.challengeContext))
                     : null,
                 statMod: totals.statMod,
-                itemBonus: Number(check.itemBonus || 0),
+                itemBonus: Number(totals.itemBonus || 0),
                 selectedBonus: Number(totals.bonus || 0),
                 dcDelta: Number(totals.dcDelta || 0),
                 riskDelta: Number(totals.riskDelta || 0),

@@ -477,6 +477,22 @@ const WorldEngine = {
         return quest;
     },
 
+    _resolveSceneQuest(scene, quest) {
+        if (!scene || !quest || typeof quest !== 'object') return null;
+        if (!Array.isArray(scene.quests)) return quest;
+        const id = String(quest.id || '').trim();
+        if (id) {
+            const byId = scene.quests.find(item => item && String(item.id || '') === id);
+            if (byId) return byId;
+        }
+        const name = this._normalizeQuestText(quest.name || '');
+        if (name) {
+            const byName = scene.quests.find(item => item && this._normalizeQuestText(item.name || '') === name);
+            if (byName) return byName;
+        }
+        return quest;
+    },
+
     normalizeChallengeApproach(data = {}, index = 0) {
         if (!data || typeof data !== 'object') return null;
         const list = (key, limit, itemLimit = 120) => (
@@ -1592,6 +1608,8 @@ const WorldEngine = {
     grantQuestReward(scene, quest, options = {}) {
         if (!scene || !quest) return { ok: false, rewards: [], message: '没有可发放的任务奖励。' };
         this.normalizeScene(scene);
+        quest = this._resolveSceneQuest(scene, quest);
+        if (!quest) return { ok: false, rewards: [], message: '任务数据无效。' };
         if (!this.isScenePlaying(scene)) return { ok: false, rewards: [], message: this.endedSceneMessage(scene) };
         const rewardText = String(options.reward || quest.reward || '').trim();
         if (!rewardText) return { ok: false, rewards: [], message: '任务没有奖励。' };
@@ -1641,7 +1659,9 @@ const WorldEngine = {
         if (rewards.length === 0) {
             return { ok: false, rewards, message: '奖励没有产生有效变化。' };
         }
-        quest.rewardGranted = true;
+        const targetQuest = this._resolveSceneQuest(scene, quest) || quest;
+        targetQuest.rewardGranted = true;
+        if (targetQuest !== quest) quest.rewardGranted = true;
         const msg = this.addSystemMessage(scene, `【任务奖励：${questName}】${rewards.join('，')}`, 'system');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
@@ -1764,6 +1784,10 @@ const WorldEngine = {
             return { ok: false, message: '没有可更新的任务目标。' };
         }
         this.normalizeScene(scene);
+        quest = this._resolveSceneQuest(scene, quest);
+        if (!quest || !Array.isArray(quest.objectives)) {
+            return { ok: false, message: '没有可更新的任务目标。' };
+        }
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const idx = Math.trunc(Number(objectiveIdx));
         if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
@@ -1813,6 +1837,10 @@ const WorldEngine = {
             return { ok: false, message: '没有可回退的任务目标。' };
         }
         this.normalizeScene(scene);
+        quest = this._resolveSceneQuest(scene, quest);
+        if (!quest || !Array.isArray(quest.objectives)) {
+            return { ok: false, message: '没有可回退的任务目标。' };
+        }
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const idx = Math.trunc(Number(objectiveIdx));
         if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
@@ -4959,7 +4987,20 @@ const WorldEngine = {
     getCheckTotals(scene, check) {
         const selected = this.getSelectedCheckResourceModifiers(scene, check);
         const statMod = Number.isFinite(Number(check?.statMod)) ? Number(check.statMod) : 0;
-        const itemBonus = Number(check?.itemBonus || 0);
+        const storedItemModifiers = Array.isArray(check?.itemModifiers) ? check.itemModifiers : [];
+        const explicitItemBonus = Number.isFinite(Number(check?.itemBonus)) ? Number(check.itemBonus) : 0;
+        const usesStoredItemBonus = storedItemModifiers.length > 0 || explicitItemBonus !== 0;
+        const autoItemBonus = usesStoredItemBonus
+            ? { bonus: explicitItemBonus, modifiers: [] }
+            : this.getCheckItemBonus(scene, check);
+        const itemBonus = Number(autoItemBonus.bonus || 0);
+        const autoItemModifiers = (autoItemBonus.modifiers || []).map(modifier => ({
+            ...modifier,
+            kind: modifier.kind || 'item',
+            consume: false
+        }));
+        const itemModifiers = [...autoItemModifiers, ...selected.itemModifiers];
+        const modifiers = [...autoItemModifiers, ...selected.modifiers];
         const baseDc = Number.isFinite(Number(check?.dc)) ? Number(check.dc) : 15;
         const riskDcDelta = this._riskDeltaToDcDelta(selected.riskDelta);
         const dcDelta = Number(selected.dcDelta || 0) + riskDcDelta;
@@ -4967,6 +5008,8 @@ const WorldEngine = {
         const dc = this._clamp(baseDc + dcDelta, 5, 30);
         return {
             ...selected,
+            itemModifiers,
+            modifiers,
             statMod,
             itemBonus,
             explicitDcDelta: Number(selected.dcDelta || 0),
