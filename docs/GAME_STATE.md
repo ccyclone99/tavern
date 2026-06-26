@@ -320,7 +320,7 @@ scene.evidenceLedger = [
 }
 ```
 
-`MapView.moveTo()` 只允许移动到当前地点 `connections` 中的相邻节点。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`alertLevel`。
+`MapView.moveTo()` 只允许移动到当前地点 `connections` 中的相邻节点。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`connections`、`alertLevel`；变化会写入事件日志并提示地图/局势。
 
 ### Item
 

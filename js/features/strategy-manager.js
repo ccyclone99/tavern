@@ -535,26 +535,56 @@ const StrategyManager = {
         }
 
         if (Array.isArray(update.locationUpdate)) {
+            if (!Array.isArray(scene.locations)) scene.locations = [];
             if (update.locationUpdate.length > MAX_LOCATIONS_PER_UPDATE) {
                 console.warn(`[StrategyManager] locationUpdate 超过单条上限 ${MAX_LOCATIONS_PER_UPDATE}，已截断`);
             }
             for (const loc of update.locationUpdate.slice(0, MAX_LOCATIONS_PER_UPDATE)) {
                 if (!loc || typeof loc !== 'object' || !loc.id) continue;
-                const existing = scene.locations.find(l => l.id === loc.id);
+                const locationId = String(loc.id).trim();
+                if (!locationId) continue;
+                const existing = scene.locations.find(l => String(l.id) === locationId);
+                const changes = [];
                 if (existing) {
-                    if (loc.name) existing.name = String(loc.name);
-                    if (loc.description !== undefined) existing.description = String(loc.description || '');
-                    if (loc.alertLevel !== undefined) existing.alertLevel = Number.isFinite(Number(loc.alertLevel)) ? Number(loc.alertLevel) : 0;
+                    if (loc.name) {
+                        const next = String(loc.name).trim().slice(0, 80);
+                        if (next && next !== existing.name) changes.push(`名称：${next}`);
+                        if (next) existing.name = next;
+                    }
+                    if (loc.description !== undefined) {
+                        const before = String(existing.description || '');
+                        const next = String(loc.description || '').slice(0, 240);
+                        if (next !== before) changes.push('描述更新');
+                        existing.description = next;
+                    }
+                    if (loc.alertLevel !== undefined) {
+                        const before = Number.isFinite(Number(existing.alertLevel)) ? Number(existing.alertLevel) : 0;
+                        const next = this._clampNumber(loc.alertLevel, 0, 100, 0);
+                        if (next !== before) changes.push(`警戒 ${before}→${next}`);
+                        existing.alertLevel = next;
+                    }
+                    if (Array.isArray(loc.connections)) {
+                        const next = this._stringList(loc.connections, 20);
+                        if (!this._sameStringList(existing.connections, next)) changes.push(`出口更新（${next.length}处）`);
+                        existing.connections = next;
+                    }
                 } else {
+                    const connections = Array.isArray(loc.connections) ? this._stringList(loc.connections, 20) : [];
                     scene.locations.push({
-                        id: String(loc.id),
-                        name: String(loc.name || loc.id),
-                        description: String(loc.description || ''),
-                        connections: Array.isArray(loc.connections) ? loc.connections.map(String) : [],
-                        alertLevel: Number.isFinite(Number(loc.alertLevel)) ? Number(loc.alertLevel) : 0
+                        id: locationId,
+                        name: String(loc.name || locationId).trim().slice(0, 80) || locationId,
+                        description: String(loc.description || '').slice(0, 240),
+                        connections,
+                        alertLevel: this._clampNumber(loc.alertLevel, 0, 100, 0)
                     });
+                    changes.push('新增地点');
+                    if (connections.length > 0) changes.push(`出口 ${connections.length} 处`);
                 }
-                locAdded = true;
+                if (changes.length) {
+                    locAdded = true;
+                    const displayName = String((existing || scene.locations.find(l => l.id === locationId))?.name || locationId);
+                    this._recordStatePatchEvent(scene, '地图变化', `${displayName}：${changes.join('，')}`, 'movement');
+                }
             }
         }
 
@@ -572,7 +602,7 @@ const StrategyManager = {
         if (discoveryChanged || relationChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged) SidebarRight.markTabNew('situation');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged || locAdded) SidebarRight.markTabNew('situation');
     },
 
     _buildStateUpdateItem(data, quantity) {
@@ -643,10 +673,10 @@ const StrategyManager = {
         }[key] || key;
     },
 
-    _recordStatePatchEvent(scene, title, text) {
+    _recordStatePatchEvent(scene, title, text, category = 'progress') {
         if (typeof WorldEngine === 'undefined' || !WorldEngine.recordEvent) return null;
         return WorldEngine.recordEvent(scene, {
-            category: 'progress',
+            category,
             title,
             text
         });
