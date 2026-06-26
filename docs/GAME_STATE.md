@@ -441,6 +441,7 @@ scene.evidenceLedger = [
   clues: [],
   requiredIntel: ["disc_xxx"],
   usedIntel: ["disc_xxx"],
+  consumedItemResourceIds: ["item_xxx"],
   exposure: 20,
   counterplay: ["调查证人", "降低警觉"],
   stakes: "失败会暴露玩家身份",
@@ -451,6 +452,7 @@ scene.evidenceLedger = [
 ```
 
 `StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，并夹紧 `risk`/`progress`/`exposure` 到 0-100。
+`WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名，`WorldEngine.consumeStrategyItemResources()` 会扣除一次，并把物品 id/name 写入 `consumedItemResourceIds` 防止重复扣除。
 
 ### Intel
 

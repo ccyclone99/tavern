@@ -449,6 +449,7 @@ UI 要求：
 - 检定卡中的可消耗物品支持 `check_bonus`、`dc_delta` 和 `risk_delta`；选中后才改变检定总值/DC/风险说明并扣除次数。
 - 带 `uses` 的消耗品用尽后移出背包；直接使用和检定投入使用同一个消耗入口。
 - `strategy_leverage` 会让物品进入当前计策的“可用物品”列表；系统按物品名、标签、`effect.tag` 与计策目标/资源/情报文本匹配，并把风险修正注入计策 prompt。
+- 计策处于计划阶段时列出可用物品不会扣除；当 `<state_update>.strategies.update` 明确把可消耗物品名写入 `resources` 或 `usedIntel`，且计策推进到 `action/complication/resolution` 或 `executing/resolved/failed` 时，系统会消耗该物品一次并用 `consumedItemResourceIds` 防重复。
 - 医疗、治疗、补给类消耗品即使没有显式 `heal`，也会有保守的本地恢复兜底。
 - 任务奖励和 `[item_add:]` 只给出物品名时，系统会对治疗药水、补给、零件包、武器、防具、地图、钥匙、证据等常见名称做轻量规则推断，生成可使用或可加成的物品。
 - `[item_add:]` 和 `[item_remove:]` 必须分别走 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()`，统一堆叠、事件日志、装备槽清理和侧栏刷新。

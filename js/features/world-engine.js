@@ -3186,6 +3186,110 @@ const WorldEngine = {
             .slice(0, limit);
     },
 
+    consumeStrategyItemResources(scene, strategy, patch = {}) {
+        if (!scene || !strategy || !Array.isArray(scene.inventory)) return [];
+        this.normalizeScene(scene);
+        const phase = String(patch.phase || strategy.phase || '');
+        const status = String(patch.status || strategy.status || '');
+        const isResolutionStep = ['action', 'complication', 'resolution'].includes(phase) ||
+            ['executing', 'resolved', 'failed'].includes(status) ||
+            !!String(patch.latestOutcome || '').trim();
+        if (!isResolutionStep) return [];
+
+        const selectionText = this._strategyItemSelectionText(patch);
+        if (!selectionText) return [];
+        const normalizedSelection = this._normalizeFlowText(selectionText);
+        if (!Array.isArray(strategy.consumedItemResourceIds)) strategy.consumedItemResourceIds = [];
+        const consumedKeys = new Set(strategy.consumedItemResourceIds.map(String).filter(Boolean));
+        const resources = this.getStrategyItemResources(scene, strategy, { limit: 12 })
+            .filter(resource => resource.consume === true)
+            .filter(resource => this._strategyResourceMentioned(resource, selectionText, normalizedSelection));
+        const consumed = [];
+
+        resources.forEach(resource => {
+            const key = String(resource.itemId || resource.name || '').trim();
+            if (!key || consumedKeys.has(key)) return;
+            const idx = scene.inventory.findIndex(item =>
+                item && ((resource.itemId && item.id === resource.itemId) || item.name === resource.name)
+            );
+            if (idx < 0) return;
+            const item = scene.inventory[idx];
+            const before = item.uses !== undefined ? Number(item.uses || 0) : Number(item.quantity || 1);
+            if (!this._consumeInventoryItem(scene, item)) return;
+            const afterItem = scene.inventory.find(next =>
+                next && ((resource.itemId && next.id === resource.itemId) || next.name === resource.name)
+            );
+            const after = afterItem
+                ? (afterItem.uses !== undefined ? Number(afterItem.uses || 0) : Number(afterItem.quantity || 1))
+                : 0;
+            consumedKeys.add(key);
+            consumed.push({
+                itemId: resource.itemId || '',
+                name: resource.name,
+                before,
+                after
+            });
+        });
+
+        if (consumed.length === 0) return [];
+        strategy.consumedItemResourceIds = [...consumedKeys].slice(-50);
+        const title = strategy.title || '计策';
+        const text = `【计策资源消耗：${title}】${consumed.map(item => `${item.name} -1`).join('，')}`;
+        this.addSystemMessage(scene, text, 'system');
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderStrategies?.();
+            SidebarRight.markTabNew?.('inventory');
+            SidebarRight.markTabNew?.('strategies');
+        }
+        return consumed;
+    },
+
+    _strategyItemSelectionText(patch = {}) {
+        const parts = [];
+        const collect = value => {
+            if (Array.isArray(value)) {
+                value.forEach(collect);
+                return;
+            }
+            if (value && typeof value === 'object') {
+                [
+                    value.name,
+                    value.itemName,
+                    value.itemId,
+                    value.resource,
+                    value.text,
+                    value.title,
+                    value.label,
+                    value.id
+                ].forEach(collect);
+                return;
+            }
+            const text = String(value || '').replace(/\s+/g, ' ').trim();
+            if (text) parts.push(text);
+        };
+        collect(patch.resources);
+        collect(patch.usedIntel);
+        return parts.join(' ');
+    },
+
+    _strategyResourceMentioned(resource, selectionText = '', normalizedSelection = '') {
+        const raw = String(selectionText || '').toLowerCase();
+        const normalized = normalizedSelection || this._normalizeFlowText(raw);
+        const candidates = [
+            resource.name,
+            resource.itemId,
+            resource.label,
+            ...(resource.tags || [])
+        ].map(item => String(item || '').trim()).filter(Boolean);
+        return candidates.some(candidate => {
+            const lower = candidate.toLowerCase();
+            const normalizedCandidate = this._normalizeFlowText(lower);
+            return (lower.length >= 2 && raw.includes(lower)) ||
+                (normalizedCandidate.length >= 2 && normalized.includes(normalizedCandidate));
+        });
+    },
+
     canUseInventoryItem(item) {
         if (!item || typeof item !== 'object') return false;
         this.normalizeItem(item);

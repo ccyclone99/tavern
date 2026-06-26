@@ -66,6 +66,9 @@ const StrategyManager = {
         if (typeof strategy.exposure === 'number') strategy.exposure = Math.min(100, Math.max(0, strategy.exposure));
         strategy.updatedAt = Date.now();
         scene.strategies[idx] = this.normalizeStrategy(strategy);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.consumeStrategyItemResources) {
+            WorldEngine.consumeStrategyItemResources(scene, scene.strategies[idx], patch);
+        }
         State.saveCurrentSceneDebounced();
         SidebarRight.renderStrategies();
         return strategy;
@@ -122,7 +125,8 @@ const StrategyManager = {
             requiredIntel: [],
             usedIntel: [],
             exposure: 0,
-            counterplay: []
+            counterplay: [],
+            consumedItemResourceIds: []
         };
         const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
         const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
@@ -141,6 +145,8 @@ const StrategyManager = {
         if (!Array.isArray(strategy.requiredIntel)) strategy.requiredIntel = [];
         if (!Array.isArray(strategy.usedIntel)) strategy.usedIntel = [];
         if (!Array.isArray(strategy.counterplay)) strategy.counterplay = [];
+        if (!Array.isArray(strategy.consumedItemResourceIds)) strategy.consumedItemResourceIds = [];
+        strategy.consumedItemResourceIds = strategy.consumedItemResourceIds.map(String).filter(Boolean).slice(-50);
         return strategy;
     },
 
