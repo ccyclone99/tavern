@@ -38,6 +38,24 @@ const State = {
         return scene.characters.map(id => this.characters.find(c => c.id === id)).filter(Boolean);
     },
 
+    canShowDebugSpoilers() {
+        const settings = this.settings || {};
+        if (settings.debugMode === true || settings.showCharacterSpoilers === true) return true;
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const flag = localStorage.getItem('tavern_show_character_spoilers') || localStorage.getItem('tavern_debug');
+                if (['1', 'true', 'yes', 'on'].includes(String(flag || '').toLowerCase())) return true;
+            }
+        } catch (e) {}
+        try {
+            if (typeof location !== 'undefined' && location.search && typeof URLSearchParams !== 'undefined') {
+                const params = new URLSearchParams(location.search);
+                return params.get('debug') === '1' || params.get('spoilers') === '1';
+            }
+        } catch (e) {}
+        return false;
+    },
+
     // 监听器
     _listeners: {},
 

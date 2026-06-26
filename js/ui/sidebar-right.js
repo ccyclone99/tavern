@@ -998,7 +998,6 @@ const SidebarRight = {
             .slice(-8);
         const levelLabels = { hint: '观察', rumor: '传闻', evidence: '证据', inference: '推论', truth: '确认' };
         const title = publicProfile.title || char.tags?.[0] || '身份未明';
-        const firstImpression = publicProfile.firstImpression || (char.description || '').split(/[。.!！?？]/).find(Boolean) || '暂无公开印象';
         const relationTags = [
             `好感:${affection}`,
             trust ? `信任:${trust}` : '',
@@ -1012,6 +1011,7 @@ const SidebarRight = {
                 <span class="st-clue-text">${Renderer.escapeHtml(item.text || item.title)}</span>
             </div>`).join('')
             : '<p class="placeholder">尚未掌握关于此人的可靠线索</p>';
+        const firstImpression = publicProfile.firstImpression || '尚未形成可靠公开印象';
         const hiddenFactsHtml = hiddenFacts.length > 0
             ? hiddenFacts.map(fact => {
                 const state = characterDiscovery[fact.id]?.state || 'locked';
@@ -1028,28 +1028,8 @@ const SidebarRight = {
                 </div>`;
             }).join('')
             : '<p class="placeholder">暂无可解锁档案槽</p>';
-
-        this.detailEl.innerHTML = `
-            ${avatarHtml}
-            <div class="detail-name">${Renderer.escapeHtml(char.name)}</div>
-            <div class="detail-tags">
-                ${char.tags?.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('') || ''}
-                ${relationTags.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('')}
-                ${relation?.mood ? `<span class="detail-tag">${Renderer.escapeHtml(relation.mood)}</span>` : ''}
-            </div>
-            <div class="detail-section">
-                <h4>公开档案</h4>
-                <p><strong>${Renderer.escapeHtml(title)}</strong></p>
-                <p>${Renderer.escapeHtml(firstImpression)}</p>
-            </div>
-            <div class="detail-section">
-                <h4>已知线索</h4>
-                ${knowledgeHtml}
-            </div>
-            <div class="detail-section">
-                <h4>未解锁信息</h4>
-                <div class="st-steps">${hiddenFactsHtml}</div>
-            </div>
+        const canShowDebugSpoilers = typeof State.canShowDebugSpoilers === 'function' && State.canShowDebugSpoilers();
+        const debugSpoilerHtml = canShowDebugSpoilers ? `
             <details class="detail-spoiler">
                 <summary>作者/调试：完整角色卡 <span class="spoiler-warn">(剧透)</span></summary>
                 <div class="spoiler-content">
@@ -1076,8 +1056,33 @@ const SidebarRight = {
             <div style="margin-top:16px;text-align:center;">
                 <button class="btn btn-secondary" id="editCharBtn">编辑角色</button>
             </div>
+        ` : '';
+
+        this.detailEl.innerHTML = `
+            ${avatarHtml}
+            <div class="detail-name">${Renderer.escapeHtml(char.name)}</div>
+            <div class="detail-tags">
+                ${char.tags?.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('') || ''}
+                ${relationTags.map(t => `<span class="detail-tag">${Renderer.escapeHtml(t)}</span>`).join('')}
+                ${relation?.mood ? `<span class="detail-tag">${Renderer.escapeHtml(relation.mood)}</span>` : ''}
+            </div>
+            <div class="detail-section">
+                <h4>公开档案</h4>
+                <p><strong>${Renderer.escapeHtml(title)}</strong></p>
+                <p>${Renderer.escapeHtml(firstImpression)}</p>
+            </div>
+            <div class="detail-section">
+                <h4>已知线索</h4>
+                ${knowledgeHtml}
+            </div>
+            <div class="detail-section">
+                <h4>未解锁信息</h4>
+                <div class="st-steps">${hiddenFactsHtml}</div>
+            </div>
+            ${debugSpoilerHtml}
         `;
-        document.getElementById('editCharBtn').onclick = () => CharacterEditor.open(char.id);
+        const editCharBtn = document.getElementById('editCharBtn');
+        if (editCharBtn) editCharBtn.onclick = () => CharacterEditor.open(char.id);
     },
 
     renderStrategies() {

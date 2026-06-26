@@ -773,7 +773,7 @@ const WorldGenerator = {
 - conflictSeeds: 3-4个初始矛盾种子，每个是字符串，描述可供玩家谋略的冲突
 - factions: 2-4个势力数组，每个含 { name, attitude(对玩家初始态度-50~50), power(实力0~100), description, leverage:[筹码数组] }
 - intel: 3-5个可发现情报数组，每个含 { text, source, reliability("rumor"/"confirmed"/"false") }
-- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/first_mes/mes_example/tags/_emotionTags/_talkativeness，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组), agenda({ currentPlan, priority(0-100), schedule:[日程], offscreenActions:[离屏行动] })。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
+- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/firstImpression(玩家初见可见印象，不含秘密、真实动机、恐惧或把柄)/first_mes/mes_example/tags/_emotionTags/_talkativeness，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组), agenda({ currentPlan, priority(0-100), schedule:[日程], offscreenActions:[离屏行动] })。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
 - locations: 4-6个地点节点数组，每个含 { id, name, description, connections:[相邻地点id数组] }，第一个为起始地点
 - currentLocation: 起始地点id（设为地点的第一个）
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
@@ -802,10 +802,7 @@ const WorldGenerator = {
 
     _buildCharacterProfile(charData = {}) {
         const tags = Array.isArray(charData.tags) ? charData.tags : [];
-        const firstSentence = String(charData.description || '')
-            .split(/[。.!！?？]/)
-            .map(s => s.trim())
-            .find(Boolean) || '';
+        const explicitFirstImpression = String(charData.firstImpression || '').trim();
         const hiddenFacts = [];
         const addFacts = (list, type, title, hint, trust, dc) => {
             (Array.isArray(list) ? list : []).forEach((truth, idx) => {
@@ -833,7 +830,8 @@ const WorldGenerator = {
         return {
             public: {
                 title: charData.title || tags[0] || '角色',
-                firstImpression: charData.firstImpression || firstSentence.slice(0, 120)
+                firstImpression: explicitFirstImpression.slice(0, 120) ||
+                    (tags[0] ? `${tags[0]}，更多信息有待观察。` : '尚未形成可靠公开印象')
             },
             hiddenFacts
         };

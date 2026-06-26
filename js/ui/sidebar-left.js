@@ -99,11 +99,13 @@ const SidebarLeft = {
                 </div>
             `;
 
-            // 右键编辑（高级入口）
-            div.oncontextmenu = (e) => {
-                e.preventDefault();
-                CharacterEditor.open(char.id);
-            };
+            // 右键编辑是作者/调试入口，普通玩家流程不暴露完整角色卡。
+            if (typeof State.canShowDebugSpoilers === 'function' && State.canShowDebugSpoilers()) {
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    CharacterEditor.open(char.id);
+                };
+            }
 
             this.listEl.appendChild(div);
         });

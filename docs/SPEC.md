@@ -177,7 +177,7 @@ UI 要求：
 - 角色详情页改为“档案页”。
 - 未解锁字段显示为 `???` 或不显示。
 - 可显示解锁提示，例如“需要更多信任”“需要调查舰桥”“需要感知检定”。
-- 移除普通玩家流程里的完整剧透角色卡；编辑入口保留为作者/调试功能。
+- 移除普通玩家流程里的完整剧透角色卡；完整角色卡和 NPC 编辑入口仅在作者/调试剧透开关开启时显示。
 
 ### 4.3 NPC 知识边界
 
@@ -644,7 +644,7 @@ Prompt 必须区分以下块：
 - 欠债/把柄。
 - 未解锁槽位。
 
-作者调试入口可保留，但应明显标记为“编辑/剧透”。
+作者调试入口可保留，但应明显标记为“编辑/剧透”，并默认隐藏。运行时通过 `State.canShowDebugSpoilers()` 判断是否显示。
 
 ### 7.2 玩家知识账本
 
@@ -777,7 +777,7 @@ Prompt 必须区分以下块：
 
 - `scene.intel` 保留读取，视为已知情报。
 - 没有 `scene.knowledge` 时自动创建。
-- 没有角色 `profile` 时由现有 `description/personality/tags` 生成 public 档案。
+- 没有角色 `profile` 时只允许使用显式 `firstImpression`、`tags` 或非剧透占位生成 public 档案；不能从完整 `description/personality/secrets` 摘取公开信息。
 - 现有 `secrets/leverage/fears/motives` 暂时继续作为 NPC 私密设定。
 - 没有 `clocks`、`discoveries`、`counterStrategies`、`agenda` 时默认空数组/空对象。
 
