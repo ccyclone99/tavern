@@ -607,10 +607,14 @@ const ChatUI = {
     },
 
     async onSend() {
-        const text = this.inputEl.value.trim();
-        if (!text || State.isStreaming) return;
+        let text = this.inputEl.value.trim();
+        if (State.isStreaming) return;
 
         let scene = State.scene;
+        const blankCheckSubmit = !text && !State.isOOC && !!scene?.pendingCheck;
+        if (!text && !blankCheckSubmit) return;
+        if (blankCheckSubmit) text = '掷骰';
+
         if (!scene) {
             await State.createScene('酒馆大厅');
             scene = State.scene;
