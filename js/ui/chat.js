@@ -224,8 +224,8 @@ const ChatUI = {
         let current = modes[mode] || modes.talk;
         if (!State.isOOC && scene?.pendingCheck) {
             current = {
-                placeholder: '输入“掷骰”继续，或输入“取消”放弃检定。',
-                hint: '当前等待检定结果；检定完成前不会推进其他行动。',
+                placeholder: '可输入“投入资源名”，再输入“掷骰”；或输入“取消”。',
+                hint: '当前等待检定结果；可先投入物品/同伴协助，检定完成前不会推进其他行动。',
                 send: '掷骰'
             };
         } else if (!State.isOOC && scene?.pendingAction) {
@@ -255,7 +255,7 @@ const ChatUI = {
             if (chips.length === 0) {
                 this.suggestionHelpEl.textContent = '';
             } else if (State.scene?.pendingCheck) {
-                this.suggestionHelpEl.textContent = '输入建议：这些按钮会处理当前检定；你也可以直接输入“掷骰”或“取消”。';
+                this.suggestionHelpEl.textContent = '输入建议：这些按钮会处理当前检定；你也可以直接输入“投入资源名”“掷骰”或“取消”。';
             } else if (State.scene?.pendingAction) {
                 this.suggestionHelpEl.textContent = '输入建议：确认和取消会立即处理；改写会填入输入框。';
             } else {
@@ -279,11 +279,41 @@ const ChatUI = {
     _buildSuggestionChips(scene) {
         if (State.isStreaming) return [];
         if (scene?.pendingCheck) {
-            return [
+            const chips = [
                 { label: '掷骰继续', text: '掷骰', behavior: 'send', primary: true },
-                { label: '取消', text: '取消', behavior: 'send' },
-                { label: '解释', text: '这是什么检定？', behavior: 'send' }
+                { label: '取消', text: '取消', behavior: 'send' }
             ];
+            const check = scene.pendingCheck;
+            const selectedItemIds = new Set(Array.isArray(check.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
+            const selectedCompanionIds = new Set(Array.isArray(check.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
+            const isSelected = (modifier, selectedIds) => {
+                if (!modifier) return false;
+                if (selectedIds.has(String(modifier.id))) return true;
+                if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedIds.has(String(id)))) return true;
+                if (modifier.kind !== 'item') return false;
+                const legacyRefs = [modifier.itemId, modifier.source].map(String).filter(Boolean);
+                return [...selectedIds].some(id => legacyRefs.some(ref => id === `item:${ref}` || id.startsWith(`item:${ref}:`)));
+            };
+            const availableItems = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
+                ? WorldEngine.getAvailableCheckItems(scene, check)
+                : (check.availableItemModifiers || []);
+            const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
+                ? WorldEngine.getAvailableCompanionResources(scene, check)
+                : (check.availableCompanionModifiers || []);
+            const item = availableItems.find(resource => !isSelected(resource, selectedItemIds));
+            const companion = availableCompanions.find(resource => !isSelected(resource, selectedCompanionIds));
+            if (item?.source) chips.splice(1, 0, {
+                label: `投入${this._shortChipLabel(item.source)}`,
+                text: `投入${item.source}`,
+                behavior: 'send'
+            });
+            if (companion?.source) chips.splice(Math.min(2, chips.length), 0, {
+                label: `请${this._shortChipLabel(companion.source)}`,
+                text: `请${companion.source}帮忙`,
+                behavior: 'send'
+            });
+            chips.push({ label: '解释', text: '这是什么检定？', behavior: 'send' });
+            return chips.slice(0, 5);
         }
         if (scene?.pendingAction) {
             return [
