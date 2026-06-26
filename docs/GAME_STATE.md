@@ -279,6 +279,14 @@ scene.evidenceLedger = [
 
 `ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。
 
+`storyPhaseUpdate` 不能直接跳阶段。`WorldEngine.applyStoryPhaseUpdate()` 会在激活下一阶段或完成当前 active 阶段时检查闸门：
+
+- 当前阶段至少有一个 `sceneChallenge.status === "completed"`。
+- 或存在失败推进/替代路线：阶段挑战 `failed`，或补丁写明 `failForward` / `alternative` / `outcome: "failed"`，且带 `reason`。
+- 或玩家绕过阶段但付出明确代价：补丁写明 `cost`、`bypassCost`、`resourceCost`、`relationCost`、`clockCost`、`consequence`、`costs`、`worldTensionDelta`、`clockDelta` 或 `goldCost`，且带 `reason`。
+
+不满足闸门时，阶段状态保持不变，系统写入 `eventLog` 的 `progress` 事件“剧情阶段待确认”，并在当前局势最近风险里提示阶段待确认。
+
 ### CompanionResource
 
 ```js

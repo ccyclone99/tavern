@@ -453,7 +453,7 @@ const PromptBuilder = {
                 : '';
             return `- [${status}] ${p.title || '阶段'}：目标=${p.goal || '—'}；赌注=${p.stakes || '—'}${actions}`;
         }).join('\n');
-        return `【剧情阶段】\n${phaseLines}\n\n阶段规则：\n- 优先围绕当前阶段的目标和赌注组织场景。\n- 推荐行动只是推动方向，不替玩家选择。\n- 当阶段目标实际达成，可用 storyPhaseUpdate 激活下一阶段，也可配合 storyArcUpdate 推进主线；不要突然跳过中段。\n- 赌注要通过 NPC 反应、环境变化、时钟和代价体现。`;
+        return `【剧情阶段】\n${phaseLines}\n\n阶段规则：\n- 优先围绕当前阶段的目标和赌注组织场景。\n- 推荐行动只是推动方向，不替玩家选择。\n- 当阶段目标实际达成，可用 storyPhaseUpdate 激活下一阶段，也可配合 storyArcUpdate 推进主线；不要突然跳过中段。\n- storyPhaseUpdate 激活下一阶段或完成当前阶段时必须带 reason；如果当前阶段挑战未完成，只能用 failForward/alternative 或明确 cost/bypassCost/costs 表示失败替代或绕过代价。\n- 赌注要通过 NPC 反应、环境变化、时钟和代价体现。`;
     },
 
     buildStoryTextureContext(scene) {

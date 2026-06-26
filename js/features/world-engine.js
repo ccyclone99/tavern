@@ -876,13 +876,54 @@ const WorldEngine = {
                 scene.storyPhases.push(phase);
             }
             if (!phase) return;
-            if (update.activate === true) {
+            const wantsActive = update.activate === true || update.status === 'active';
+            const wantsCompleted = update.status === 'completed';
+            if (wantsActive && phase.status !== 'active') {
+                const currentActive = scene.storyPhases.find(p => p.id !== phase.id && p.status === 'active');
+                if (currentActive && currentActive.status !== 'completed') {
+                    const gate = this._storyPhaseGateResult(scene, currentActive, update);
+                    if (!gate.ok) {
+                        this._recordStoryPhaseGateBlocked(scene, currentActive, phase, gate.message);
+                        phase.lastBlockedReason = gate.message;
+                        phase.updatedAt = Date.now();
+                        changed = true;
+                        return;
+                    }
+                    currentActive.status = 'completed';
+                    currentActive.lastReason = gate.reason;
+                    currentActive.updatedAt = Date.now();
+                }
                 scene.storyPhases.forEach(p => {
                     if (p.id !== phase.id && p.status === 'active') p.status = 'completed';
                 });
                 phase.status = 'active';
+                const reason = String(update.reason || phase.entry || '阶段推进').slice(0, 240);
+                phase.lastReason = reason;
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '剧情阶段推进',
+                    text: `${phase.title || '剧情阶段'} 已激活：${reason}`
+                });
             }
-            if (update.status !== undefined && statuses.includes(update.status)) phase.status = update.status;
+            if (wantsCompleted && phase.status === 'active') {
+                const gate = this._storyPhaseGateResult(scene, phase, update);
+                if (!gate.ok) {
+                    this._recordStoryPhaseGateBlocked(scene, phase, null, gate.message);
+                    phase.lastBlockedReason = gate.message;
+                    phase.updatedAt = Date.now();
+                    changed = true;
+                    return;
+                }
+                phase.status = 'completed';
+                phase.lastReason = gate.reason;
+                this.recordEvent(scene, {
+                    category: 'progress',
+                    title: '剧情阶段完成',
+                    text: `${phase.title || '剧情阶段'} 已完成：${gate.reason}`
+                });
+            } else if (update.status !== undefined && statuses.includes(update.status) && !wantsActive) {
+                phase.status = update.status;
+            }
             ['goal', 'stakes', 'entry', 'exit'].forEach(key => {
                 if (update[key] !== undefined) phase[key] = String(update[key]).slice(0, 260);
             });
@@ -893,6 +934,70 @@ const WorldEngine = {
             changed = true;
         });
         return changed;
+    },
+
+    _storyPhaseGateResult(scene, phase, update = {}) {
+        const reason = String(update.reason || update.lastReason || update.cause || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+        const challenges = (scene?.sceneChallenges || []).filter(c => c.phaseId === phase?.id);
+        const completed = challenges.find(c => c.status === 'completed');
+        if (completed) return { ok: true, reason: reason || `已完成阶段挑战：${completed.title || completed.id}` };
+
+        const failed = challenges.find(c => c.status === 'failed')
+            || update.failForward === true
+            || update.alternative === true
+            || update.alternate === true
+            || ['failed', 'fail_forward', 'alternative'].includes(String(update.outcome || ''));
+        if (failed && reason) return { ok: true, reason: `失败推进：${reason}` };
+
+        const cost = this._storyPhaseCostText(update);
+        if (cost && reason) return { ok: true, reason: `绕过代价：${cost}；${reason}` };
+
+        const title = phase?.title || '当前阶段';
+        return {
+            ok: false,
+            message: `${title} 还缺少阶段推进依据：需要完成至少一个阶段挑战，或明确失败替代路线，或写明绕过本阶段付出的资源、关系、时钟等代价。`
+        };
+    },
+
+    _storyPhaseCostText(update = {}) {
+        const parts = [];
+        ['cost', 'bypassCost', 'resourceCost', 'relationCost', 'clockCost', 'consequence'].forEach(key => {
+            if (update[key] !== undefined) {
+                const text = String(update[key] || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+                if (text) parts.push(text);
+            }
+        });
+        if (Array.isArray(update.costs)) {
+            update.costs.slice(0, 4).forEach(item => {
+                const text = typeof item === 'object'
+                    ? String(item.label || item.text || item.type || JSON.stringify(item)).replace(/\s+/g, ' ').trim().slice(0, 120)
+                    : String(item || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+                if (text) parts.push(text);
+            });
+        }
+        ['worldTensionDelta', 'clockDelta', 'goldCost'].forEach(key => {
+            if (Number.isFinite(Number(update[key])) && Number(update[key]) !== 0) {
+                parts.push(`${key} ${Number(update[key]) > 0 ? '+' : ''}${Number(update[key])}`);
+            }
+        });
+        return [...new Set(parts)].slice(0, 4).join('；');
+    },
+
+    _recordStoryPhaseGateBlocked(scene, fromPhase, toPhase, message) {
+        if (!scene || !message) return;
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '剧情阶段待确认',
+            text: toPhase
+                ? `${fromPhase?.title || '当前阶段'} → ${toPhase.title || '下一阶段'} 被拦截：${message}`
+                : `${fromPhase?.title || '当前阶段'} 完成被拦截：${message}`
+        });
+        if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
+            scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        }
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push(`阶段待确认：${fromPhase?.title || '当前阶段'}`);
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
     },
 
     applyCounterStrategyUpdate(scene, updates) {
