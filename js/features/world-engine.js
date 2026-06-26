@@ -559,6 +559,7 @@ const WorldEngine = {
             type,
             stat: statMap[stat] || stat,
             actionType: effect.actionType ? String(effect.actionType) : '',
+            tag: effect.tag ? String(effect.tag).slice(0, 80) : '',
             clockId: effect.clockId ? String(effect.clockId).slice(0, 100) : '',
             clockTag: effect.clockTag ? String(effect.clockTag).slice(0, 60) : '',
             clockName: effect.clockName ? String(effect.clockName).slice(0, 100) : '',
@@ -2243,6 +2244,116 @@ const WorldEngine = {
         });
         if (consumed && typeof SidebarRight !== 'undefined') SidebarRight.renderInventory?.();
         return consumed;
+    },
+
+    getStrategyItemResources(scene, strategy, options = {}) {
+        if (!scene || !strategy || !Array.isArray(scene.inventory)) return [];
+        const limit = Math.max(1, Math.min(12, Number(options.limit || 6)));
+        const contextParts = [
+            strategy.title,
+            strategy.goal,
+            strategy.phase,
+            strategy.stakes,
+            ...(strategy.resources || []),
+            ...(strategy.requiredIntel || []),
+            ...(strategy.usedIntel || []),
+            ...(strategy.counterplay || []),
+            ...((strategy.steps || []).map(step => step?.text || step)),
+            ...((strategy.clues || []).map(clue => clue?.text || clue?.title || clue))
+        ];
+        const contextText = contextParts.map(item => String(item || '').toLowerCase()).join(' ');
+        const normalizedContext = this._normalizeFlowText ? this._normalizeFlowText(contextText) : contextText;
+        const resources = [];
+
+        (scene.inventory || []).forEach((item, index) => {
+            if (!item) return;
+            this.normalizeItem(item);
+            if (Number(item.quantity || 1) <= 0) return;
+            if (item.uses !== undefined && Number(item.uses || 0) <= 0) return;
+
+            let score = 0;
+            let checkBonus = 0;
+            let dcDelta = 0;
+            let riskDelta = 0;
+            const labels = [];
+            const itemTags = (item.tags || []).map(tag => String(tag || '').toLowerCase()).filter(Boolean);
+            const itemText = `${item.name || ''} ${item.description || ''} ${itemTags.join(' ')}`.toLowerCase();
+            const normalizedItemText = this._normalizeFlowText ? this._normalizeFlowText(itemText) : itemText;
+            const itemName = String(item.name || '').toLowerCase();
+
+            if (itemName && contextText.includes(itemName)) score += 4;
+            itemTags.forEach(tag => {
+                if (!tag) return;
+                const normalizedTag = this._normalizeFlowText ? this._normalizeFlowText(tag) : tag;
+                if ((tag.length >= 2 && contextText.includes(tag)) || (normalizedTag.length >= 2 && normalizedContext.includes(normalizedTag))) score += 2;
+            });
+            if (item.type === 'quest' && score > 0) {
+                score += 2;
+                labels.push('任务物品筹码');
+            }
+
+            (item.effects || []).forEach(effect => {
+                const value = Number(effect.value || 0);
+                if (effect.type === 'strategy_leverage') {
+                    const tag = String(effect.tag || '').toLowerCase();
+                    const normalizedTag = this._normalizeFlowText ? this._normalizeFlowText(tag) : tag;
+                    const tagMatches = !tag ||
+                        (tag.length >= 2 && (contextText.includes(tag) || normalizedItemText.includes(tag))) ||
+                        (normalizedTag.length >= 2 && (normalizedContext.includes(normalizedTag) || normalizedItemText.includes(normalizedTag)));
+                    if (!tagMatches && score <= 0) return;
+                    score += tagMatches ? 8 : 4;
+                    const leverageValue = value || -10;
+                    riskDelta += leverageValue > 0 ? -leverageValue : leverageValue;
+                    labels.push(`筹码${effect.tag ? `:${effect.tag}` : ''}`);
+                    return;
+                }
+
+                if (!['check_bonus', 'dc_delta', 'risk_delta'].includes(effect.type)) return;
+                const effectAction = String(effect.actionType || '').toLowerCase();
+                const actionMatches = !effectAction || effectAction === 'strategy' || contextText.includes(effectAction);
+                const whenMatches = !effect.when || contextText.includes(String(effect.when).toLowerCase()) || normalizedContext.includes(this._normalizeFlowText ? this._normalizeFlowText(effect.when) : String(effect.when).toLowerCase());
+                if (!actionMatches || !whenMatches || score <= 0) return;
+
+                if (effect.type === 'check_bonus') {
+                    checkBonus += value;
+                    if (value) {
+                        riskDelta -= Math.max(0, value) * 2;
+                        labels.push(`检定 ${value >= 0 ? '+' : ''}${value}`);
+                    }
+                } else if (effect.type === 'dc_delta') {
+                    dcDelta += value;
+                    if (value) {
+                        riskDelta += value * 3;
+                        labels.push(`DC ${value >= 0 ? '+' : ''}${value}`);
+                    }
+                } else if (effect.type === 'risk_delta') {
+                    riskDelta += value;
+                    if (value) labels.push(`风险 ${value >= 0 ? '+' : ''}${value}`);
+                }
+                score += 2;
+            });
+
+            if (score <= 0 || labels.length === 0) return;
+            const consume = (item.effects || []).some(effect => effect.consume === true) || item.type === 'consumable';
+            resources.push({
+                id: `strategy_item:${item.id || item.name || index}`,
+                itemId: item.id || '',
+                name: item.name || '未命名物品',
+                label: [...new Set(labels)].join('，'),
+                tags: item.tags || [],
+                uses: item.uses,
+                quantity: item.quantity || 1,
+                consume,
+                score,
+                checkBonus,
+                dcDelta,
+                riskDelta
+            });
+        });
+
+        return resources
+            .sort((a, b) => b.score - a.score || Number(a.consume) - Number(b.consume) || String(a.name).localeCompare(String(b.name), 'zh-CN'))
+            .slice(0, limit);
     },
 
     canUseInventoryItem(item) {

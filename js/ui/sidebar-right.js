@@ -769,6 +769,8 @@ const SidebarRight = {
                                     ? `时钟${effect.value >= 0 ? '+' : ''}${effect.value}`
                                     : effect.type === 'world_tension'
                                         ? `世界紧张${effect.value >= 0 ? '+' : ''}${effect.value}`
+                                    : effect.type === 'strategy_leverage'
+                                        ? `计策筹码${effect.tag ? ' · ' + effect.tag : ''}`
                                         : effect.type;
                     return `<span class="inv-effect-chip">${Renderer.escapeHtml(label)}</span>`;
                 }).join('');
@@ -1106,6 +1108,21 @@ const SidebarRight = {
         const counterplayHtml = (active.counterplay || []).map(item =>
             `<span class="st-intel-chip st-intel-counter">${Renderer.escapeHtml(item)}</span>`
         ).join('');
+        const strategyItems = typeof WorldEngine !== 'undefined' && WorldEngine.getStrategyItemResources
+            ? WorldEngine.getStrategyItemResources(scene, active, { limit: 6 })
+            : [];
+        const strategyItemsHtml = strategyItems.map(item => {
+            const details = [
+                item.riskDelta ? `风险${item.riskDelta >= 0 ? '+' : ''}${item.riskDelta}` : '',
+                item.dcDelta ? `DC${item.dcDelta >= 0 ? '+' : ''}${item.dcDelta}` : '',
+                item.checkBonus ? `检定${item.checkBonus >= 0 ? '+' : ''}${item.checkBonus}` : '',
+                item.consume ? '会消耗' : ''
+            ].filter(Boolean).join(' · ');
+            return `<div class="st-clue st-item-resource">
+                <span class="st-clue-badge">物品</span>
+                <span class="st-clue-text">${Renderer.escapeHtml(item.name)}：${Renderer.escapeHtml(item.label)}${details ? `（${Renderer.escapeHtml(details)}）` : ''}</span>
+            </div>`;
+        }).join('');
 
         const othersHtml = others.length > 0
             ? `<div class="st-others"><h4>其他计策</h4>${others.map(s =>
@@ -1134,6 +1151,7 @@ const SidebarRight = {
                 ${active.stakes ? `<div class="st-stakes"><strong>赌注：</strong>${Renderer.escapeHtml(active.stakes)}</div>` : ''}
                 ${intelHtml ? `<div class="st-section"><h4>情报资源</h4><div class="st-intel-list">${intelHtml}</div></div>` : ''}
                 ${counterplayHtml ? `<div class="st-section"><h4>反制解法</h4><div class="st-intel-list">${counterplayHtml}</div></div>` : ''}
+                ${strategyItemsHtml ? `<div class="st-section"><h4>可用物品</h4><div class="st-clues">${strategyItemsHtml}</div></div>` : ''}
                 ${stepsHtml ? `<div class="st-section"><h4>步骤</h4><div class="st-steps">${stepsHtml}</div></div>` : ''}
                 ${participantsHtml ? `<div class="st-section"><h4>参与 NPC</h4><div class="st-participants">${participantsHtml}</div></div>` : ''}
                 ${cluesHtml ? `<div class="st-section"><h4>情报</h4><div class="st-clues">${cluesHtml}</div></div>` : ''}

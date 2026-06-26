@@ -290,6 +290,7 @@ const PromptBuilder = {
                         if (effect.type === 'world_tension') return `世界紧张${effect.value >= 0 ? '+' : ''}${effect.value}`;
                         if (effect.type === 'gold') return `金币${effect.value >= 0 ? '+' : ''}${effect.value}`;
                         if (effect.type === 'exp') return `经验+${effect.value}`;
+                        if (effect.type === 'strategy_leverage') return `计策筹码${effect.tag ? ':' + effect.tag : ''}`;
                         return effect.type;
                     }).join('、')}`
                     : '';
@@ -561,8 +562,14 @@ const PromptBuilder = {
         const allStrategies = (scene.strategies || []).map(s =>
             `- ${s.title}：${s.goal || '无目标'}（${s.status || 'draft'}，${s.phase || '—'}，风险${s.risk || 0}%，暴露${s.exposure || 0}%）`
         ).join('\n') || '无';
+        const strategyItems = active && typeof WorldEngine !== 'undefined' && WorldEngine.getStrategyItemResources
+            ? WorldEngine.getStrategyItemResources(scene, active, { limit: 6 })
+            : [];
+        const strategyItemsBlock = strategyItems.length > 0
+            ? `\n可用计策物品：\n${strategyItems.map(item => `- ${item.name}：${item.label}${item.riskDelta ? `；风险${item.riskDelta >= 0 ? '+' : ''}${item.riskDelta}` : ''}${item.consume ? '；使用会消耗' : ''}`).join('\n')}\n`
+            : '';
 
-        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100，同时记录 requiredIntel/usedIntel/exposure/counterplay。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖玩家已知情报、筹码、关系、资源、检定和风险，不允许无代价成功。\n5. 私密设定不是玩家已知；只有当玩家观察、调查、套话、取得证据或满足关系门槛时，才可以把它转化为 knowledgeAdd。\n6. 后果必须具体影响关系、警觉、任务、资源、地点、时钟或世界局势。\n7. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n8. 当创建或更新计策、添加玩家已知情报、推进剧情弧/剧情阶段/线索/失败状态/时钟、调整 NPC 日程或反制时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "knowledgeAdd": [], "discoveryUpdate": [], "intelAdd": [], "factionsUpdate": [], "characterUpdates": [], "clockUpdate": [], "storyArcUpdate": [], "storyPhaseUpdate": [], "clueUpdate": [], "failureStateUpdate": [], "counterStrategyUpdate": [], "npcAgendaUpdate": [], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
+        return `【计策主持人协议】\n你是一位主持人（DM），不替玩家做最终选择。当玩家提出目标、阴谋、调查、拉拢、离间、潜入、交易、威胁等意图时，应帮助创建或推进计策。\n\n${activeDesc}\n所有计策：\n${allStrategies}${strategyItemsBlock}\n\n规则：\n1. 信息不足时，最多追问 1-2 个关键问题（目标、筹码、风险偏好、关键 NPC）。\n2. 计划可执行时，推进阶段（intel → setup → action → complication → resolution）并给出风险值 0-100，同时记录 requiredIntel/usedIntel/exposure/counterplay。\n3. 每轮必须给玩家一个明确的下一步问题，或 2-3 个可选行动。\n4. 成功依赖玩家已知情报、筹码、关系、资源、检定和风险，不允许无代价成功；若玩家投入“可用计策物品”，应在 risk/exposure/usedIntel/resources 中体现。\n5. 私密设定不是玩家已知；只有当玩家观察、调查、套话、取得证据或满足关系门槛时，才可以把它转化为 knowledgeAdd。\n6. 后果必须具体影响关系、警觉、任务、资源、地点、时钟或世界局势。\n7. 计策状态包括：draft（草稿）、preparing（筹备中）、executing（执行中）、exposed（已暴露）、resolved（已解决）、failed（失败）。\n8. 当创建或更新计策、添加玩家已知情报、推进剧情弧/剧情阶段/线索/失败状态/时钟、调整 NPC 日程或反制时，在回复末尾追加隐藏状态补丁：\n<state_update>\n{ "strategies": { "create": [...], "update": [...] }, "knowledgeAdd": [], "discoveryUpdate": [], "intelAdd": [], "factionsUpdate": [], "characterUpdates": [], "clockUpdate": [], "storyArcUpdate": [], "storyPhaseUpdate": [], "clueUpdate": [], "failureStateUpdate": [], "counterStrategyUpdate": [], "npcAgendaUpdate": [], "scene": { "worldTensionDelta": 0 } }\n</state_update>\n补丁只包含你确认发生的变化，JSON 必须合法。玩家看不到补丁内容。`;
     },
 
     buildNpcAgendaBlock(character) {
