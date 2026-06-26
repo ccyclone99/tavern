@@ -263,6 +263,7 @@ scene.sceneChallenges = [
       { id: "present_route_data", label: "提交路线和辐射读数", stat: "intelligence", dc: 13, effect: 1 }
     ],
     supports: ["q_main:1"],
+    evidenceIds: ["ev_route_reading"],
     coreRevelations: ["rev_player_is_not_contagious"]
   }
 ];

@@ -268,6 +268,7 @@ const WorldEngine = {
             optionalRewards: list('optionalRewards', 8),
             failForward: list('failForward', 8, 220),
             supports: list('supports', 12),
+            evidenceIds: list('evidenceIds', 20),
             expReward: Number.isFinite(Number(data.expReward)) ? this._clamp(Number(data.expReward), 0, 200) : 0,
             rewardGranted: data.rewardGranted === true,
             lastReason: String(data.lastReason || '').slice(0, 240),
@@ -1657,6 +1658,7 @@ const WorldEngine = {
             }
             if (!challenge) return;
 
+            const previousStatus = challenge.status;
             if (update.status !== undefined && this.challengeStatuses.includes(update.status)) challenge.status = update.status;
             ['title', 'goal', 'stakes', 'lastReason', 'phaseId'].forEach(key => {
                 if (update[key] !== undefined) challenge[key] = String(update[key]).slice(0, key === 'stakes' ? 320 : 240);
@@ -1676,7 +1678,20 @@ const WorldEngine = {
                 challenge.approaches = update.approaches.map((a, idx) => this.normalizeChallengeApproach(a, idx)).filter(Boolean).slice(0, 10);
             }
             if (Array.isArray(update.supports)) challenge.supports = update.supports.map(String).slice(0, 12);
-            this._settleChallengeStatus(scene, challenge, update.reason || update.lastReason || '挑战状态更新');
+            if (update.evidenceAdd !== undefined || update.evidenceIds !== undefined) {
+                const evidenceAdd = update.evidenceAdd !== undefined
+                    ? (Array.isArray(update.evidenceAdd) ? update.evidenceAdd : [update.evidenceAdd])
+                    : [];
+                const evidenceIds = update.evidenceIds !== undefined
+                    ? (Array.isArray(update.evidenceIds) ? update.evidenceIds : [update.evidenceIds])
+                    : [];
+                if (!Array.isArray(challenge.evidenceIds)) challenge.evidenceIds = [];
+                [...evidenceAdd, ...evidenceIds].map(String).filter(Boolean).forEach(item => {
+                    if (!challenge.evidenceIds.includes(item)) challenge.evidenceIds.push(item);
+                });
+                challenge.evidenceIds = challenge.evidenceIds.slice(-20);
+            }
+            this._settleChallengeStatus(scene, challenge, update.reason || update.lastReason || '挑战状态更新', { previousStatus });
             challenge.updatedAt = Date.now();
             changed = true;
         });
@@ -4238,9 +4253,9 @@ const WorldEngine = {
         ];
     },
 
-    _settleChallengeStatus(scene, challenge, reason = '') {
+    _settleChallengeStatus(scene, challenge, reason = '', options = {}) {
         if (!challenge) return;
-        const was = challenge.status;
+        const was = options.previousStatus || challenge.status;
         const minChecks = this._minChecksForChallenge(challenge);
         const hasEnoughChecks = Number(challenge.checkCount || 0) >= minChecks;
         if (challenge.status === 'completed' && !hasEnoughChecks) {
@@ -4261,6 +4276,16 @@ const WorldEngine = {
         } else if (challenge.progress >= challenge.targetProgress && challenge.status !== 'completed') {
             challenge.status = 'completed';
             this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
+            this._grantChallengeReward(scene, challenge);
+            this._completeQuestObjectivesForChallenge(scene, challenge);
+            this._completeLinkedPhaseIfReady(scene, challenge);
+        } else if (challenge.status === 'completed') {
+            if (Number(challenge.progress || 0) < Number(challenge.targetProgress || 1)) {
+                challenge.progress = Number(challenge.targetProgress || 1);
+            }
+            if (was !== 'completed') {
+                this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
+            }
             this._grantChallengeReward(scene, challenge);
             this._completeQuestObjectivesForChallenge(scene, challenge);
             this._completeLinkedPhaseIfReady(scene, challenge);
