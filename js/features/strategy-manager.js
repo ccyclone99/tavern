@@ -3,6 +3,10 @@
  * 负责创建、更新、应用 AI 状态补丁，驱动右侧计策面板
  */
 const StrategyManager = {
+    maxStrategies: 24,
+    maxStrategiesPerUpdate: 4,
+    maxStrategyUpdatesPerUpdate: 12,
+
     /**
      * 创建新计策
      */
@@ -10,6 +14,13 @@ const StrategyManager = {
         const scene = State.scene;
         if (!scene) return null;
         if (!this._canMutateGameplay(scene, '创建计策')) return null;
+        if (!Array.isArray(scene.strategies)) scene.strategies = [];
+        if (scene.strategies.length >= this.maxStrategies) {
+            const message = `当前计策已达上限 ${this.maxStrategies} 条。`;
+            console.warn(`[StrategyManager] ${message}`);
+            if (typeof showToast !== 'undefined') showToast(message);
+            return null;
+        }
 
         const now = Date.now();
         const strategy = this.normalizeStrategy({
@@ -116,6 +127,57 @@ const StrategyManager = {
      */
     normalizeStrategy(strategy) {
         if (!strategy) return strategy;
+        const clamp = (value, min, max, fallback = min) => {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return fallback;
+            return Math.max(min, Math.min(max, Math.round(n)));
+        };
+        const clip = (value, limit, fallback = '') => {
+            const text = String(value ?? fallback).trim();
+            return (text || fallback).slice(0, limit);
+        };
+        const stringList = (value, limit, itemLimit = 120) => (
+            Array.isArray(value) ? value : []
+        ).map(item => clip(item, itemLimit)).filter(Boolean).slice(0, limit);
+        const stepList = value => (
+            Array.isArray(value) ? value : []
+        ).map((item, idx) => {
+            const raw = item && typeof item === 'object' ? item : { text: item };
+            const status = ['pending', 'active', 'done', 'failed'].includes(raw.status) ? raw.status : 'pending';
+            const text = clip(raw.text || raw.title || raw.name || '', 160);
+            if (!text) return null;
+            return { text, status };
+        }).filter(Boolean).slice(0, 8);
+        const participantList = value => (
+            Array.isArray(value) ? value : []
+        ).map(item => {
+            if (!item || typeof item !== 'object') return null;
+            const name = clip(item.name || item.characterName || item.id || '', 80);
+            if (!name) return null;
+            return {
+                id: clip(item.id || item.characterId || '', 100),
+                name,
+                role: clip(item.role || '参与者', 80),
+                trust: clamp(item.trust, -100, 100, 0),
+                suspicion: clamp(item.suspicion, -100, 100, 0)
+            };
+        }).filter(Boolean).slice(0, 8);
+        const clueList = value => (
+            Array.isArray(value) ? value : []
+        ).map(item => {
+            if (item && typeof item === 'object') {
+                const text = clip(item.text || item.title || '', 160);
+                if (!text) return null;
+                return {
+                    id: clip(item.id || '', 100),
+                    text,
+                    reliability: ['rumor', 'confirmed', 'false'].includes(item.reliability) ? item.reliability : 'rumor'
+                };
+            }
+            const text = clip(item, 160);
+            return text ? { text, reliability: 'rumor' } : null;
+        }).filter(Boolean).slice(0, 10);
+
         const defaults = {
             status: 'draft',
             phase: 'intel',
@@ -136,20 +198,24 @@ const StrategyManager = {
         for (const [key, val] of Object.entries(defaults)) {
             if (strategy[key] === undefined || strategy[key] === null) strategy[key] = val;
         }
+        strategy.id = clip(strategy.id || `st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, 100);
+        strategy.title = clip(strategy.title || '未命名计策', 120, '未命名计策');
+        strategy.goal = clip(strategy.goal || '', 260);
+        strategy.stakes = clip(strategy.stakes || '', 240);
+        strategy.latestOutcome = clip(strategy.latestOutcome || '', 320);
         if (!validStatuses.includes(strategy.status)) strategy.status = 'draft';
         if (!validPhases.includes(strategy.phase)) strategy.phase = 'intel';
-        if (typeof strategy.risk === 'number') strategy.risk = Math.min(100, Math.max(0, strategy.risk));
-        if (typeof strategy.progress === 'number') strategy.progress = Math.min(100, Math.max(0, strategy.progress));
-        if (typeof strategy.exposure === 'number') strategy.exposure = Math.min(100, Math.max(0, strategy.exposure));
-        if (!Array.isArray(strategy.participants)) strategy.participants = [];
-        if (!Array.isArray(strategy.steps)) strategy.steps = [];
-        if (!Array.isArray(strategy.resources)) strategy.resources = [];
-        if (!Array.isArray(strategy.clues)) strategy.clues = [];
-        if (!Array.isArray(strategy.requiredIntel)) strategy.requiredIntel = [];
-        if (!Array.isArray(strategy.usedIntel)) strategy.usedIntel = [];
-        if (!Array.isArray(strategy.counterplay)) strategy.counterplay = [];
-        if (!Array.isArray(strategy.consumedItemResourceIds)) strategy.consumedItemResourceIds = [];
-        strategy.consumedItemResourceIds = strategy.consumedItemResourceIds.map(String).filter(Boolean).slice(-50);
+        strategy.risk = clamp(strategy.risk, 0, 100, 0);
+        strategy.progress = clamp(strategy.progress, 0, 100, 0);
+        strategy.exposure = clamp(strategy.exposure, 0, 100, 0);
+        strategy.participants = participantList(strategy.participants);
+        strategy.steps = stepList(strategy.steps);
+        strategy.resources = stringList(strategy.resources, 12);
+        strategy.clues = clueList(strategy.clues);
+        strategy.requiredIntel = stringList(strategy.requiredIntel, 12);
+        strategy.usedIntel = stringList(strategy.usedIntel, 12);
+        strategy.counterplay = stringList(strategy.counterplay, 8);
+        strategy.consumedItemResourceIds = stringList(strategy.consumedItemResourceIds, 50, 120).slice(-50);
         return strategy;
     },
 
@@ -183,6 +249,8 @@ const StrategyManager = {
         const MAX_ITEMS_PER_UPDATE = 50;
         const MAX_LOCATIONS_PER_UPDATE = 20;
         const MAX_TOTAL_INVENTORY = 200;
+        const MAX_STRATEGIES_PER_UPDATE = this.maxStrategiesPerUpdate;
+        const MAX_STRATEGY_UPDATES_PER_UPDATE = this.maxStrategyUpdatesPerUpdate;
         let knowledgeAdded = false;
         let discoveryChanged = false;
         let itemAdded = false;
@@ -218,12 +286,18 @@ const StrategyManager = {
         // 1. strategies.create / update
         if (!stoppedByEnding && update.strategies && typeof update.strategies === 'object') {
             if (Array.isArray(update.strategies.create)) {
-                for (const st of update.strategies.create) {
+                if (update.strategies.create.length > MAX_STRATEGIES_PER_UPDATE) {
+                    console.warn(`[StrategyManager] strategies.create 超过单条上限 ${MAX_STRATEGIES_PER_UPDATE}，已截断`);
+                }
+                for (const st of update.strategies.create.slice(0, MAX_STRATEGIES_PER_UPDATE)) {
                     if (st && typeof st === 'object') this.createStrategy(st);
                 }
             }
             if (Array.isArray(update.strategies.update)) {
-                for (const patch of update.strategies.update) {
+                if (update.strategies.update.length > MAX_STRATEGY_UPDATES_PER_UPDATE) {
+                    console.warn(`[StrategyManager] strategies.update 超过单条上限 ${MAX_STRATEGY_UPDATES_PER_UPDATE}，已截断`);
+                }
+                for (const patch of update.strategies.update.slice(0, MAX_STRATEGY_UPDATES_PER_UPDATE)) {
                     if (patch && typeof patch === 'object' && patch.id) {
                         this.updateStrategy(patch.id, patch);
                     }

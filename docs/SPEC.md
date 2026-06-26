@@ -375,6 +375,8 @@ strategy.counterplay = [];
 
 当玩家用假情报推进计策时，应提高暴露风险或触发 NPC 反制。
 
+`strategies.create` / `strategies.update` 必须限量和限幅：单条状态补丁最多创建 4 条计策、更新 12 条计策，场景总计策最多 24 条；`title/goal/stakes/latestOutcome` 和步骤、参与者、资源、情报、反制数组都必须由 `StrategyManager.normalizeStrategy()` 截断，避免 AI 生成超长计策污染存档和 UI。
+
 ### 4.9 NPC 反制
 
 NPC 可以创建反制卡，但玩家不一定知道详情。
