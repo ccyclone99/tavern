@@ -5061,12 +5061,16 @@ const WorldEngine = {
         if (!scene || !Array.isArray(scene.companionResources)) return false;
         let consumed = false;
         const notes = [];
+        const consumedResourceIds = new Set();
         modifiers.forEach(mod => {
             if (mod.kind !== 'companion' || !mod.resourceId) return;
+            const resourceId = String(mod.resourceId || '').trim();
+            if (!resourceId || consumedResourceIds.has(resourceId)) return;
             const resource = scene.companionResources.find(r => r.id === mod.resourceId);
             if (!resource || Number(resource.uses || 0) <= 0) return;
             if (!this.getCompanionResourceAvailability(scene, resource).ok) return;
             resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
+            consumedResourceIds.add(resourceId);
             consumed = true;
             const costNotes = this._applyCompanionResourceCost(scene, resource);
             const effectNotes = this.isScenePlaying(scene)

@@ -322,7 +322,7 @@ scene.evidenceLedger = [
 }
 ```
 
-同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 会按当前场景角色名做一次兼容修复。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
+同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 会按当前场景角色名做一次兼容修复。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
 
 `effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag` 或资源标签延缓/推进公开时钟；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
 
