@@ -173,6 +173,8 @@
 
 `State.normalizeScene(scene)` 会为旧存档补齐以上字段。新增字段必须在 `normalizeScene()` 中提供兼容默认值。
 
+`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致探索奖励重复发放、输入状态错乱或 DM 叙事人格丢失。
+
 ## 三、子结构
 
 ### PlayerPersona

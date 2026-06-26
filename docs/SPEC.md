@@ -551,6 +551,7 @@ UI 要求：
 - 日志条目只保存摘要和引用，不复制完整聊天文本。
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
+- 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志丢失，避免重复刷经验或物资。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
 

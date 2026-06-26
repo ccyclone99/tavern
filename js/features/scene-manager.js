@@ -17,7 +17,7 @@ const SceneManager = {
         const scene = State.scene;
         if (!scene) { showToast('没有可存档的场景'); return; }
 
-        const defaultName = scene.name + ' - ' + new Date().toLocaleString();
+        const defaultName = `${scene.name || scene.title || '未命名世界'} - ${new Date().toLocaleString()}`;
 
         // 小型输入弹窗替代 prompt()
         const modal = document.createElement('div');
@@ -69,6 +69,9 @@ const SceneManager = {
                         messages: JSON.parse(JSON.stringify(scene.messages)),
                         characters: JSON.parse(JSON.stringify(scene.characters || [])),
                         lorebookEntries: JSON.parse(JSON.stringify(scene.lorebookEntries || [])),
+                        background: scene.background || '',
+                        userName: scene.userName || State.settings.userName || '旅人',
+                        dmPersona: scene.dmPersona ? JSON.parse(JSON.stringify(scene.dmPersona)) : null,
                         inventory: JSON.parse(JSON.stringify(scene.inventory || [])),
                         equipment: JSON.parse(JSON.stringify(scene.equipment || {})),
                         quests: JSON.parse(JSON.stringify(scene.quests || [])),
@@ -100,6 +103,7 @@ const SceneManager = {
                         sceneChallenges: JSON.parse(JSON.stringify(scene.sceneChallenges || [])),
                         evidenceLedger: JSON.parse(JSON.stringify(scene.evidenceLedger || [])),
                         companionResources: JSON.parse(JSON.stringify(scene.companionResources || [])),
+                        explorationRewardLog: JSON.parse(JSON.stringify(scene.explorationRewardLog || [])),
                         questProgressGuards: JSON.parse(JSON.stringify(scene.questProgressGuards || {})),
                         runRecord: scene.runRecord ? JSON.parse(JSON.stringify(scene.runRecord)) : null,
                         runHistory: JSON.parse(JSON.stringify(scene.runHistory || [])),
@@ -112,6 +116,7 @@ const SceneManager = {
                         activeStrategyId: scene.activeStrategyId,
                         pendingAction: JSON.parse(JSON.stringify(scene.pendingAction || null)),
                         pendingCheck: JSON.parse(JSON.stringify(scene.pendingCheck || null)),
+                        inputContext: JSON.parse(JSON.stringify(scene.inputContext || { state: 'idle', prompt: '', suggestions: [], lastIntentId: '' })),
                         gameState: scene.gameState || 'playing',
                         summary: scene.summary || ''
                     }
@@ -196,19 +201,21 @@ const SceneManager = {
         if (s.lorebookEntries) scene.lorebookEntries = JSON.parse(JSON.stringify(s.lorebookEntries));
         // 完整字段恢复（新快照）
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
+         'dmPersona',
          'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs',
          'storyPhases', 'clueGraph', 'consequenceLedger', 'eventLog', 'failureStates', 'runRecord', 'runHistory', 'clocks', 'counterStrategies', 'flowGuide',
-         'currentSituation', 'pendingAction', 'pendingCheck', 'summary',
-         'gameplayProfile', 'storyTexture', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'questProgressGuards'].forEach(f => {
+         'currentSituation', 'pendingAction', 'pendingCheck', 'inputContext', 'summary',
+         'gameplayProfile', 'storyTexture', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'explorationRewardLog', 'questProgressGuards'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',
-         'attrPoints', 'worldTension', 'turnCount', 'activeStrategyId', 'gameState'].forEach(f => {
+         'attrPoints', 'worldTension', 'turnCount', 'activeStrategyId', 'gameState', 'background', 'userName'].forEach(f => {
             if (s[f] !== undefined) scene[f] = s[f];
         });
 
         State.normalizeScene(scene);
         await State.saveCurrentScene();
+        if (typeof applyBackground === 'function') applyBackground();
         ChatUI.render();
         SidebarLeft.render();
         SidebarRight.renderDetail();
