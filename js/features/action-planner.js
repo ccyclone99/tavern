@@ -31,8 +31,8 @@ const ActionPlanner = {
 
     profiles: [
         { type: 'combat', stat: 'strength', baseRisk: 72, baseDc: 17, keywords: ['攻击', '打倒', '杀', '砍', '射击', '开枪', '制服', '决斗', '战斗'] },
-        { type: 'force', stat: 'strength', baseRisk: 58, baseDc: 16, keywords: ['撞开', '砸开', '破门', '推开', '掰开', '拖住', '夺走', '抢'] },
-        { type: 'sneak', stat: 'dexterity', baseRisk: 55, baseDc: 15, keywords: ['潜入', '偷偷', '偷', '撬锁', '开锁', '解锁', '躲开', '绕过', '跟踪', '藏', '溜进'] },
+        { type: 'force', stat: 'strength', baseRisk: 58, baseDc: 16, keywords: ['撞开', '砸开', '破门', '推开', '掰开', '拖住', '夺走', '抢', '强行穿越', '强行突破', '翻越'] },
+        { type: 'sneak', stat: 'dexterity', baseRisk: 55, baseDc: 15, keywords: ['潜入', '偷偷', '偷', '撬锁', '开锁', '解锁', '躲开', '绕过', '穿越', '越过', '跟踪', '藏', '溜进'] },
         { type: 'lie', stat: 'charisma', baseRisk: 52, baseDc: 15, keywords: ['撒谎', '骗', '伪装', '冒充', '编造', '欺骗'] },
         { type: 'threaten', stat: 'charisma', baseRisk: 60, baseDc: 16, keywords: ['威胁', '恐吓', '逼问', '胁迫', '勒索'] },
         { type: 'persuade', stat: 'charisma', baseRisk: 42, baseDc: 14, keywords: ['说服', '劝', '谈判', '请求', '拉拢', '安抚', '讨价还价'] },

@@ -900,7 +900,9 @@ const WorldEngine = {
             item.description = desc || '可恢复少量生命，也能在合适检定中作为准备资源。';
             item.effects = [
                 { type: 'heal', value: 2, consume: true },
-                { type: 'check_bonus', value: 2, consume: true }
+                { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 2, consume: true },
+                { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 2, consume: true },
+                { type: 'check_bonus', stat: 'constitution', actionType: 'force', value: 2, consume: true }
             ];
         } else if (has('零件', '备件', '维修包', 'repair kit', 'parts')) {
             item.type = 'consumable';
@@ -928,7 +930,19 @@ const WorldEngine = {
             item.type = requestedType || 'misc';
             item.tags = ['工具'];
             item.description = desc || '可在合适的调查或操作中提供轻微优势。';
-            item.effects = [{ type: 'check_bonus', actionType: 'investigate', value: 1, consume: false }];
+            if (has('扫描仪', '探测器', 'scanner')) {
+                item.tags = ['工具', '扫描', '观察'];
+                item.description = desc || '可辅助观察异常、读取环境读数和寻找线索。';
+                item.effects = [
+                    { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false },
+                    { type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: false }
+                ];
+            } else {
+                item.effects = [
+                    { type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: false },
+                    { type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 1, consume: false }
+                ];
+            }
         }
         return this.normalizeItem(item);
     },
@@ -2921,7 +2935,7 @@ const WorldEngine = {
                 quantity: 1,
                 uses: 1,
                 tags: ['零件', '修复', '设备'],
-                effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }]
+                effects: [{ type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 2, consume: true }]
             };
         }
         if (has('route', 'radiation', 'storm', 'old_mall', 'new_home', 'capacity', 'air', 'energy_key')) {
@@ -2935,7 +2949,9 @@ const WorldEngine = {
                 tags: ['探索', '路线', '补给'],
                 effects: [
                     { type: 'heal', value: 2, consume: true },
-                    { type: 'check_bonus', value: 2, consume: true }
+                    { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 2, consume: true },
+                    { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 2, consume: true },
+                    { type: 'check_bonus', stat: 'constitution', actionType: 'force', value: 2, consume: true }
                 ]
             };
         }
@@ -4749,7 +4765,7 @@ const WorldEngine = {
         return {
             supply: {
                 price: 15,
-                item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、穿越或野外判断。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] }
+                item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、潜行穿越或强行突破。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 2, consume: true }, { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 2, consume: true }, { type: 'check_bonus', stat: 'constitution', actionType: 'force', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] }
             },
             medical: {
                 price: 20,
@@ -4757,7 +4773,7 @@ const WorldEngine = {
             },
             parts: {
                 price: 20,
-                item: { id: 'shop_parts_kit', name: '备用零件包', description: '备用零件，可辅助一次修复、破解或设备操作。', type: 'consumable', quantity: 1, uses: 1, tags: ['零件', '修复', '设备'], effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }] }
+                item: { id: 'shop_parts_kit', name: '备用零件包', description: '备用零件，可辅助一次修复、破解或设备操作。', type: 'consumable', quantity: 1, uses: 1, tags: ['零件', '修复', '设备'], effects: [{ type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 2, consume: true }] }
             },
             weapon: {
                 price: 45,
@@ -6531,8 +6547,8 @@ const WorldEngine = {
         const key = String(actionType || '').toLowerCase();
         const map = {
             combat: ['combat', '攻击', '战斗', '武器', '近战', '射击', '开枪', '制服'],
-            force: ['force', '强行', '破门', '撞开', '砸开', '拖住', '夺走', '护甲', '防具'],
-            sneak: ['sneak', '潜行', '偷偷', '撬锁', '开锁', '躲开', '跟踪', '藏'],
+            force: ['force', '强行', '强行穿越', '强行突破', '破门', '撞开', '砸开', '翻越', '拖住', '夺走', '护甲', '防具'],
+            sneak: ['sneak', '潜行', '偷偷', '撬锁', '开锁', '躲开', '绕过', '穿越', '越过', '跟踪', '藏'],
             lie: ['lie', '撒谎', '欺骗', '伪装', '冒充'],
             threaten: ['threaten', '威胁', '恐吓', '逼问', '胁迫'],
             persuade: ['persuade', '说服', '谈判', '请求', '拉拢', '安抚'],
@@ -6541,7 +6557,7 @@ const WorldEngine = {
             observe: ['observe', '观察', '察看', '查看', '留意', '扫描', '探测', '侦测', '检测', '感知'],
             ask: ['ask', '询问', '问问', '打听', '请教'],
             trade: ['trade', '交易', '购买', '出售', '交换'],
-            use_item: ['use_item', '使用', '道具', '工具', '设备', '修复', '维修', '修理', '调试', '校准', '接线', '启动', '操作', '控制台', '终端'],
+            use_item: ['use_item', '使用', '道具', '工具', '设备', '修复', '维修', '修理', '破解', '拆解', '调试', '校准', '接线', '启动', '操作', '控制台', '终端', '净化', '封印', '仪式', '污染'],
             rest: ['rest', '休息', '睡觉', '扎营', '疗伤', '恢复']
         };
         return map[key] || [key].filter(Boolean);
