@@ -128,17 +128,20 @@ const GroupChat = {
             const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
             const checkMarkers = safeMarkers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
-            this._reconcileQuestProgressFromNarrative(msg);
+            if (this._isScenePlaying(scene)) this._reconcileQuestProgressFromNarrative(msg);
 
             // 处理检定标记：生成交互式检定卡，等待玩家点击或输入“掷骰”
             let createdCheck = false;
-            for (const cm of checkMarkers) {
-                if (this._createPendingCheck(cm.raw, msg.id)) createdCheck = true;
+            if (this._isScenePlaying(scene)) {
+                for (const cm of checkMarkers) {
+                    if (!this._isScenePlaying(scene)) break;
+                    if (this._createPendingCheck(cm.raw, msg.id)) createdCheck = true;
+                }
             }
 
             // 兜底：真实模型有时会按本地行动裁决叙事，但漏掉 [check:auto]。
             // 对已确认的风险行动，系统仍应自动生成检定，而不是让玩家主动要求。
-            if (!createdCheck && this._shouldCreateLocalCheckFromLatestAction(scene, msg)) {
+            if (this._isScenePlaying(scene) && !createdCheck && this._shouldCreateLocalCheckFromLatestAction(scene, msg)) {
                 createdCheck = !!this._createPendingCheck('auto', msg.id);
             }
 
@@ -148,7 +151,8 @@ const GroupChat = {
                 console.warn('关系分析失败（非致命）:', err.message || err);
             });
 
-            if (createdCheck || checkMarkers.length > 0) {
+            const waitingForCheck = this._isScenePlaying(scene) && (createdCheck || checkMarkers.length > 0 || !!scene.pendingCheck);
+            if (waitingForCheck) {
                 ActionBar.renderPendingCheck();
                 ChatUI._syncInputMode?.();
                 showToast('需要检定：点击或输入“掷骰”继续');
@@ -167,7 +171,7 @@ const GroupChat = {
 
             return {
                 ok: true,
-                pendingCheck: createdCheck || checkMarkers.length > 0 || !!scene.pendingCheck
+                pendingCheck: waitingForCheck
             };
 
         } catch (err) {
@@ -264,6 +268,10 @@ const GroupChat = {
             ? PromptGuard.sanitizeMarkers(markers, State.scene)
             : markers;
         for (const marker of safeMarkers) {
+            if (!this._isScenePlaying(State.scene)) {
+                console.warn('[GroupChat] 场景已结束，跳过后续 AI 标记');
+                break;
+            }
             switch (marker.type) {
                 case 'new_char':
                     setTimeout(() => {
@@ -312,6 +320,11 @@ const GroupChat = {
                     break;
             }
         }
+    },
+
+    _isScenePlaying(scene = State.scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) return WorldEngine.isScenePlaying(scene);
+        return !!scene && (!scene.gameState || scene.gameState === 'playing');
     },
 
     /**
@@ -403,7 +416,7 @@ const GroupChat = {
     },
 
     _shouldCreateLocalCheckFromLatestAction(scene, replyMessage) {
-        if (!scene || scene.pendingCheck) return false;
+        if (!this._isScenePlaying(scene) || scene.pendingCheck) return false;
         const latestAction = [...(scene.messages || [])]
             .reverse()
             .find(m => m.type === 'action_intent' && m.actionData);
@@ -437,6 +450,7 @@ const GroupChat = {
     _createPendingCheck(raw, sourceMessageId = '') {
         const scene = State.scene;
         if (!scene) return null;
+        if (!this._isScenePlaying(scene)) return null;
         if (scene.pendingCheck) {
             console.warn('[GroupChat] 已存在待处理检定，忽略新的 check 标记');
             return scene.pendingCheck;
