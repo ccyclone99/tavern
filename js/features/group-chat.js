@@ -699,6 +699,7 @@ const GroupChat = {
             }
             if (shouldRetryPendingRewards && scene.gameState === 'playing') {
                 WorldEngine._retryPendingQuestRewardsAfterInventoryChange?.(scene);
+                WorldEngine._retryPendingExplorationRewardsAfterInventoryChange?.(scene);
             }
         }
         ActionBar.renderPendingCheck();
