@@ -43,6 +43,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
         if (!Array.isArray(scene.currentSituation.recommendedActions)) scene.currentSituation.recommendedActions = [];
         if (typeof scene.turnCount !== 'number') scene.turnCount = 0;
+        this.normalizePlayerVitals(scene);
         if (Array.isArray(scene.quests)) {
             scene.quests.forEach(quest => {
                 if (quest && quest.rewardGranted !== true) quest.rewardGranted = false;
@@ -911,6 +912,25 @@ const WorldEngine = {
         const con = Number(scene?.playerStats?.constitution ?? 10);
         const level = Number(scene?.level || 1);
         return Math.max(1, 10 + Math.floor((con - 10) / 2) * 4 + (level - 1) * 4);
+    },
+
+    normalizePlayerVitals(scene) {
+        if (!scene) return scene;
+        const derivedMax = this.calculatePlayerMaxHp(scene);
+        const currentMax = Number(scene.playerMaxHp);
+        const hasValidMax = Number.isFinite(currentMax) && currentMax > 0;
+        const nextMax = hasValidMax ? Math.max(currentMax, derivedMax) : derivedMax;
+        const currentHp = Number(scene.playerHp);
+        const wasFull = hasValidMax && Number.isFinite(currentHp) && currentHp >= currentMax;
+        scene.playerMaxHp = nextMax;
+        if (!Number.isFinite(currentHp)) {
+            scene.playerHp = nextMax;
+        } else if (nextMax > currentMax && wasFull) {
+            scene.playerHp = nextMax;
+        } else {
+            scene.playerHp = this._clamp(currentHp, 0, nextMax);
+        }
+        return scene;
     },
 
     addExperience(scene, amount, options = {}) {

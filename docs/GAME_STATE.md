@@ -406,6 +406,8 @@ scene.evidenceLedger = [
 
 `playerHp` 和 `playerMaxHp` 由规则层维护。AI 标记 `[damage:N|原因]`、`[heal:N|原因]` 会分别调用 `WorldEngine.applyPlayerDamage()` 和 `WorldEngine.applyPlayerHealing()`，写入 survival 事件并刷新顶部状态。生命降到 0 时触发 HP 归零失败结局和失败回顾记录。
 
+`WorldEngine.normalizeScene()` 会按等级和体质把过低的旧版 `playerMaxHp` 迁移到公式值；旧档如果原本满血，会同步补到新的最大生命，受伤状态则保留当前生命值。
+
 ### EventLogEntry
 
 ```js
