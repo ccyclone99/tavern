@@ -125,7 +125,7 @@ AI 回复文本
 | `world-engine.js` | 局势时钟、剧情弧推进、NPC 日程/离屏行动、反制、消息可见性、物品效果规则、任务目标闸门与奖励结算 |
 | `action-planner.js` | 本地行动意图分类、风险预览、建议检定估算 |
 | `intent-router.js` | 单输入框自然语言路由，处理帮助、pending action/check、计策、OOC 和高风险行动预览 |
-| `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |
+| `group-chat.js` | 多角色回复调度、AI 标记解析、检定、胜负、自动摘要；HP/金币/经验/背包标记委托 `WorldEngine` 结算 |
 | `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用；支持字段以 `API_PROTOCOL.md` 和 `PromptBuilder.buildStateUpdateSchemaHint()` 为准 |
 | `relationship.js` | 好感/情绪规则更新和 LLM 分析更新 |
 | `lorebook.js` | 世界书编辑与管理 |
@@ -142,7 +142,7 @@ AI 回复文本
 | `chat.js` | 输入栏、消息渲染、流式消息 DOM、发送/停止按钮 |
 | `sidebar-left.js` | 左侧角色列表和角色选择 |
 | `sidebar-right.js` | 右侧计策、线索账本、世界书、地图、任务、背包、详情面板 |
-| `quest-tracker.js` | 任务渲染、目标勾选、奖励解析、升级 |
+| `quest-tracker.js` | 任务渲染和目标勾选；任务目标闸门、奖励和成长结算委托 `WorldEngine` |
 | `map-view.js` | 地图节点渲染和移动校验 |
 | `action-bar.js` | 底部/快捷状态与操作栏 |
 | `character-editor.js` | 角色编辑 UI |

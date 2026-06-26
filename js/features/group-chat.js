@@ -810,12 +810,15 @@ const GroupChat = {
         }
     },
 
+    _warnMissingRuleLayer(actionLabel) {
+        const message = `${actionLabel} 需要 WorldEngine 规则层，已跳过。`;
+        console.warn(`[GroupChat] ${message}`);
+        if (typeof showToast !== 'undefined') showToast(message);
+    },
+
     _handleItemAdd(raw) {
         const scene = State.scene;
         if (!scene) return;
-        if (!scene.inventory) scene.inventory = [];
-        if (!scene.equipment) scene.equipment = { weapon: null, armor: null, accessory: null };
-        const MAX_TOTAL_INVENTORY = 200;
         const parts = raw.split('|');
         const name = (parts[0] || '未知物品').trim();
         const description = (parts[1] || '').trim().slice(0, 160);
@@ -829,7 +832,7 @@ const GroupChat = {
             const item = WorldEngine.createInventoryItemFromReward(name, quantity, { description, type });
             const result = WorldEngine.grantInventoryItem(scene, item, { source: '剧情标记' });
             if (!result.ok) {
-                console.warn(`[GroupChat] ${result.message || `背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`}`);
+                console.warn(`[GroupChat] ${result.message || '无法新增物品'}`);
                 return;
             }
             showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
@@ -837,27 +840,7 @@ const GroupChat = {
             return;
         }
 
-        const existing = scene.inventory.find(item => item.name === name);
-        if (existing) {
-            existing.quantity += quantity;
-        } else if (scene.inventory.length < MAX_TOTAL_INVENTORY) {
-            scene.inventory.push({
-                id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                name, description, type, quantity, equipped: false
-            });
-        } else {
-            console.warn(`[GroupChat] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
-            return;
-        }
-        showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'inventory',
-            title: '获得物品',
-            text: `获得 ${name}${quantity > 1 ? ' x' + quantity : ''}`
-        });
-        State.saveCurrentSceneDebounced();
-        SidebarRight.renderInventory();
-        SidebarRight.markTabNew('inventory');
+        this._warnMissingRuleLayer('[item_add]');
     },
 
     _handleItemRemove(raw) {
@@ -876,33 +859,7 @@ const GroupChat = {
             State.saveCurrentSceneDebounced();
             return;
         }
-        const idx = scene.inventory.findIndex(item => item.name === name);
-        if (idx === -1) return;
-        const item = scene.inventory[idx];
-        if (item.quantity > 1) {
-            item.quantity--;
-        } else {
-            // 如果装备了，先卸下
-            if (item.equipped) {
-                item.equipped = false;
-                const slotMap = { weapon: 'weapon', armor: 'armor' };
-                for (const [type, slot] of Object.entries(slotMap)) {
-                    if (item.type === type && scene.equipment[slot] === item.name) {
-                        scene.equipment[slot] = null;
-                    }
-                }
-                if (scene.equipment.accessory === item.name) scene.equipment.accessory = null;
-            }
-            scene.inventory.splice(idx, 1);
-        }
-        showToast(`失去物品：${name}`);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'inventory',
-            title: '失去物品',
-            text: `失去 ${name}`
-        });
-        State.saveCurrentSceneDebounced();
-        SidebarRight.renderInventory();
+        this._warnMissingRuleLayer('[item_remove]');
     },
 
     _handleItemEquip(raw) {
@@ -916,9 +873,11 @@ const GroupChat = {
                 return;
             }
             showToast(`装备了：${result.itemName}`);
+            State.saveCurrentSceneDebounced();
+            SidebarRight.renderInventory();
+            return;
         }
-        State.saveCurrentSceneDebounced();
-        SidebarRight.renderInventory();
+        this._warnMissingRuleLayer('[item_equip]');
     },
 
     _handleItemUnequip(raw) {
@@ -932,9 +891,11 @@ const GroupChat = {
                 return;
             }
             showToast(`卸下了：${result.itemName}`);
+            State.saveCurrentSceneDebounced();
+            SidebarRight.renderInventory();
+            return;
         }
-        State.saveCurrentSceneDebounced();
-        SidebarRight.renderInventory();
+        this._warnMissingRuleLayer('[item_unequip]');
     },
 
     /** 处理 [damage:N|原因] 玩家受伤害 */
@@ -949,31 +910,7 @@ const GroupChat = {
             State.saveCurrentSceneDebounced();
             return;
         }
-        scene.playerHp = Math.max(0, (scene.playerHp || 0) - amount);
-        const msg = {
-            id: 'msg_' + Date.now() + '_dmg',
-            role: 'assistant',
-            content: `受到 ${amount} 点伤害${reason ? '（' + reason + '）' : ''}，剩余生命 ${scene.playerHp}/${scene.playerMaxHp}`,
-            type: 'system',
-            visibility: typeof WorldEngine !== 'undefined'
-                ? WorldEngine.createVisibility({ public: true })
-                : undefined,
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'survival',
-            title: '受到伤害',
-            text: msg.content,
-            messageId: msg.id,
-            timestamp: msg.timestamp
-        });
-        ChatUI.onMessageAdded(msg);
-        State.saveCurrentSceneDebounced();
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
-        // 死亡判定
-        if (scene.playerHp <= 0) this._triggerGameOver();
+        this._warnMissingRuleLayer('[damage]');
     },
 
     /** 处理 [heal:N] 玩家回血 */
@@ -987,29 +924,7 @@ const GroupChat = {
             State.saveCurrentSceneDebounced();
             return;
         }
-        scene.playerHp = Math.min(scene.playerMaxHp || 20, (scene.playerHp || 0) + amount);
-        const msg = {
-            id: 'msg_' + Date.now() + '_heal',
-            role: 'assistant',
-            content: `恢复 ${amount} 点生命，当前 ${scene.playerHp}/${scene.playerMaxHp}`,
-            type: 'system',
-            visibility: typeof WorldEngine !== 'undefined'
-                ? WorldEngine.createVisibility({ public: true })
-                : undefined,
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'survival',
-            title: '恢复生命',
-            text: msg.content,
-            messageId: msg.id,
-            timestamp: msg.timestamp
-        });
-        ChatUI.onMessageAdded(msg);
-        State.saveCurrentSceneDebounced();
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
+        this._warnMissingRuleLayer('[heal]');
     },
 
     /** 处理 [gold:N] 金钱变动（正获得/负花费） */
@@ -1022,29 +937,7 @@ const GroupChat = {
             State.saveCurrentSceneDebounced();
             return;
         }
-        scene.gold = Math.max(0, (scene.gold || 0) + amount);
-        const msg = {
-            id: 'msg_' + Date.now() + '_gold',
-            role: 'assistant',
-            content: `${amount >= 0 ? '获得' : '花费'} ${Math.abs(amount)} 金币，持有 ${scene.gold}`,
-            type: 'system',
-            visibility: typeof WorldEngine !== 'undefined'
-                ? WorldEngine.createVisibility({ public: true })
-                : undefined,
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'economy',
-            title: amount >= 0 ? '获得金币' : '花费金币',
-            text: msg.content,
-            messageId: msg.id,
-            timestamp: msg.timestamp
-        });
-        ChatUI.onMessageAdded(msg);
-        State.saveCurrentSceneDebounced();
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
+        this._warnMissingRuleLayer('[gold]');
     },
 
     /** 处理 [exp:N] 经验获得 */
@@ -1054,21 +947,12 @@ const GroupChat = {
         const amount = Math.max(1, Math.min(200, parseInt(raw.split('|')[0]) || 1));
         if (typeof WorldEngine !== 'undefined' && WorldEngine.addExperience) {
             WorldEngine.addExperience(scene, amount, { source: '剧情奖励' });
-        } else if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) {
-            QuestTracker._addExp(amount);
-        } else {
-            scene.exp = (scene.exp || 0) + amount;
-            while (scene.exp >= (scene.level || 1) * 100) {
-                scene.exp -= (scene.level || 1) * 100;
-                scene.level = (scene.level || 1) + 1;
-                scene.attrPoints = (scene.attrPoints || 0) + 2;
-                scene.playerMaxHp = 10 + Math.floor((((scene.playerStats && scene.playerStats.constitution) || 10) - 10) / 2) * 4 + (scene.level - 1) * 4;
-                scene.playerHp = scene.playerMaxHp;
-            }
+            State.saveCurrentSceneDebounced();
+            if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+            if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
+            return;
         }
-        State.saveCurrentSceneDebounced();
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        if (typeof SidebarRight !== 'undefined' && SidebarRight.renderDetail) SidebarRight.renderDetail();
+        this._warnMissingRuleLayer('[exp]');
     },
 
     /** 触发死亡结局 */
