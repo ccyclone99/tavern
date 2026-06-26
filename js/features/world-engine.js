@@ -740,7 +740,7 @@ const WorldEngine = {
         const title = actual >= 0 ? '获得金币' : '花费金币';
         const text = `${source}：${actual >= 0 ? '获得' : '花费'} ${Math.abs(actual)} 金币，当前 ${scene.gold}。`;
         if (options.silent === true) {
-            this.recordEvent(scene, { category: 'economy', title, text });
+            if (options.record !== false) this.recordEvent(scene, { category: 'economy', title, text });
         } else {
             this.addSystemMessage(scene, `【${title}】${text}`, 'system');
         }
@@ -766,11 +766,18 @@ const WorldEngine = {
         if (actual <= 0) return { ok: false, amount: 0, hp: scene.playerHp, maxHp, message: '生命值无变化。' };
 
         const reason = String(options.reason || '').trim().slice(0, 160);
-        this.addSystemMessage(
-            scene,
-            `【受伤】受到 ${actual} 点伤害${reason ? `（${reason}）` : ''}，剩余生命 ${scene.playerHp}/${maxHp}。`,
-            'system'
-        );
+        const content = `【受伤】受到 ${actual} 点伤害${reason ? `（${reason}）` : ''}，剩余生命 ${scene.playerHp}/${maxHp}。`;
+        if (options.silent === true) {
+            if (options.record !== false) {
+                this.recordEvent(scene, {
+                    category: 'survival',
+                    title: '受伤',
+                    text: content.replace(/^【[^】]+】/, '')
+                });
+            }
+        } else {
+            this.addSystemMessage(scene, content, 'system');
+        }
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
         if (scene.playerHp <= 0 && options.triggerGameOver !== false && typeof GroupChat !== 'undefined' && GroupChat._triggerGameOver) {
@@ -793,7 +800,17 @@ const WorldEngine = {
         const content = actual > 0
             ? `【恢复生命】恢复 ${actual} 点生命${reason ? `（${reason}）` : ''}，当前 ${scene.playerHp}/${maxHp}。`
             : `【恢复生命】生命已满，当前 ${scene.playerHp}/${maxHp}。`;
-        this.addSystemMessage(scene, content, 'system');
+        if (options.silent === true) {
+            if (options.record !== false) {
+                this.recordEvent(scene, {
+                    category: 'survival',
+                    title: '恢复生命',
+                    text: content.replace(/^【[^】]+】/, '')
+                });
+            }
+        } else {
+            this.addSystemMessage(scene, content, 'system');
+        }
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
         return { ok: actual > 0, amount: actual, hp: scene.playerHp, maxHp, before };
@@ -2802,11 +2819,9 @@ const WorldEngine = {
         const applied = [];
         const applyHeal = value => {
             const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
-            const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
             const amount = this._clamp(Number(value || 0), 1, maxHp);
-            scene.playerHp = Math.min(maxHp, before + amount);
-            const actual = scene.playerHp - before;
-            if (actual > 0) applied.push(`生命 +${actual}`);
+            const result = this.applyPlayerHealing(scene, amount, { reason: `使用${item.name}`, silent: true });
+            if (result.amount > 0) applied.push(`生命 +${result.amount}`);
             else applied.push('生命已满');
         };
 
@@ -2819,8 +2834,9 @@ const WorldEngine = {
             if (effect.type === 'heal') {
                 applyHeal(value || 1);
             } else if (effect.type === 'gold') {
-                scene.gold = Math.max(0, Number(scene.gold || 0) + value);
-                applied.push(`金币 ${value >= 0 ? '+' : ''}${value}`);
+                const result = this.addGold(scene, value, { source: `使用${item.name}`, silent: true });
+                if (result.ok) applied.push(`金币 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                else applied.push('金币无变化');
             } else if (effect.type === 'exp') {
                 const amount = this._clamp(value, 1, 200);
                 this.addExperience(scene, amount, { source: `使用${item.name}`, silent: true });
@@ -2853,12 +2869,11 @@ const WorldEngine = {
         if (!scene) return { ok: false, message: '没有可休息的场景。' };
         this.normalizeScene(scene);
         const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
-        const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
         const amount = options.amount !== undefined
             ? this._clamp(Number(options.amount), 1, maxHp)
             : Math.max(2, Math.ceil(maxHp * 0.35));
-        scene.playerHp = Math.min(maxHp, before + amount);
-        const actual = scene.playerHp - before;
+        const healResult = this.applyPlayerHealing(scene, amount, { reason: '休息', silent: true, record: false });
+        const actual = healResult.amount;
         this.addSystemMessage(scene, `【休息】恢复 ${actual} 点生命，当前 ${scene.playerHp}/${maxHp}。时间推进，局势可能变化。`, 'system');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
@@ -2884,7 +2899,12 @@ const WorldEngine = {
             this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
             return { ok: false, message };
         }
-        scene.gold = gold - entry.price;
+        const payment = this.addGold(scene, -entry.price, { source: `购买${entry.item.name}`, silent: true, record: false });
+        if (!payment.ok) {
+            const message = `交易结算失败：当前金币 ${scene.gold}。`;
+            this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
+            return { ok: false, message };
+        }
         this._addOrMergeInventoryItem(scene, entry.item);
         this.addSystemMessage(scene, `【购买】花费 ${entry.price} 金币，获得 ${entry.item.name}。`, 'system');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();

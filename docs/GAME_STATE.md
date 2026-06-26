@@ -356,7 +356,7 @@ scene.evidenceLedger = [
 物品效果约定：
 
 - `check_bonus`：用于检定；装备和非消耗任务物品可自动生效，`consume: true` 的消耗品需要在检定卡显式点选。
-- `heal/gold/exp/clock_delta/clock_resist/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。时钟效果优先按 `clockId`、`clockTag`、`clockName` 匹配，否则按物品标签匹配公开时钟。
+- `heal/gold/exp/clock_delta/clock_resist/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。`heal`/`gold` 复用生命与经济规则入口，时钟效果优先按 `clockId`、`clockTag`、`clockName` 匹配，否则按物品标签匹配公开时钟。
 - `dc_delta/risk_delta`：可作为检定卡可选消耗资源，玩家点选后才生效并扣除次数。
 - `strategy_leverage`：可作为计策筹码；`tag`、物品标签、名称或描述与当前计策文本匹配时，右侧计策面板和计策 prompt 会展示该物品及风险修正。
 - 带 `uses` 的同名物品合并时累加 uses，效果按语义去重，避免一次使用重复结算。
