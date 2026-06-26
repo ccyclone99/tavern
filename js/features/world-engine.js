@@ -2421,13 +2421,17 @@ const WorldEngine = {
         const target = scene.inventory[idx];
         if (target.uses !== undefined) {
             target.uses = Math.max(0, Number(target.uses || 0) - 1);
-            if (target.uses <= 0) scene.inventory.splice(idx, 1);
+            if (target.uses <= 0) {
+                this._clearEquipmentForItem(scene, target);
+                scene.inventory.splice(idx, 1);
+            }
             return true;
         }
         if (Number(target.quantity || 1) > 1) {
             target.quantity = Number(target.quantity || 1) - 1;
             return true;
         }
+        this._clearEquipmentForItem(scene, target);
         scene.inventory.splice(idx, 1);
         return true;
     },

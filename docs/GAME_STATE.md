@@ -377,7 +377,7 @@ scene.evidenceLedger = [
 - 出售、剧情移除和阶段绕过代价会把 `uses` 视为可扣次数；出售多次使用的消耗品按实际售出的次数计价，不能按剩余总次数估价却只扣 1 次。
 - 检定投入的消耗品扣除后会生成 `【资源消耗】检定投入` 系统消息，并写入 `eventLog.resource`，方便右侧局势和通关回顾追溯。
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
-- `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
+- `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除或直接消耗已装备物品时会同步清理装备槽。
 - `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
 - 出售、移除、直接使用、检定投入和计策资源消耗如果真实腾出背包格子，会静默重试已完成但未领取的任务奖励；成功时写入正常任务奖励摘要。
 - 主线奖励未领取时不会进入胜利结局；清理背包触发补领成功后会重新检查通关，避免结局锁死未发奖励。
