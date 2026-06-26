@@ -107,6 +107,7 @@ const SceneManager = {
                         questProgressGuards: JSON.parse(JSON.stringify(scene.questProgressGuards || {})),
                         runRecord: scene.runRecord ? JSON.parse(JSON.stringify(scene.runRecord)) : null,
                         runHistory: JSON.parse(JSON.stringify(scene.runHistory || [])),
+                        transcriptLog: JSON.parse(JSON.stringify(scene.transcriptLog || [])),
                         clocks: JSON.parse(JSON.stringify(scene.clocks || [])),
                         counterStrategies: JSON.parse(JSON.stringify(scene.counterStrategies || [])),
                         flowGuide: JSON.parse(JSON.stringify(scene.flowGuide || {})),
@@ -203,7 +204,7 @@ const SceneManager = {
         ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
          'dmPersona',
          'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs',
-         'storyPhases', 'clueGraph', 'consequenceLedger', 'eventLog', 'failureStates', 'runRecord', 'runHistory', 'clocks', 'counterStrategies', 'flowGuide',
+         'storyPhases', 'clueGraph', 'consequenceLedger', 'eventLog', 'failureStates', 'runRecord', 'runHistory', 'transcriptLog', 'clocks', 'counterStrategies', 'flowGuide',
          'currentSituation', 'pendingAction', 'pendingCheck', 'inputContext', 'summary',
          'gameplayProfile', 'storyTexture', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'explorationRewardLog', 'questProgressGuards'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));

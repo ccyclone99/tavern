@@ -159,6 +159,7 @@ const State = {
         if (!Array.isArray(scene.eventLog)) scene.eventLog = [];
         if (!Array.isArray(scene.failureStates)) scene.failureStates = [];
         if (!Array.isArray(scene.runHistory)) scene.runHistory = [];
+        if (!Array.isArray(scene.transcriptLog)) scene.transcriptLog = [];
         if (!Array.isArray(scene.sceneChallenges)) scene.sceneChallenges = [];
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
@@ -318,6 +319,7 @@ const State = {
             questProgressGuards: { autoAdvanceStreak: 0, lastAdvancedAt: 0 },
             runRecord: null,
             runHistory: [],
+            transcriptLog: [],
             clocks: [],
             counterStrategies: [],
             flowGuide: { openingMoves: [], sessionGoals: [], stalledPrompts: [], failForward: [], completedMoves: [] },

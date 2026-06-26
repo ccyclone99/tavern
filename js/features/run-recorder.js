@@ -3,13 +3,35 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 8,
+    version: 9,
 
     ensure(scene) {
         if (!scene) return scene;
         if (!Array.isArray(scene.runHistory)) scene.runHistory = [];
+        if (!Array.isArray(scene.transcriptLog)) scene.transcriptLog = [];
         if (scene.runRecord && typeof scene.runRecord !== 'object') scene.runRecord = null;
         return scene;
+    },
+
+    archiveMessages(scene, messages = []) {
+        if (!scene || !Array.isArray(messages) || messages.length === 0) return [];
+        this.ensure(scene);
+        const existingKeys = new Set(scene.transcriptLog.map(entry => this._transcriptKey(entry)));
+        const start = scene.transcriptLog.length;
+        const entries = messages
+            .map((message, idx) => this._messageToTranscriptEntry(scene, message, start + idx + 1))
+            .map(entry => entry ? { ...entry, archived: true, archivedAt: Date.now() } : null)
+            .filter(Boolean)
+            .filter(entry => {
+                const key = this._transcriptKey(entry);
+                if (existingKeys.has(key)) return false;
+                existingKeys.add(key);
+                return true;
+            });
+        if (entries.length > 0) {
+            scene.transcriptLog.push(...entries);
+        }
+        return entries;
     },
 
     complete(scene, outcome = scene?.gameState || 'stopped', reason = '') {
@@ -82,15 +104,15 @@ const RunRecorder = {
                 supports: (e.supports || []).slice(0, 8)
             }))
             .slice(-12);
-        const checks = (scene.messages || [])
-            .filter(m => m.type === 'check' && m.checkData)
-            .map(m => ({
-                statName: m.checkData.statName || '属性',
-                total: Number(m.checkData.total || 0),
-                dc: Number(m.checkData.dc || 0),
-                outcome: m.checkData.resultLabel || m.checkData.outcome || '',
-                intent: m.checkData.intent || '',
-                challengeTitle: m.checkData.challengeContext?.challengeTitle || ''
+        const checks = transcript
+            .filter(entry => entry.type === 'check' && entry.check)
+            .map(entry => ({
+                statName: entry.check.statName || '属性',
+                total: Number(entry.check.total || 0),
+                dc: Number(entry.check.dc || 0),
+                outcome: entry.check.outcome || '',
+                intent: entry.check.intent || '',
+                challengeTitle: entry.check.challengeTitle || ''
             }))
             .slice(-12);
         const phaseSummaries = this._buildPhaseSummaries(scene, challenges, evidence, checks);
@@ -231,37 +253,67 @@ const RunRecorder = {
     },
 
     _buildTranscript(scene) {
+        const archived = Array.isArray(scene?.transcriptLog) ? scene.transcriptLog : [];
+        const archivedKeys = new Set(archived.map(entry => this._transcriptKey(entry)));
+        const liveOffset = archived.length;
+        const live = (scene.messages || [])
+            .map((message, idx) => this._messageToTranscriptEntry(scene, message, liveOffset + idx + 1))
+            .filter(Boolean)
+            .filter(entry => !archivedKeys.has(this._transcriptKey(entry)));
+        const summaryFallback = scene.summary && archived.length === 0
+            ? [{
+                index: 0,
+                id: 'summary_fallback',
+                role: 'system',
+                type: 'summary',
+                speaker: '先前剧情摘要',
+                text: this._clean(scene.summary),
+                timestamp: scene.createdAt || 0,
+                check: null,
+                archived: true,
+                summaryFallback: true
+            }]
+            : [];
+        return [...summaryFallback, ...archived, ...live];
+    },
+
+    _messageToTranscriptEntry(scene, message, index = 0) {
+        if (!message) return null;
         const playerName = scene?.playerPersona?.name || scene?.userName || '玩家';
         const characterName = id => {
             if (!id || typeof State === 'undefined' || !Array.isArray(State.characters)) return '';
             return State.characters.find(c => c && c.id === id)?.name || '';
         };
-        return (scene.messages || [])
-            .map((m, idx) => {
-                const text = this._clean(m.content || '').slice(0, 2000);
-                if (!text) return null;
-                const check = m.checkData || null;
-                const speaker = m.role === 'user'
-                    ? playerName
-                    : (m.role === 'assistant' ? (characterName(m.characterId) || '主持人') : this._momentTitle(m));
-                return {
-                    index: idx + 1,
-                    id: m.id || '',
-                    role: m.role || '',
-                    type: m.type || 'message',
-                    speaker,
-                    text,
-                    timestamp: m.timestamp || 0,
-                    check: check ? {
-                        statName: check.statName || '属性',
-                        total: Number(check.total || 0),
-                        dc: Number(check.dc || 0),
-                        outcome: check.resultLabel || check.outcome || ''
-                    } : null
-                };
-            })
-            .filter(Boolean)
-            .slice(-300);
+        const text = this._clean(message.content || '');
+        if (!text) return null;
+        const check = message.checkData || null;
+        const speaker = message.role === 'user'
+            ? playerName
+            : (message.role === 'assistant' ? (characterName(message.characterId) || '主持人') : this._momentTitle(message));
+        return {
+            index,
+            id: message.id || '',
+            role: message.role || '',
+            type: message.type || 'message',
+            speaker,
+            text,
+            timestamp: message.timestamp || 0,
+            check: check ? {
+                statName: check.statName || '属性',
+                total: Number(check.total || 0),
+                dc: Number(check.dc || 0),
+                outcome: check.resultLabel || check.outcome || '',
+                intent: check.intent || '',
+                challengeTitle: check.challengeContext?.challengeTitle || ''
+            } : null,
+            archived: false
+        };
+    },
+
+    _transcriptKey(entry) {
+        if (!entry) return '';
+        if (entry.id) return `id:${entry.id}`;
+        return `${entry.timestamp || 0}|${entry.role || ''}|${entry.type || ''}|${String(entry.text || '').slice(0, 120)}`;
     },
 
     _momentTitle(msg) {

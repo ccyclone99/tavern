@@ -1259,6 +1259,9 @@ const GroupChat = {
 
             const summary = result.content || '';
             if (summary) {
+                if (typeof RunRecorder !== 'undefined' && RunRecorder.archiveMessages) {
+                    RunRecorder.archiveMessages(scene, oldestMessages);
+                }
                 // 拼接后限制总长度，防止长期对话 summary 无限增长爆 token
                 let combined = summary + '\n\n' + (scene.summary || '');
                 if (combined.length > 1200) {
