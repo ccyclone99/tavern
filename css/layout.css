@@ -134,6 +134,10 @@
     font-weight: 600;
 }
 
+.status-prep {
+    color: var(--text-gold);
+}
+
 .chat-messages {
     flex: 1;
     overflow-y: auto;

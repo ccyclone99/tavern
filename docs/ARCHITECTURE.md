@@ -207,7 +207,7 @@ AI 回复文本
 
 线索账本 UI 位于右侧 `knowledge` tab，由 `SidebarRight.renderKnowledge()` 渲染。它只读取玩家已知的 `scene.knowledge.discoveries` 和已解锁的 `scene.discoveries.characters` 档案槽，不直接展示 NPC 私密设定。
 
-当前局势 UI 位于右侧 `situation` tab，由 `SidebarRight.renderSituation()` 渲染。它读取 `WorldEngine.getCurrentSituation(scene)`，展示当前位置、主线目标、公开时钟、隐藏压力提示、反制、最近风险、可用线索和可选行动。
+当前局势 UI 位于右侧 `situation` tab，由 `SidebarRight.renderSituation()` 渲染。它读取 `WorldEngine.getCurrentSituation(scene)` 和 `WorldEngine.getPreparationHints(scene)`，展示当前位置、主线目标、公开时钟、隐藏压力提示、反制、最近风险、可用成长/准备、可用线索和可选行动。
 
 ### WorldEngine 负责“世界如何自己动”
 
@@ -224,6 +224,7 @@ AI 回复文本
 - `addWorldTension()`：统一世界紧张度变化、事件日志、局势刷新和世界紧张度失败条件检查。
 - `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()` / `sellInventoryItem()`：处理背包直接使用、休息恢复、基础购买与出售非关键物品，复杂交易仍交给行动/AI 流程。
 - `createInventoryItemFromReward()` / `grantInventoryItem()` / `removeInventoryItem()` / `addOrMergeInventoryItem()` / `allocateStatPoint()`：把任务/AI 奖励物品语义化，统一物品堆叠、移除、装备槽清理，并处理属性点分配与 HP 重算。
+- `getPreparationHints()`：统一生成属性点、回血、装备、可用物品、购买和待领取探索奖励提示，供聊天 chips、顶部摘要和局势面板复用。
 - `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。
 - `recordConsequence()` / `getActiveConsequences()` / `getConsequenceRiskModifier()`：把持续后果写入账本、展示到局势面板，并反馈到行动预览风险/DC。
 

@@ -371,6 +371,16 @@ const ChatUI = {
         if (!scene || (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying && !WorldEngine.isScenePlaying(scene))) {
             return [];
         }
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.getPreparationHints) {
+            return WorldEngine.getPreparationHints(scene, { limit: 3 })
+                .filter(hint => hint.command)
+                .map((hint, idx) => ({
+                    label: this._shortChipLabel(hint.label || hint.command || hint.title),
+                    text: hint.command,
+                    behavior: 'fill',
+                    primary: idx === 0 && ['attribute', 'healing', 'pending_reward'].includes(hint.kind)
+                }));
+        }
         const chips = [];
         const add = chip => {
             if (!chip?.text || chips.some(c => c.text === chip.text)) return;

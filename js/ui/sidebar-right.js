@@ -234,6 +234,28 @@ const SidebarRight = {
                 </div>
             `;
         })() : '';
+        const prepHints = typeof WorldEngine !== 'undefined' && WorldEngine.getPreparationHints
+            ? WorldEngine.getPreparationHints(scene, { limit: 5 })
+            : [];
+        const prepHintsHtml = prepHints.length > 0
+            ? `<div class="situation-section situation-prep-section">
+                <h4>可用准备</h4>
+                <div class="situation-prep-list">
+                    ${prepHints.map(hint => {
+                        const action = hint.command
+                            ? `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(hint.command)}" aria-label="采用准备：${Renderer.escapeAttr(hint.command)}">${Renderer.escapeHtml(hint.label || hint.command)}</button>`
+                            : '';
+                        return `<div class="situation-prep-item situation-prep-${Renderer.escapeAttr(hint.kind || 'prep')}">
+                            <div>
+                                <strong>${Renderer.escapeHtml(hint.title || '准备')}</strong>
+                                ${hint.detail ? `<p>${Renderer.escapeHtml(hint.detail)}</p>` : ''}
+                            </div>
+                            ${action}
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`
+            : '';
         const companionResources = typeof WorldEngine !== 'undefined' && WorldEngine.getUnlockedCompanionResources
             ? WorldEngine.getUnlockedCompanionResources(scene)
             : (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
@@ -341,6 +363,7 @@ const SidebarRight = {
             ${phaseHtml}
             ${questHtml}
             ${challengeHtml}
+            ${prepHintsHtml}
             ${companionResourcesHtml}
             ${consequenceHtml}
             ${eventLogHtml}
@@ -563,6 +586,12 @@ const SidebarRight = {
         const pressure = urgentClock
             ? `${urgentClock.name} ${urgentClock.value}/${urgentClock.max}`
             : (situation.hiddenPressure > 0 ? `${situation.hiddenPressure} 股暗处压力` : '局势稳定');
+        const prepHint = typeof WorldEngine !== 'undefined' && WorldEngine.getPreparationHints
+            ? WorldEngine.getPreparationHints(scene, { limit: 4 }).find(hint =>
+                ['attribute', 'pending_reward', 'healing', 'rest', 'equipment'].includes(hint.kind)
+            )
+            : null;
+        const prepText = prepHint ? `可准备：${prepHint.label || prepHint.title}` : '';
 
         summaryEl.classList.remove('hidden');
         summaryEl.innerHTML = `
@@ -572,6 +601,7 @@ const SidebarRight = {
             </span>
             <span class="status-summary-sub">
                 <span>${Renderer.escapeHtml(pressure)}</span>
+                ${prepText ? `<span class="status-prep">${Renderer.escapeHtml(prepText)}</span>` : ''}
                 ${risk ? `<span>${Renderer.escapeHtml(risk)}</span>` : '<span>暂无公开风险</span>'}
             </span>
         `;

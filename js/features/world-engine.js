@@ -5051,6 +5051,257 @@ const WorldEngine = {
         return source.map(item => String(item || '').trim()).filter(Boolean).slice(0, limit);
     },
 
+    getPreparationHints(scene, options = {}) {
+        if (!scene) return [];
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return [];
+
+        const limit = this._clamp(Number(options.limit || 6), 1, 8);
+        const hints = [];
+        const add = hint => {
+            if (!hint || !hint.title) return;
+            const command = String(hint.command || '').trim();
+            const key = `${hint.kind || 'hint'}|${command || hint.title}`;
+            if (hints.some(item => item._key === key)) return;
+            hints.push({
+                kind: hint.kind || 'prep',
+                title: String(hint.title || '').slice(0, 40),
+                detail: String(hint.detail || '').slice(0, 160),
+                command,
+                label: String(hint.label || command || hint.title || '').slice(0, 24),
+                priority: Number(hint.priority || 0),
+                _key: key
+            });
+        };
+
+        const statSuggestion = this._suggestPreparationStat(scene);
+        if (statSuggestion) {
+            const points = Math.max(1, Number(scene.attrPoints || 0));
+            add({
+                kind: 'attribute',
+                title: `${statSuggestion.label} +1`,
+                detail: `剩余 ${points} 个属性点；当前挑战更可能用到${statSuggestion.reason || statSuggestion.label}。`,
+                command: `加一点${statSuggestion.label}`,
+                label: `${statSuggestion.label}+1`,
+                priority: 100
+            });
+        }
+
+        const pendingRewards = (scene.pendingExplorationRewards || []).filter(Boolean);
+        if (pendingRewards.length > 0) {
+            const first = pendingRewards[0];
+            const cleanup = this._findInventoryCleanupCandidate(scene);
+            const cleanupCommand = cleanup?.name && !this.canUseInventoryItem(cleanup)
+                ? `出售${cleanup.name}`
+                : '';
+            const cleanupDetail = cleanup?.name
+                ? (cleanupCommand ? `可先出售 ${cleanup.name} 腾出空间。` : `可先使用或整理 ${cleanup.name} 腾出空间。`)
+                : '清理背包后会自动补发。';
+            add({
+                kind: 'pending_reward',
+                title: `待领取探索奖励 ${pendingRewards.length}`,
+                detail: `${first.item?.name || '奖励物品'} 已记录；${cleanupDetail}`,
+                command: cleanupCommand,
+                label: cleanupCommand ? `腾格：${cleanup.name}` : '整理背包',
+                priority: 82
+            });
+        }
+
+        const hp = this._clamp(Number(scene.playerHp ?? scene.playerMaxHp ?? 10), 0, Math.max(1, Number(scene.playerMaxHp || 10)));
+        const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
+        if (hp < maxHp) {
+            const healingItem = this._findPreparationHealingItem(scene);
+            if (healingItem) {
+                add({
+                    kind: 'healing',
+                    title: `恢复生命 ${hp}/${maxHp}`,
+                    detail: `${healingItem.name} 可直接恢复，能降低失败风险。`,
+                    command: `使用${healingItem.name}`,
+                    label: `使用${healingItem.name}`,
+                    priority: hp <= Math.ceil(maxHp * 0.45) ? 92 : 76
+                });
+            } else {
+                add({
+                    kind: 'rest',
+                    title: `恢复生命 ${hp}/${maxHp}`,
+                    detail: '没有可直接治疗的物品；休息会回血，但会推进时间和局势。',
+                    command: '休息一下',
+                    label: '休息恢复',
+                    priority: hp <= Math.ceil(maxHp * 0.45) ? 88 : 60
+                });
+            }
+        }
+
+        const equipment = this._findPreparationEquipment(scene);
+        if (equipment) {
+            add({
+                kind: 'equipment',
+                title: `装备${equipment.name}`,
+                detail: this._itemEffectSummary(equipment) || '装备后可在相关行动中提供常驻修正。',
+                command: `装备${equipment.name}`,
+                label: `装备${equipment.name}`,
+                priority: 72
+            });
+        }
+
+        const usable = this._findPreparationUsableItem(scene);
+        if (usable) {
+            add({
+                kind: 'usable',
+                title: `使用${usable.name}`,
+                detail: this._itemEffectSummary(usable) || '这个物品可以直接使用。',
+                command: `使用${usable.name}`,
+                label: `使用${usable.name}`,
+                priority: 54
+            });
+        }
+
+        const purchase = this._suggestPreparationPurchase(scene);
+        if (purchase) {
+            add({
+                kind: 'shop',
+                title: purchase.title,
+                detail: purchase.detail,
+                command: purchase.command,
+                label: purchase.label,
+                priority: purchase.priority || 45
+            });
+        }
+
+        return hints
+            .sort((a, b) => b.priority - a.priority || String(a.title).localeCompare(String(b.title), 'zh-CN'))
+            .slice(0, limit)
+            .map(({ _key, ...hint }) => hint);
+    },
+
+    _suggestPreparationStat(scene) {
+        if (Number(scene?.attrPoints || 0) <= 0) return null;
+        const stats = scene.playerStats || {};
+        const eligible = key => Number(stats[key] || 10) < 20;
+        const activeChallenge = this.getActiveChallenge(scene);
+        const approach = (activeChallenge?.approaches || []).find(item => item?.stat && eligible(item.stat));
+        if (approach?.stat) {
+            return {
+                key: approach.stat,
+                label: this._statName(approach.stat),
+                reason: approach.statName || this._statName(approach.stat)
+            };
+        }
+        const priority = ['dexterity', 'intelligence', 'wisdom', 'charisma', 'constitution', 'strength'];
+        const lowest = priority
+            .filter(eligible)
+            .sort((a, b) => Number(stats[a] || 10) - Number(stats[b] || 10))[0];
+        return lowest ? { key: lowest, label: this._statName(lowest), reason: this._statName(lowest) } : null;
+    },
+
+    _findPreparationHealingItem(scene) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && this.canUseInventoryItem(item))
+            .filter(item => this._itemHasRemainingUse(item))
+            .find(item => this._itemHasEffect(item, 'heal') || this._itemLooksLikeHealing(item));
+    },
+
+    _findPreparationUsableItem(scene) {
+        const healing = this._findPreparationHealingItem(scene);
+        return (scene?.inventory || [])
+            .filter(item => item?.name && item !== healing && this.canUseInventoryItem(item))
+            .filter(item => this._itemHasRemainingUse(item))
+            .find(item => !this._itemHasEffect(item, 'check_bonus'));
+    },
+
+    _findPreparationEquipment(scene) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && item.equipped !== true && this.canEquipInventoryItem(item))
+            .sort((a, b) => this._equipmentPriority(a) - this._equipmentPriority(b))[0] || null;
+    },
+
+    _findInventoryCleanupCandidate(scene) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && item.equipped !== true && item.type !== 'quest')
+            .sort((a, b) => {
+                const score = item => {
+                    if (item.type === 'consumable') return 0;
+                    if (Number(item.quantity || 1) > 1) return 1;
+                    if (this.canUseInventoryItem(item)) return 2;
+                    return 3;
+                };
+                return score(a) - score(b) || String(a.name).localeCompare(String(b.name), 'zh-CN');
+            })[0] || null;
+    },
+
+    _itemHasRemainingUse(item) {
+        if (!item) return false;
+        if (item.uses !== undefined && Number(item.uses || 0) <= 0) return false;
+        return Number(item.quantity || 1) > 0;
+    },
+
+    _itemHasEffect(item, type) {
+        return Array.isArray(item?.effects) && item.effects.some(effect => effect?.type === type);
+    },
+
+    _itemLooksLikeHealing(item) {
+        return /药|医疗|治疗|绷带|急救|回复|恢复/.test(String(item?.name || '') + String(item?.description || ''));
+    },
+
+    _equipmentPriority(item) {
+        const type = String(item?.type || '');
+        if (type === 'weapon') return 0;
+        if (type === 'armor') return 1;
+        return 2;
+    },
+
+    _itemEffectSummary(item) {
+        const labels = (item?.effects || []).map(effect => {
+            const value = Number(effect?.value || 0);
+            if (effect.type === 'heal') return `恢复 ${value} 生命`;
+            if (effect.type === 'check_bonus') return `检定 ${value >= 0 ? '+' : ''}${value}${effect.consume ? '（消耗）' : ''}`;
+            if (effect.type === 'risk_delta') return `风险 ${value >= 0 ? '+' : ''}${value}`;
+            if (effect.type === 'dc_delta') return `DC ${value >= 0 ? '+' : ''}${value}`;
+            if (effect.type === 'gold') return `金币 ${value >= 0 ? '+' : ''}${value}`;
+            if (effect.type === 'exp') return `经验 +${value}`;
+            return '';
+        }).filter(Boolean);
+        return labels.slice(0, 3).join('，');
+    },
+
+    _suggestPreparationPurchase(scene) {
+        if (!scene || Number(scene.gold || 0) < 15) return null;
+        const inventory = scene.inventory || [];
+        if (inventory.length >= 200) return null;
+        const catalog = this.getBasicSupplyCatalog();
+        const gold = Number(scene.gold || 0);
+        const has = itemName => inventory.some(item => item && item.name === itemName);
+        const canBuy = key => catalog[key] && gold >= Number(catalog[key].price || 0);
+        const make = key => {
+            const entry = catalog[key];
+            const item = entry?.item || {};
+            return {
+                title: `购买${item.name}`,
+                detail: `${entry.price} 金币；${this._itemEffectSummary(item) || item.description || '补充冒险资源'}。`,
+                command: `购买${item.name}`,
+                label: `购买${item.name}`,
+                priority: 45
+            };
+        };
+
+        const activeChallenge = this.getActiveChallenge(scene);
+        const approachTypes = new Set((activeChallenge?.approaches || []).map(a => a?.actionType || '').filter(Boolean));
+        const approachStats = new Set((activeChallenge?.approaches || []).map(a => a?.stat || '').filter(Boolean));
+        const readyConsumables = inventory.filter(item =>
+            item?.type === 'consumable' &&
+            this._itemHasRemainingUse(item) &&
+            Array.isArray(item.effects) &&
+            item.effects.some(effect => ['check_bonus', 'heal'].includes(effect?.type))
+        );
+        if (readyConsumables.length < 2 && canBuy('supply')) return make('supply');
+        if ((approachTypes.has('combat') || approachStats.has('strength')) && canBuy('weapon') && !has('短剑')) return make('weapon');
+        if ((approachTypes.has('force') || approachTypes.has('combat') || approachStats.has('constitution')) && canBuy('armor') && !has('轻型护甲')) return make('armor');
+        if ((approachTypes.has('investigate') || approachTypes.has('sneak') || approachStats.has('intelligence')) && canBuy('tool') && !has('通用工具包')) return make('tool');
+        if ((approachTypes.has('observe') || approachStats.has('wisdom')) && canBuy('scanner') && !has('便携扫描仪')) return make('scanner');
+        if (canBuy('medical') && !readyConsumables.some(item => this._itemHasEffect(item, 'heal'))) return make('medical');
+        return null;
+    },
+
     getCurrentSituation(scene) {
         if (!scene) return null;
         this.normalizeScene(scene);

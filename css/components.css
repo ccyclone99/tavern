@@ -2014,6 +2014,44 @@
     margin-top: 10px;
 }
 
+.situation-prep-section {
+    border-color: rgba(59,130,246,0.28);
+}
+
+.situation-prep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.situation-prep-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-input);
+    padding: 9px;
+}
+
+.situation-prep-item strong {
+    color: var(--text-main);
+    font-size: 12px;
+}
+
+.situation-prep-item p {
+    margin-top: 3px;
+    font-size: 11px;
+}
+
+.situation-prep-attribute,
+.situation-prep-healing,
+.situation-prep-pending_reward {
+    border-color: rgba(245,158,11,0.34);
+    background: rgba(245,158,11,0.06);
+}
+
 .consequence-ledger {
     border-color: rgba(245,158,11,0.26);
 }
