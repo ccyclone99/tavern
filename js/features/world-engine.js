@@ -101,12 +101,16 @@ const WorldEngine = {
             (Array.isArray(scene.clueGraph) && scene.clueGraph.length > 0);
     },
 
+    _isTerminalProgressStatus(status) {
+        return ['completed', 'failed', 'bypassed'].includes(String(status || ''));
+    },
+
     _ensureActiveStoryPhase(scene) {
         if (!Array.isArray(scene.storyPhases) || scene.storyPhases.length === 0) return null;
         const active = scene.storyPhases.find(phase => phase.status === 'active');
         if (active) return active;
-        const next = scene.storyPhases.find(phase => !['completed', 'failed', 'bypassed'].includes(phase.status)) || scene.storyPhases[0];
-        if (next && !['completed', 'failed', 'bypassed'].includes(next.status)) next.status = 'active';
+        const next = scene.storyPhases.find(phase => !this._isTerminalProgressStatus(phase.status)) || scene.storyPhases[0];
+        if (next && !this._isTerminalProgressStatus(next.status)) next.status = 'active';
         return next || null;
     },
 
@@ -115,10 +119,11 @@ const WorldEngine = {
         const active = scene.sceneChallenges.find(challenge => challenge.status === 'active');
         if (active) return active;
         const phase = this.getActiveStoryPhase(scene);
+        if (phase && this._isTerminalProgressStatus(phase.status)) return null;
         const next = scene.sceneChallenges.find(challenge =>
             challenge.status === 'locked' && (!phase?.id || !challenge.phaseId || challenge.phaseId === phase.id)
-        ) || scene.sceneChallenges.find(challenge => !['completed', 'failed', 'bypassed'].includes(challenge.status));
-        if (next && !['completed', 'failed', 'bypassed'].includes(next.status)) next.status = 'active';
+        ) || scene.sceneChallenges.find(challenge => !this._isTerminalProgressStatus(challenge.status));
+        if (next && !this._isTerminalProgressStatus(next.status)) next.status = 'active';
         return next || null;
     },
 
@@ -147,9 +152,10 @@ const WorldEngine = {
     },
 
     _buildFallbackSceneChallenges(scene) {
-        const phases = Array.isArray(scene.storyPhases) && scene.storyPhases.length > 0
+        const rawPhases = Array.isArray(scene.storyPhases) && scene.storyPhases.length > 0
             ? scene.storyPhases
             : this._buildFallbackStoryPhases(scene);
+        const phases = rawPhases.filter(phase => !this._isTerminalProgressStatus(phase.status));
         const mainQuest = this._getMainQuest(scene);
         return phases.slice(0, 4).map((phase, idx) => this.normalizeSceneChallenge({
             id: `challenge_auto_${phase.id || idx + 1}`,
@@ -4627,9 +4633,8 @@ const WorldEngine = {
     getActiveStoryPhase(scene) {
         const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases : [];
         if (phases.length === 0) return null;
-        const terminalStatuses = ['completed', 'failed', 'bypassed'];
         return phases.find(p => p.status === 'active')
-            || phases.find(p => !terminalStatuses.includes(p.status))
+            || phases.find(p => !this._isTerminalProgressStatus(p.status))
             || phases[phases.length - 1]
             || null;
     },
@@ -4638,6 +4643,9 @@ const WorldEngine = {
         const challenges = Array.isArray(scene?.sceneChallenges) ? scene.sceneChallenges : [];
         if (challenges.length === 0) return null;
         const phase = this.getActiveStoryPhase(scene);
+        if (phase && this._isTerminalProgressStatus(phase.status)) {
+            return challenges.find(c => c.status === 'active') || null;
+        }
         return challenges.find(c => c.status === 'active' && (!phase?.id || !c.phaseId || c.phaseId === phase.id))
             || challenges.find(c => c.status === 'active')
             || challenges.find(c => c.status === 'locked' && (!phase?.id || !c.phaseId || c.phaseId === phase.id))

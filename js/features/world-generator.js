@@ -778,7 +778,7 @@ const WorldGenerator = {
 - currentLocation: 起始地点id（设为地点的第一个）
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
 - storyArcs: 1个主线剧情弧数组，每个含 { title, phase:"intro", synopsis(梗概), beats:[{condition(触发条件),action(触发事件)}]数组(4-6个节拍，按顺序推进，reveal=揭示真相/twist=剧情转折/climax=高潮/resolution=结局), currentBeat:0 }
-- storyPhases: 3个剧情阶段数组，每个含 { id, title, status("locked"/"active"/"completed"), goal, stakes, entry, exit, recommendedActions:[玩家可直接输入的行动], pressureTags:[关联压力标签], spotlight:[关键NPC或势力] }
+- storyPhases: 3个剧情阶段数组，每个含 { id, title, status("locked"/"active"/"completed"/"failed"/"bypassed"), goal, stakes, entry, exit, recommendedActions:[玩家可直接输入的行动], pressureTags:[关联压力标签], spotlight:[关键NPC或势力] }
 - clueGraph: 3-5条线索链数组，每个含 { id, title, subjectType("character"/"faction"/"location"/"mystery"/"item"), subjectName, status("hidden"/"hinted"/"suspected"/"confirmed"), currentStage:0, truth(DM私密真相), stages:[{level,title,text,source,locationId,actions:[可直接输入的调查行动],check:{stat,dc},onFailure}] }
 - clocks: 1-3个局势时钟数组，每个含 { id, name, tag, value:0, max:4-8, visibility("known"/"hinted"/"hidden"), description, trigger:{ at, event } }，代表会随玩家拖延或失败恶化的威胁
 - failureStates: 1-3个失败结局数组，每个含 { id,title,status:"armed",severity,trigger:{type:"clock",clockId,at:"max"},message,aftermath,recoverable:false }，用于关键时钟满格后进入坏结局
