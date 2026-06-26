@@ -571,7 +571,7 @@ const PromptBuilder = {
     buildWorldPressureContext(scene) {
         const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
         const hidden = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
-        const counters = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
+        const counters = (scene.counterStrategies || []).filter(c => c.status !== 'resolved' && c.visibility !== 'hidden');
         const parts = [];
         if (clocks.length > 0) {
             parts.push(`局势时钟：\n${clocks.map(c => `- ${c.name} ${c.value}/${c.max}${c.description ? `：${c.description}` : ''}`).join('\n')}`);
@@ -727,7 +727,10 @@ const PromptBuilder = {
                 const resourceLines = Array.isArray(d.resourceModifiers) && d.resourceModifiers.length > 0
                     ? `\n- 投入资源：${d.resourceModifiers.map(m => `${m.source}（${m.label}）`).join('；')}`
                     : '';
-                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据以下结果叙述具体后果：\n- 检定：${d.statName} ${d.roll} ${d.mod >= 0 ? '+' + d.mod : d.mod} = ${d.total} vs DC${d.dc}${d.baseDc && d.baseDc !== d.dc ? `（基础DC${d.baseDc}）` : ''}${resourceLines}\n- 结果层级：${d.resultLabel || d.outcome || (d.success ? '成功' : '失败')}\n- 裁决提示：${d.consequenceHint || '按结果合理推进'}${consequenceLines}\n\n要求：\n- 大成功：给出额外收益、优势、机会或更深线索。\n- 成功：让目标按预期推进。\n- 部分成功：目标达成一部分，或达成但必须付出代价。\n- 失败推进：不要只写失败，必须产生新线索、新阻碍、新场景、资源损失、关系变化或反制。\n- 大失败：严重后果，但仍要打开新的剧情方向。`);
+                const counterLines = Array.isArray(d.counterplayResults) && d.counterplayResults.length > 0
+                    ? `\n- 反制变化：${d.counterplayResults.map(item => `${item.title}${item.resolved ? '已解决' : (item.revealed ? '被揭示' : '被削弱')}`).join('；')}`
+                    : '';
+                systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据以下结果叙述具体后果：\n- 检定：${d.statName} ${d.roll} ${d.mod >= 0 ? '+' + d.mod : d.mod} = ${d.total} vs DC${d.dc}${d.baseDc && d.baseDc !== d.dc ? `（基础DC${d.baseDc}）` : ''}${resourceLines}${counterLines}\n- 结果层级：${d.resultLabel || d.outcome || (d.success ? '成功' : '失败')}\n- 裁决提示：${d.consequenceHint || '按结果合理推进'}${consequenceLines}\n\n要求：\n- 大成功：给出额外收益、优势、机会或更深线索。\n- 成功：让目标按预期推进。\n- 部分成功：目标达成一部分，或达成但必须付出代价。\n- 失败推进：不要只写失败，必须产生新线索、新阻碍、新场景、资源损失、关系变化或反制。\n- 大失败：严重后果，但仍要打开新的剧情方向。`);
             } else {
                 systemParts.push(`【当前任务】玩家刚刚进行了一次属性检定。请根据检定结果以叙事方式描述发生的情况；失败时不要只阻断，必须让局势继续向前。`);
             }

@@ -489,6 +489,8 @@ const WorldEngine = {
             counterplay: Array.isArray(data.counterplay) ? data.counterplay.map(String).slice(0, 6) : [],
             hint: String(data.hint || '').slice(0, 240),
             lastAction: String(data.lastAction || '').slice(0, 240),
+            resolvedAt: Number.isFinite(Number(data.resolvedAt)) ? Number(data.resolvedAt) : 0,
+            resolution: String(data.resolution || '').slice(0, 260),
             createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now()
         };
@@ -786,7 +788,10 @@ const WorldEngine = {
             ['title', 'actorId', 'actorName', 'target', 'hint', 'lastAction'].forEach(key => {
                 if (update[key] !== undefined) counter[key] = String(update[key]).slice(0, key === 'lastAction' || key === 'hint' ? 240 : 120);
             });
-            if (update.status !== undefined && this.counterStatuses.includes(update.status)) counter.status = update.status;
+            if (update.status !== undefined && this.counterStatuses.includes(update.status)) {
+                counter.status = update.status;
+                if (counter.status === 'resolved' && !counter.resolvedAt) counter.resolvedAt = Date.now();
+            }
             if (update.visibility !== undefined && this.clockVisibilities.includes(update.visibility)) counter.visibility = update.visibility;
             if (update.progress !== undefined) counter.progress = this._clamp(Number(update.progress), 0, 100);
             if (update.progressDelta !== undefined) counter.progress = this._clamp(Number(counter.progress || 0) + Number(update.progressDelta || 0), 0, 100);
@@ -1853,6 +1858,98 @@ const WorldEngine = {
         return resolved;
     },
 
+    resolveCounterStrategies(scene, context = {}) {
+        if (!scene || !Array.isArray(scene.counterStrategies)) return [];
+        this.normalizeScene(scene);
+        const outcome = String(context.outcome || '');
+        const canAffect = context.force === true || ['partial', 'success', 'critical_success'].includes(outcome);
+        if (!canAffect) return [];
+
+        const scored = scene.counterStrategies
+            .map((counter, index) => ({
+                counter,
+                index,
+                score: this._counterMatchScore(counter, context)
+            }))
+            .filter(entry => entry.counter && entry.counter.status !== 'resolved')
+            .filter(entry => entry.score >= (outcome === 'partial' ? 4 : 5))
+            .sort((a, b) => b.score - a.score || Number(b.counter.progress || 0) - Number(a.counter.progress || 0));
+        if (scored.length === 0) return [];
+
+        const limit = Math.max(1, Math.min(2, Number(context.limit || (outcome === 'critical_success' ? 2 : 1))));
+        const progressDelta = outcome === 'critical_success' ? -35 : (outcome === 'success' ? -22 : -8);
+        const exposureDelta = outcome === 'critical_success' ? 35 : (outcome === 'success' ? 24 : 12);
+        const now = Date.now();
+        const reason = String(context.reason || context.intent || '玩家采取了有效反制').slice(0, 260);
+        const results = [];
+
+        scored.slice(0, limit).forEach(entry => {
+            const counter = scene.counterStrategies[entry.index];
+            if (!counter || counter.status === 'resolved') return;
+            const before = {
+                status: counter.status,
+                visibility: counter.visibility,
+                progress: Number(counter.progress || 0),
+                exposure: Number(counter.exposure || 0)
+            };
+
+            const revealOnly = outcome === 'partial';
+            if (counter.visibility === 'hidden') counter.visibility = revealOnly ? 'hinted' : 'known';
+            else if (counter.visibility === 'hinted' && outcome !== 'partial') counter.visibility = 'known';
+            if (counter.status === 'active' && (counter.visibility === 'known' || outcome !== 'partial')) {
+                counter.status = 'revealed';
+            }
+
+            if (!revealOnly || before.visibility !== counter.visibility) {
+                counter.progress = this._clamp(before.progress + progressDelta, 0, 100);
+            }
+            counter.exposure = this._clamp(before.exposure + exposureDelta, 0, 100);
+            counter.lastAction = reason;
+            counter.updatedAt = now;
+
+            const decisiveCritical = outcome === 'critical_success' && (counter.progress <= 5 || entry.score >= 8);
+            if (context.force === true || decisiveCritical || counter.progress <= 0 || counter.exposure >= 100) {
+                counter.status = 'resolved';
+                counter.visibility = 'known';
+                counter.resolvedAt = now;
+                counter.resolution = reason;
+            }
+
+            const result = {
+                id: counter.id,
+                title: counter.title,
+                status: counter.status,
+                visibility: counter.visibility,
+                progressDelta: counter.progress - before.progress,
+                exposureDelta: counter.exposure - before.exposure,
+                resolved: counter.status === 'resolved',
+                revealed: before.visibility !== counter.visibility || before.status !== counter.status,
+                score: entry.score
+            };
+            results.push(result);
+        });
+
+        if (results.length > 0) {
+            const resolved = results.filter(item => item.resolved);
+            const weakened = results.filter(item => !item.resolved);
+            const text = [
+                resolved.length ? `解决：${resolved.map(item => item.title).join('、')}` : '',
+                weakened.length ? `削弱/揭示：${weakened.map(item => item.title).join('、')}` : ''
+            ].filter(Boolean).join('；');
+            this.recordEvent(scene, {
+                category: 'progress',
+                title: resolved.length ? '反制解决' : '反制削弱',
+                text,
+                refId: results[0].id,
+                timestamp: now
+            });
+            if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+            if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+            scene.currentSituation.recentRisks.push(text);
+        }
+        return results;
+    },
+
     getConsequenceRiskModifier(scene, context = {}) {
         const active = this.getActiveConsequences(scene, { limit: 6 });
         if (active.length === 0) return null;
@@ -2364,7 +2461,7 @@ const WorldEngine = {
             || (scene.quests || []).find(q => q.status === 'active') || null;
         const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
         const hiddenPressure = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
-        const counterStrategies = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
+        const counterStrategies = (scene.counterStrategies || []).filter(c => c.status !== 'resolved' && c.visibility !== 'hidden');
         const recentRisks = [
             ...((scene.currentSituation?.recentRisks || []).slice(-5)),
             ...counterStrategies.slice(-3).map(c => c.hint || c.title).filter(Boolean)
@@ -2617,7 +2714,7 @@ const WorldEngine = {
             || (scene.quests || []).find(q => q.status === 'active') || null;
         const clocks = (scene.clocks || []).filter(c => c.visibility !== 'hidden');
         const hiddenPressure = (scene.clocks || []).filter(c => c.visibility === 'hidden' && c.value > 0).length;
-        const counterStrategies = (scene.counterStrategies || []).filter(c => c.status === 'active' && c.visibility !== 'hidden');
+        const counterStrategies = (scene.counterStrategies || []).filter(c => c.status !== 'resolved' && c.visibility !== 'hidden');
         const storyPhase = this.getActiveStoryPhase(scene);
         const knownUnknowns = this.getKnownUnknowns(scene);
         const activeChallenge = this.getActiveChallenge(scene);
@@ -3061,7 +3158,7 @@ const WorldEngine = {
             return quest.status === status || (status === 'failed' && quest.status === 'abandoned');
         }
         if (type === 'counter') {
-            const counter = (scene.counterStrategies || []).find(c => !trigger.counterId || c.id === trigger.counterId);
+            const counter = (scene.counterStrategies || []).find(c => c.status !== 'resolved' && (!trigger.counterId || c.id === trigger.counterId));
             if (!counter) return false;
             const at = trigger.at === 'max' || trigger.at === undefined ? 100 : Number(trigger.at);
             return Number(counter.progress || 0) >= at;
@@ -3117,6 +3214,73 @@ const WorldEngine = {
             if (title && intent.includes(title)) score += 2;
         }
         return score;
+    },
+
+    _counterMatchScore(counter, context = {}) {
+        if (!counter) return 0;
+        const actionType = String(context.actionType || '').toLowerCase();
+        const intent = String(context.intent || '').toLowerCase();
+        const challengeText = `${context.challengeId || ''} ${context.challengeTitle || ''}`.toLowerCase();
+        const counterText = [
+            counter.title,
+            counter.actorName,
+            counter.target,
+            counter.hint,
+            counter.lastAction,
+            ...(counter.counterplay || [])
+        ].join(' ').toLowerCase();
+        let score = 0;
+
+        if (['investigate', 'observe', 'probe'].includes(actionType)) score += 2;
+        if (['persuade', 'threaten', 'lie', 'sneak'].includes(actionType)) score += 1;
+        if (counter.visibility !== 'hidden') score += 1;
+        if (intent) {
+            (counter.counterplay || []).forEach(option => {
+                const overlap = this._textOverlapScore(intent, option);
+                if (overlap >= 4) score += 5;
+                else if (overlap >= 2) score += 2;
+            });
+            const fieldOverlap = this._textOverlapScore(intent, counterText);
+            if (fieldOverlap >= 6) score += 4;
+            else if (fieldOverlap >= 3) score += 2;
+        }
+        if (challengeText && this._textOverlapScore(challengeText, counterText) >= 3) score += 2;
+        return score;
+    },
+
+    _textOverlapScore(a = '', b = '') {
+        const left = String(a || '').toLowerCase().replace(/\s+/g, '');
+        const right = String(b || '').toLowerCase().replace(/\s+/g, '');
+        if (!left || !right) return 0;
+        if (left.includes(right) || right.includes(left)) {
+            return Math.min(8, Math.max(3, Math.floor(Math.min(left.length, right.length) / 2)));
+        }
+        const tokens = this._matchTokens(left);
+        if (tokens.length === 0) return 0;
+        const rightTokens = new Set(this._matchTokens(right));
+        let score = 0;
+        tokens.forEach(token => {
+            if (right.includes(token) || rightTokens.has(token)) score += 1;
+        });
+        return Math.min(8, score);
+    },
+
+    _matchTokens(text = '') {
+        const clean = String(text || '').toLowerCase();
+        const ignored = new Set(['玩家', '这个', '那个', '自己', '进行', '采取', '一下', '一个', '需要', '可以', '使用', '利用', '公开']);
+        const chunks = clean.match(/[a-z0-9_]{2,}|[\u4e00-\u9fff]{2,}/g) || [];
+        const out = new Set();
+        chunks.forEach(chunk => {
+            if (ignored.has(chunk)) return;
+            out.add(chunk);
+            if (/^[\u4e00-\u9fff]+$/.test(chunk) && chunk.length > 2) {
+                for (let i = 0; i < chunk.length - 1; i += 1) {
+                    const token = chunk.slice(i, i + 2);
+                    if (!ignored.has(token)) out.add(token);
+                }
+            }
+        });
+        return [...out].slice(0, 80);
     },
 
     _trimSituation(scene) {

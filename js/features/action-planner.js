@@ -272,7 +272,7 @@ ${risks}
                 });
             }
 
-            const counters = (scene?.counterStrategies || []).filter(c => c.status === 'active');
+            const counters = (scene?.counterStrategies || []).filter(c => c.status !== 'resolved');
             if (counters.length > 0 && ['sneak', 'lie', 'threaten', 'persuade', 'probe', 'investigate'].includes(profile.type)) {
                 const pressure = Math.min(14, counters.length * 4 + Math.ceil((counters[0].progress || 0) / 25));
                 modifiers.push({ source: '敌方反制', label: `风险 +${pressure}`, riskDelta: pressure, dcDelta: pressure >= 10 ? 1 : 0 });

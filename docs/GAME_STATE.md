@@ -551,9 +551,13 @@ scene.evidenceLedger = [
   exposure: 20,
   counterplay: ["反跟踪", "直接对质"],
   hint: "你注意到证人变得紧张",
-  lastAction: "派人盘问证人"
+  lastAction: "派人盘问证人",
+  resolvedAt: 0,
+  resolution: ""
 }
 ```
+
+`active` 和 `revealed` 都表示反制仍会带来压力；`revealed` 代表玩家已经识别来源，可以更明确地采取反制行动。相关观察、调查、试探、谈判或潜入检定达到部分成功以上时，系统会按 `counterplay/title/target/hint` 匹配并揭示、削弱或解决反制。`resolved` 反制不会再进入行动风险、右侧局势压力或失败触发。
 
 ### MessageVisibility
 

@@ -292,7 +292,7 @@ const SidebarRight = {
             ? situation.counterStrategies.slice(0, 5).map(counter => `<div class="situation-counter">
                 <div class="situation-row">
                     <span>${Renderer.escapeHtml(counter.title)}</span>
-                    <strong>${counter.progress || 0}%</strong>
+                    <strong>${counter.progress || 0}%${counter.status === 'revealed' ? ' · 已揭示' : ''}</strong>
                 </div>
                 <p>${Renderer.escapeHtml(counter.hint || counter.lastAction || '对方正在准备反制')}</p>
                 ${(counter.counterplay || []).length > 0 ? `<div class="situation-tags">${counter.counterplay.slice(0, 3).map(t => `<span>${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}

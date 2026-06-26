@@ -633,6 +633,31 @@ const GroupChat = {
             WorldEngine.consumeCheckItems(scene, totals.itemModifiers || []);
             WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+            if (WorldEngine.resolveCounterStrategies) {
+                const counterplayResults = WorldEngine.resolveCounterStrategies(scene, {
+                    outcome: outcomeInfo.outcome,
+                    actionType: check.actionType || '',
+                    stat: check.key || '',
+                    intent: check.intent || check.stakes || '',
+                    challengeId: check.challengeContext?.challengeId || '',
+                    challengeTitle: check.challengeContext?.challengeTitle || '',
+                    source: 'check',
+                    messageId: msg.id,
+                    reason: `${check.statName || '属性'}检定${outcomeInfo.label || ''}影响了敌方反制`
+                });
+                if (counterplayResults.length > 0) {
+                    msg.checkData.counterplayResults = counterplayResults.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        status: item.status,
+                        visibility: item.visibility,
+                        progressDelta: item.progressDelta,
+                        exposureDelta: item.exposureDelta,
+                        resolved: item.resolved,
+                        revealed: item.revealed
+                    }));
+                }
+            }
             if (WorldEngine.resolveRelevantConsequences) {
                 const resolvedConsequences = WorldEngine.resolveRelevantConsequences(scene, {
                     outcome: outcomeInfo.outcome,
@@ -754,7 +779,10 @@ const GroupChat = {
         const resources = Array.isArray(data.resourceModifiers) && data.resourceModifiers.length > 0
             ? ` 玩家投入资源：${data.resourceModifiers.map(m => `${m.source}（${m.label}）`).join('；')}。`
             : '';
-        return `检定结果：${data.resultLabel || '未知'}。${resources}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+        const counters = Array.isArray(data.counterplayResults) && data.counterplayResults.length > 0
+            ? ` 反制变化：${data.counterplayResults.map(item => `${item.title}${item.resolved ? '已解决' : (item.revealed ? '被揭示' : '被削弱')}`).join('；')}。`
+            : '';
+        return `检定结果：${data.resultLabel || '未知'}。${resources}${counters}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
     },
 
     async cancelPendingCheck() {
