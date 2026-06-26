@@ -106,7 +106,7 @@ const QuestTracker = {
             if (result.questCompleted && typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
             State.saveCurrentScene().catch(e => console.warn('任务状态保存失败:', e));
             this.render();
-            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) WorldEngine.checkVictory(scene);
             return;
         }
         if (!nextCompleted && typeof WorldEngine !== 'undefined' && WorldEngine.reopenQuestObjective) {
@@ -126,7 +126,7 @@ const QuestTracker = {
         State.saveCurrentScene().catch(e => console.warn('任务状态保存失败:', e));
         this.render();
         // 检查胜利条件（主线全完成）
-        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) WorldEngine.checkVictory(scene);
     },
 
     /**
@@ -209,7 +209,7 @@ const QuestTracker = {
             State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
             this.render();
             // 检查胜利条件
-            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) WorldEngine.checkVictory(scene);
         }
     }
 };

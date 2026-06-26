@@ -1129,8 +1129,8 @@ const WorldEngine = {
         }
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
-        if (scene.playerHp <= 0 && options.triggerGameOver !== false && typeof GroupChat !== 'undefined' && GroupChat._triggerGameOver) {
-            GroupChat._triggerGameOver();
+        if (scene.playerHp <= 0 && options.triggerGameOver !== false) {
+            this.triggerHpGameOver(scene, { reason: reason || 'HP 归零' });
         }
         return { ok: true, amount: actual, hp: scene.playerHp, maxHp, before };
     },
@@ -1164,6 +1164,83 @@ const WorldEngine = {
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
         return { ok: actual > 0, amount: actual, hp: scene.playerHp, maxHp, before };
+    },
+
+    triggerHpGameOver(scene, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        const locName = (scene.locations || []).find(l => l.id === scene.currentLocation)?.name || '这片土地';
+        const content = String(options.message || `你的生命值归零，倒在了${locName}上。冒险就此终结……但或许还有未读的存档能让你重来。`).slice(0, 900);
+        scene.gameState = 'defeated';
+        scene.defeatReason = String(options.reasonId || scene.defeatReason || 'hp_zero').slice(0, 100);
+        if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push('失败结局：HP 归零');
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+        const msg = this._addEndingMessage(scene, content, 'gameover', 'failure', '失败结局');
+        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'defeated', String(options.reason || 'HP 归零').slice(0, 160));
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
+        State.saveCurrentSceneDebounced?.();
+        if (options.toast !== false && typeof showToast !== 'undefined') showToast('你倒下了…可读取存档重来');
+        return { ok: true, outcome: 'defeated', message: msg };
+    },
+
+    checkVictory(scene = State.scene, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        const mainQuests = (scene.quests || []).filter(q => q.type === 'main');
+        if (mainQuests.length === 0) return { ok: false, reason: 'no_main_quests' };
+        const allDone = mainQuests.every(q => q.status === 'completed');
+        if (!allDone) return { ok: false, reason: 'main_quests_incomplete' };
+
+        const rewardSettlement = this.settleCompletedQuestRewards(scene, mainQuests, { suppressBlockedMessage: true });
+        if (rewardSettlement.blocked?.length) {
+            const names = rewardSettlement.blocked.map(item => item.questName).filter(Boolean).join('、') || '主线任务';
+            const content = `【通关待结算】${names} 的任务奖励因背包空间不足暂未发放。请先清理或消耗物品；奖励补发后会自动完成通关。`;
+            const alreadyNotified = (scene.messages || []).slice(-5).some(msg => msg.content === content);
+            if (!alreadyNotified) this.addSystemMessage(scene, content, 'system');
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderInventory?.();
+                SidebarRight.renderSituation?.();
+                SidebarRight.markTabNew?.('inventory');
+                SidebarRight.markTabNew?.('situation');
+            }
+            State.saveCurrentSceneDebounced?.();
+            if (options.toast !== false && typeof showToast !== 'undefined') showToast('主线奖励待领取：请先清理背包');
+            return { ok: false, blocked: true, settlement: rewardSettlement };
+        }
+        return this.triggerVictory(scene, {
+            reason: options.reason || '主线任务完成',
+            toast: options.toast
+        });
+    },
+
+    triggerVictory(scene, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        scene.gameState = 'victorious';
+        const sceneName = scene.name || scene.title || '这个世界';
+        const content = String(options.message || `所有主线任务已完成！${sceneName}的故事迎来了它的结局。恭喜你，冒险者。`).slice(0, 900);
+        if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push('通关：主线任务完成');
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+        const msg = this._addEndingMessage(scene, content, 'victory', 'victory', '通关');
+        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'victorious', String(options.reason || '主线任务完成').slice(0, 160));
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
+        State.saveCurrentSceneDebounced?.();
+        if (options.toast !== false && typeof showToast !== 'undefined') showToast('🏆 冒险完成！');
+        return { ok: true, outcome: 'victorious', message: msg };
     },
 
     moveToLocation(scene, locId, options = {}) {
@@ -1458,9 +1535,7 @@ const WorldEngine = {
             SidebarRight.markTabNew?.('quests');
             SidebarRight.markTabNew?.('inventory');
         }
-        if (results.length > 0 && typeof GroupChat !== 'undefined' && GroupChat._checkVictory) {
-            GroupChat._checkVictory();
-        }
+        if (results.length > 0) this.checkVictory(scene);
         return results;
     },
 
@@ -1534,7 +1609,7 @@ const WorldEngine = {
             scene.questProgressGuards.autoAdvanceStreak = 0;
             scene.questProgressGuards.lastAdvancedAt = Date.now();
         }
-        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        this.checkVictory(scene);
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
         return { ok: true, questCompleted, objectiveIdx: idx, questId: quest.id };
     },
@@ -1563,7 +1638,7 @@ const WorldEngine = {
             scene.questProgressGuards.autoAdvanceStreak = 0;
             scene.questProgressGuards.lastAdvancedAt = Date.now();
         }
-        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+        this.checkVictory(scene);
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
         return { ok: true, questReopened: true, objectiveIdx: idx, questId: quest.id };
     },
@@ -1627,7 +1702,7 @@ const WorldEngine = {
 
         if (changed) {
             if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
-            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+            this.checkVictory(scene);
         }
         return { changed, results };
     },
@@ -2988,9 +3063,7 @@ const WorldEngine = {
             SidebarRight.renderSituation?.();
             SidebarRight.markTabNew?.('quests');
         }
-        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) {
-            GroupChat._checkVictory();
-        }
+        this.checkVictory(scene);
         State.saveCurrentSceneDebounced?.();
         return { changed: true, completedObjectives, completedQuests };
     },
@@ -3671,6 +3744,29 @@ const WorldEngine = {
             category: this._eventCategoryFromText(content),
             title: this._eventTitleFromText(content),
             text: String(content),
+            messageId: msg.id,
+            timestamp: msg.timestamp
+        });
+        if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
+        return msg;
+    },
+
+    _addEndingMessage(scene, content, type, category, title) {
+        if (!scene || !content) return null;
+        if (!Array.isArray(scene.messages)) scene.messages = [];
+        const msg = {
+            id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            role: 'assistant',
+            content: String(content),
+            type,
+            visibility: { public: true, locationId: scene.currentLocation || '', participants: [], overheardBy: [] },
+            timestamp: Date.now()
+        };
+        scene.messages.push(msg);
+        this.recordEvent(scene, {
+            category,
+            title,
+            text: msg.content,
             messageId: msg.id,
             timestamp: msg.timestamp
         });
@@ -5288,9 +5384,7 @@ const WorldEngine = {
             scene.questProgressGuards.autoAdvanceStreak = 0;
             scene.questProgressGuards.lastAdvancedAt = Date.now();
         }
-        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) {
-            GroupChat._checkVictory();
-        }
+        this.checkVictory(scene);
         return { changed: true, completedByQuest, completedQuests };
     },
 
@@ -5522,7 +5616,7 @@ const WorldEngine = {
             failure.message || '关键局势已经失控，故事进入失败结局。',
             failure.aftermath || '可以读取存档，从更早的选择重新尝试。'
         ].filter(Boolean).join('\n\n');
-        const msg = this.addSystemMessage(scene, message, 'gameover');
+        const msg = this._addEndingMessage(scene, message, 'gameover', 'failure', '失败结局');
         if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'defeated', failure.title);
         if (typeof showToast !== 'undefined') showToast(failure.recoverable === false ? '进入失败结局' : '进入失败结局，可读取存档重来');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();

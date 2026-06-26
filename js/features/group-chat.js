@@ -980,96 +980,20 @@ const GroupChat = {
     _triggerGameOver() {
         const scene = State.scene;
         if (!scene || scene.gameState !== 'playing') return;
-        scene.gameState = 'defeated';
-        const msg = {
-            id: 'msg_' + Date.now() + '_gameover',
-            role: 'assistant',
-            content: `你的生命值归零，倒在了${scene.locations?.find(l => l.id === scene.currentLocation)?.name || '这片土地'}上。冒险就此终结……但或许还有未读的存档能让你重来。`,
-            type: 'gameover',
-            visibility: typeof WorldEngine !== 'undefined'
-                ? WorldEngine.createVisibility({ public: true })
-                : undefined,
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-            WorldEngine.recordEvent(scene, {
-                category: 'failure',
-                title: '失败结局',
-                text: msg.content,
-                messageId: msg.id,
-                timestamp: msg.timestamp
-            });
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.triggerHpGameOver) {
+            return WorldEngine.triggerHpGameOver(scene);
         }
-        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'defeated', 'HP 归零');
-        ChatUI.onMessageAdded(msg);
-        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
-        if (typeof SidebarRight !== 'undefined') {
-            SidebarRight.renderSituation?.();
-            SidebarRight.markTabNew?.('situation');
-        }
-        State.saveCurrentSceneDebounced();
-        showToast('你倒下了…可读取存档重来');
+        this._warnMissingRuleLayer('HP 归零结局');
     },
 
     /** 触发胜利结局（主线全完成） */
     _checkVictory() {
         const scene = State.scene;
         if (!scene || scene.gameState !== 'playing') return;
-        const mainQuests = (scene.quests || []).filter(q => q.type === 'main');
-        if (mainQuests.length === 0) return;
-        const allDone = mainQuests.every(q => q.status === 'completed');
-        if (!allDone) return;
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.settleCompletedQuestRewards) {
-            const rewardSettlement = WorldEngine.settleCompletedQuestRewards(scene, mainQuests, { suppressBlockedMessage: true });
-            if (rewardSettlement.blocked?.length) {
-                const names = rewardSettlement.blocked.map(item => item.questName).filter(Boolean).join('、') || '主线任务';
-                const content = `【通关待结算】${names} 的任务奖励因背包空间不足暂未发放。请先清理或消耗物品；奖励补发后会自动完成通关。`;
-                const alreadyNotified = (scene.messages || []).slice(-5).some(msg => msg.content === content);
-                if (!alreadyNotified) {
-                    WorldEngine.addSystemMessage(scene, content, 'system');
-                }
-                if (typeof SidebarRight !== 'undefined') {
-                    SidebarRight.renderInventory?.();
-                    SidebarRight.renderSituation?.();
-                    SidebarRight.markTabNew?.('inventory');
-                    SidebarRight.markTabNew?.('situation');
-                }
-                State.saveCurrentSceneDebounced();
-                showToast('主线奖励待领取：请先清理背包');
-                return;
-            }
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) {
+            return WorldEngine.checkVictory(scene);
         }
-        scene.gameState = 'victorious';
-        const sceneName = scene.name || scene.title || '这个世界';
-        const msg = {
-            id: 'msg_' + Date.now() + '_victory',
-            role: 'assistant',
-            content: `所有主线任务已完成！${sceneName}的故事迎来了它的结局。恭喜你，冒险者。`,
-            type: 'victory',
-            visibility: typeof WorldEngine !== 'undefined'
-                ? WorldEngine.createVisibility({ public: true })
-                : undefined,
-            timestamp: Date.now()
-        };
-        scene.messages.push(msg);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-            WorldEngine.recordEvent(scene, {
-                category: 'victory',
-                title: '通关',
-                text: msg.content,
-                messageId: msg.id,
-                timestamp: msg.timestamp
-            });
-        }
-        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'victorious', '主线任务完成');
-        ChatUI.onMessageAdded(msg);
-        if (typeof SidebarRight !== 'undefined') {
-            SidebarRight.renderSituation?.();
-            SidebarRight.markTabNew?.('situation');
-        }
-        State.saveCurrentSceneDebounced();
-        showToast('🏆 冒险完成！');
+        this._warnMissingRuleLayer('胜利结局');
     },
 
     /**

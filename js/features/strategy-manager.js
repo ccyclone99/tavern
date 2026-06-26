@@ -622,8 +622,10 @@ const StrategyManager = {
             } else {
                 console.warn('[StrategyManager] WorldEngine.applyQuestUpdates 不可用，跳过 questsUpdate');
             }
-            if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'quest' });
-            if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) GroupChat._checkVictory();
+            if (typeof WorldEngine !== 'undefined') {
+                WorldEngine.checkFailureStates(scene, { type: 'quest' });
+                WorldEngine.checkVictory?.(scene);
+            }
             stopIfEnded('questsUpdate');
         }
 

@@ -246,13 +246,13 @@
 }
 ```
 
-主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。回顾类输入（如“回顾”“通关记录”“失败记录”“冒险记录”）由 `IntentRouter` 本地处理，打开右侧“局势”面板；如果冒险已结束，会确保 `RunRecorder.complete()` 生成当前版本的 `runRecord`，不会进入 AI 回复流程。
+主线任务全部 `completed` 后，`WorldEngine.checkVictory()` 会先结算已完成主线任务的未发奖励；如果奖励被背包容量阻塞，`scene.gameState` 仍保持 `playing`，提示玩家清理背包。待补领奖励成功后才把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`GroupChat._checkVictory()` 只保留为旧调用包装器，不能直接改写结局状态。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。回顾类输入（如“回顾”“通关记录”“失败记录”“冒险记录”）由 `IntentRouter` 本地处理，打开右侧“局势”面板；如果冒险已结束，会确保 `RunRecorder.complete()` 生成当前版本的 `runRecord`，不会进入 AI 回复流程。
 
 结局后的右侧面板仍可查看任务、背包、属性和计策，但应隐藏或置为只读：任务目标不再绑定勾选事件，背包不显示使用/装备/卸下按钮，属性点不显示加号，计策不显示放弃/重新规划入口。规则层仍必须保留最终防线，不能只依赖 UI 隐藏按钮。
 
 同一条 AI 回复中，如果状态补丁或标记已经触发胜利/失败，后续标记、自动检定、自动任务推断和自动关系分析都应停止，避免结局消息之后继续改变 NPC 关系或世界状态。
 
-剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
+剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零由 `WorldEngine.triggerHpGameOver()` 处理，旧的 `GroupChat._triggerGameOver()` 只保留为包装器。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
 结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。长对话自动摘要前会先把被压缩的原始消息写入 `scene.transcriptLog`，因此结局回顾不会只剩最近 300 条或摘要文本。右侧“局势”面板会展示这份冒险回顾，完整对话默认折叠，供玩家需要时展开复盘。
 
@@ -404,7 +404,7 @@ scene.evidenceLedger = [
 
 ### 生命字段
 
-`playerHp` 和 `playerMaxHp` 由规则层维护。AI 标记 `[damage:N|原因]`、`[heal:N|原因]` 会分别调用 `WorldEngine.applyPlayerDamage()` 和 `WorldEngine.applyPlayerHealing()`，写入 survival 事件并刷新顶部状态。生命降到 0 时触发 HP 归零失败结局和失败回顾记录。
+`playerHp` 和 `playerMaxHp` 由规则层维护。AI 标记 `[damage:N|原因]`、`[heal:N|原因]` 会分别调用 `WorldEngine.applyPlayerDamage()` 和 `WorldEngine.applyPlayerHealing()`，写入 survival 事件并刷新顶部状态。生命降到 0 时由 `WorldEngine.triggerHpGameOver()` 触发 HP 归零失败结局和失败回顾记录。
 
 `WorldEngine.normalizeScene()` 会按等级和体质把过低的旧版 `playerMaxHp` 迁移到公式值；旧档如果原本满血，会同步补到新的最大生命，受伤状态则保留当前生命值。
 

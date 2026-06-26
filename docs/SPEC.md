@@ -506,7 +506,7 @@ UI 要求：
 - 任务奖励包含物品时必须先做背包容量预检；背包满且无法合并时整套奖励不发放，`rewardGranted` 保持 `false`，避免金币/经验已发但物品静默丢失。
 - 玩家出售、移除或消耗物品后如果真实腾出背包格子，系统会自动重试已完成但 `rewardGranted:false` 的任务奖励；补发仍复用 `grantQuestReward()`，重试失败不重复刷屏。
 - 检定投入物品时触发的任务奖励补领不能插队到检定核心结算之前；它只能在当前检定消耗、挑战、反制和后果处理完成且 `gameState` 仍为 `playing` 时执行。
-- 通关检查必须先结算所有已完成主线任务的未发奖励；如果背包空间不足导致主线奖励未发放，`scene.gameState` 继续保持 `playing`，提示玩家清理背包，补领奖励成功后再自动进入胜利。
+- 通关检查必须调用 `WorldEngine.checkVictory()`，先结算所有已完成主线任务的未发奖励；如果背包空间不足导致主线奖励未发放，`scene.gameState` 继续保持 `playing`，提示玩家清理背包，补领奖励成功后再自动进入胜利。
 - 当前等级所需经验为 `level * 100`；升级后扣除所需经验，等级 +1，获得 2 点属性点。
 - 升级会按等级和体质重新计算最大生命，并回满生命。
 - 属性点可在玩家详情面板分配，也可通过单输入框命令分配（如“加一点敏捷”“体质+1”）；每次 +1 后立刻刷新顶部属性、检定修正和 HP。
@@ -518,7 +518,7 @@ UI 要求：
 
 - `[damage:N|原因]` 调用 `WorldEngine.applyPlayerDamage()`，写入 survival 事件，刷新顶部生命值。
 - `[heal:N|原因]` 调用 `WorldEngine.applyPlayerHealing()`，按实际恢复量写入 survival 事件。
-- HP 降到 0 时触发 HP 归零失败结局，并生成通关/失败回顾记录。
+- HP 降到 0 时必须由 `WorldEngine.triggerHpGameOver()` 触发 HP 归零失败结局，并生成通关/失败回顾记录；聊天层只保留兼容包装器，不直接改写 `gameState`。
 
 ### 4.15 剧情弧推进
 
@@ -563,7 +563,7 @@ UI 要求：
 - 日志条目只保存摘要和引用，不复制完整聊天文本。
 - 地图移动统一走 `WorldEngine.moveToLocation()`；UI、输入路由和 `[move:]` 标记不能直接改写 `scene.currentLocation`，必须复用相邻地点校验、结局锁、移动消息和 `eventLog.movement`。
 - `factionsUpdate` 和 `locationUpdate` 必须同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
-- `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。
+- `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。HP 归零、剧本失败和主线通关的结局消息统一由规则层写入，不能由 UI 或聊天层直接改写 `scene.gameState`。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
 - 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志丢失，避免重复刷经验或物资。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
