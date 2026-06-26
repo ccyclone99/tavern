@@ -160,7 +160,7 @@ Observer 不参与剧情裁决，除非模拟明确把它设为仲裁器。
 - `storyArcs.currentBeat` 可通过 `storyArcUpdate` 推进；外部模拟如果绕过浏览器实现，需要自行应用同等补丁。
 - `WorldEngine.tickAfterPlayerTurn()` 会在浏览器端推进局势时钟和 NPC 离屏行动；外部模拟若不驱动浏览器，需要自行复刻。
 - `<state_update>` 不能直接创建任务，只能轻量更新已有任务；创建任务应使用 `[quest:]`。
-- `characterUpdates` 使用 `characterId`，DM 必须知道目标 id；只写角色名不会生效。
+- `characterUpdates` 优先使用 `characterId`，也支持当前场景内唯一角色名（`characterName/name/actorName/targetName`）匹配；外部模拟需要复刻重名跳过规则，避免误改。
 - `[move:]` 按地点名匹配（支持部分匹配），外部模拟最好使用精确名称。
 - 动态 `[new_char:]` 支持扩展字段并会自动补齐 `creed/redLines/values/motives/fears/secrets/leverage/profile.hiddenFacts`；外部模拟若绕过浏览器，需要复刻 `PromptGuard` 和 `NewCharacterHandler` 的裁剪、默认值与解锁槽生成逻辑。
 - 自动摘要依赖 LLM API，外部模拟若不调用浏览器实现，需要自己维护 `summary`。

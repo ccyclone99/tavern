@@ -468,8 +468,8 @@ const StrategyManager = {
                 console.warn(`[StrategyManager] characterUpdates 超过单条上限 ${MAX_RELATION_UPDATES_PER_UPDATE}，已截断`);
             }
             for (const cu of characterUpdates.slice(0, MAX_RELATION_UPDATES_PER_UPDATE)) {
-                if (!cu || typeof cu !== 'object' || !cu.characterId) continue;
-                const char = State.characters.find(c => c.id === cu.characterId);
+                if (!cu || typeof cu !== 'object') continue;
+                const char = this._resolveCharacterForUpdate(cu, scene);
                 if (!char) continue;
                 const userName = scene.userName || State.settings.userName || '旅人';
                 if (!char._relations) char._relations = {};
@@ -707,6 +707,66 @@ const StrategyManager = {
         return typeof WorldEngine !== 'undefined' && WorldEngine.normalizeItem
             ? WorldEngine.normalizeItem(base)
             : base;
+    },
+
+    _resolveCharacterForUpdate(update = {}, scene = State.scene) {
+        const characters = Array.isArray(State.characters) ? State.characters.filter(Boolean) : [];
+        if (characters.length === 0) return null;
+
+        const activeIds = new Set(Array.isArray(scene?.characters) ? scene.characters.map(String) : []);
+        const activeChars = activeIds.size > 0
+            ? characters.filter(char => activeIds.has(String(char.id || '')))
+            : characters;
+
+        const rawId = String(update.characterId || update.id || '').trim();
+        if (rawId) {
+            const byId = characters.find(char => String(char.id || '') === rawId);
+            if (byId) return byId;
+        }
+
+        const refs = [
+            update.characterName,
+            update.name,
+            update.actorName,
+            update.targetName,
+            update.character,
+            update.actor,
+            update.target,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const ref of refs) {
+            const activeMatch = this._findCharacterByNameRef(activeChars, ref);
+            if (activeMatch) return activeMatch;
+        }
+
+        return null;
+    },
+
+    _findCharacterByNameRef(characters, ref) {
+        return this._findCharacterNameMatches(characters, ref)[0] || null;
+    },
+
+    _findCharacterNameMatches(characters, ref) {
+        const normalized = this._normalizeRefText(ref);
+        if (!normalized) return [];
+        const exact = characters.filter(char => this._normalizeRefText(char.name || '') === normalized);
+        if (exact.length > 0) return exact.length === 1 ? exact : [];
+
+        const partial = characters.filter(char => {
+            const name = this._normalizeRefText(char.name || '');
+            return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
+        });
+        return partial.length === 1 ? partial : [];
+    },
+
+    _normalizeRefText(value) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine._normalizeQuestText) {
+            return WorldEngine._normalizeQuestText(value);
+        }
+        return String(value || '')
+            .replace(/[ \t\r\n*`"'“”‘’「」《》【】()[\]{}，。！？、；：:,.!?;|/_\\-]/g, '')
+            .toLowerCase();
     },
 
     _clampNumber(value, min, max, fallback = 0) {
