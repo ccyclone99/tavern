@@ -4045,19 +4045,56 @@ const WorldEngine = {
         return { ok: true, healed: actual, hp: scene.playerHp, maxHp };
     },
 
+    getBasicSupplyCatalog() {
+        return {
+            supply: {
+                price: 15,
+                item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、穿越或野外判断。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] }
+            },
+            medical: {
+                price: 20,
+                item: { id: 'shop_medical_kit', name: '应急医疗包', description: '基础医疗材料，可直接恢复生命，也可辅助体质检定。', type: 'consumable', quantity: 1, uses: 1, tags: ['医疗', '治疗', '应急'], effects: [{ type: 'heal', value: 4, consume: true }, { type: 'check_bonus', stat: 'constitution', value: 2, consume: true }] }
+            },
+            parts: {
+                price: 20,
+                item: { id: 'shop_parts_kit', name: '备用零件包', description: '备用零件，可辅助一次修复、破解或设备操作。', type: 'consumable', quantity: 1, uses: 1, tags: ['零件', '修复', '设备'], effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }] }
+            },
+            weapon: {
+                price: 45,
+                item: { id: 'shop_short_sword', name: '短剑', description: '可靠的近战武器。装备后会降低战斗行动风险，并提供轻微战斗检定修正。', type: 'weapon', quantity: 1, tags: ['武器', '近战'], effects: [{ type: 'check_bonus', actionType: 'combat', value: 1, consume: false }, { type: 'risk_delta', actionType: 'combat', value: -4, consume: false }] }
+            },
+            armor: {
+                price: 50,
+                item: { id: 'shop_light_armor', name: '轻型护甲', description: '不妨碍行动的基础防具。装备后可降低战斗和强行突破风险。', type: 'armor', quantity: 1, tags: ['防具', '护甲'], effects: [{ type: 'risk_delta', actionType: 'combat', value: -4, consume: false }, { type: 'risk_delta', actionType: 'force', value: -4, consume: false }, { type: 'check_bonus', stat: 'constitution', actionType: 'force', value: 1, consume: false }] }
+            },
+            tool: {
+                price: 35,
+                item: { id: 'shop_utility_tools', name: '通用工具包', description: '基础撬具、量尺和小型维修工具。装备后可辅助调查、修复和开锁。', type: 'misc', quantity: 1, tags: ['工具', '修复', '开锁'], effects: [{ type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: false }, { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 1, consume: false }] }
+            },
+            scanner: {
+                price: 45,
+                item: { id: 'shop_portable_scanner', name: '便携扫描仪', description: '基础探测设备。装备后可辅助观察异常、读取环境读数和寻找线索。', type: 'misc', quantity: 1, tags: ['工具', '扫描', '观察'], effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false }, { type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: false }] }
+            }
+        };
+    },
+
     buyBasicSupply(scene, supplyType = 'supply') {
         if (!scene) return { ok: false, message: '没有可交易的场景。' };
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const key = String(supplyType || 'supply');
-        const catalog = {
-            supply: { price: 15, item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、穿越或野外判断。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] } },
-            medical: { price: 20, item: { id: 'shop_medical_kit', name: '应急医疗包', description: '基础医疗材料，可直接恢复生命，也可辅助体质检定。', type: 'consumable', quantity: 1, uses: 1, tags: ['医疗', '治疗', '应急'], effects: [{ type: 'heal', value: 4, consume: true }, { type: 'check_bonus', stat: 'constitution', value: 2, consume: true }] } },
-            parts: { price: 20, item: { id: 'shop_parts_kit', name: '备用零件包', description: '备用零件，可辅助一次修复、破解或设备操作。', type: 'consumable', quantity: 1, uses: 1, tags: ['零件', '修复', '设备'], effects: [{ type: 'check_bonus', stat: 'intelligence', value: 2, consume: true }] } }
-        };
+        const catalog = this.getBasicSupplyCatalog();
         const entry = catalog[key] || catalog.supply;
         const gold = Number(scene.gold || 0);
-        const item = this.normalizeItem({ ...entry.item });
+        const item = this.normalizeItem(JSON.parse(JSON.stringify(entry.item)));
+        const existingNonConsumable = item.type !== 'consumable' && Array.isArray(scene.inventory)
+            ? scene.inventory.find(existing => existing && ((item.id && existing.id === item.id) || existing.name === item.name))
+            : null;
+        if (existingNonConsumable) {
+            const message = `已经拥有 ${item.name}，可以输入“装备${item.name}”使用。`;
+            this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
+            return { ok: false, message, duplicate: true };
+        }
         const canMerge = Array.isArray(scene.inventory) && scene.inventory.some(existing =>
             existing && ((item.id && existing.id === item.id) || existing.name === item.name)
         );

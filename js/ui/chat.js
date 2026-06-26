@@ -409,6 +409,10 @@ const ChatUI = {
         if (this._shouldSuggestSupplyPurchase(scene)) {
             add({ label: '购买补给', text: '购买补给', behavior: 'fill' });
         }
+        const prepPurchase = this._suggestPrepPurchase(scene);
+        if (prepPurchase) {
+            add({ label: prepPurchase.label, text: prepPurchase.text, behavior: 'fill' });
+        }
         return chips.slice(0, 3);
     },
 
@@ -490,6 +494,32 @@ const ChatUI = {
             item.effects.some(effect => ['check_bonus', 'heal'].includes(effect?.type))
         );
         return readyConsumables.length < 2;
+    },
+
+    _suggestPrepPurchase(scene) {
+        if (!scene || Number(scene.gold || 0) < 35) return null;
+        const inventory = scene.inventory || [];
+        if (inventory.length >= 200) return null;
+        const has = name => inventory.some(item => item && item.name === name);
+        const activeChallenge = typeof WorldEngine !== 'undefined' && WorldEngine.getActiveChallenge
+            ? WorldEngine.getActiveChallenge(scene)
+            : null;
+        const approachTypes = new Set((activeChallenge?.approaches || []).map(a => a?.actionType || '').filter(Boolean));
+        const approachStats = new Set((activeChallenge?.approaches || []).map(a => a?.stat || '').filter(Boolean));
+        if ((approachTypes.has('combat') || approachStats.has('strength')) && Number(scene.gold || 0) >= 45 && !has('短剑')) {
+            return { label: '购买短剑', text: '购买短剑' };
+        }
+        if ((approachTypes.has('force') || approachTypes.has('combat') || approachStats.has('constitution')) && Number(scene.gold || 0) >= 50 && !has('轻型护甲')) {
+            return { label: '购买护甲', text: '购买护甲' };
+        }
+        if ((approachTypes.has('investigate') || approachTypes.has('sneak') || approachStats.has('intelligence')) && !has('通用工具包')) {
+            return { label: '购买工具', text: '购买工具包' };
+        }
+        if ((approachTypes.has('observe') || approachStats.has('wisdom')) && Number(scene.gold || 0) >= 45 && !has('便携扫描仪')) {
+            return { label: '购买扫描仪', text: '购买扫描仪' };
+        }
+        if (!has('通用工具包')) return { label: '购买工具', text: '购买工具包' };
+        return null;
     },
 
     _buildTutorialSuggestionChips(scene) {

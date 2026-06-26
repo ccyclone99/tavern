@@ -219,6 +219,18 @@ const IntentRouter = {
         if (normalized.includes('零件') || normalized.includes('修理') || normalized.includes('修复')) {
             return { supplyType: 'parts', label: '备用零件包' };
         }
+        if (normalized.includes('扫描') || normalized.includes('探测') || normalized.includes('侦测')) {
+            return { supplyType: 'scanner', label: '便携扫描仪' };
+        }
+        if (normalized.includes('护甲') || normalized.includes('防具') || normalized.includes('皮甲') || normalized.includes('铠甲') || normalized.includes('甲胄') || normalized.includes('盾')) {
+            return { supplyType: 'armor', label: '轻型护甲' };
+        }
+        if (normalized.includes('武器') || normalized.includes('短剑') || normalized.includes('剑') || normalized.includes('刀') || normalized.includes('枪')) {
+            return { supplyType: 'weapon', label: '短剑' };
+        }
+        if (normalized.includes('工具包') || normalized.includes('工具')) {
+            return { supplyType: 'tool', label: '通用工具包' };
+        }
         if (normalized.includes('补给') || normalized.includes('口粮') || normalized.includes('物资')) {
             return { supplyType: 'supply', label: '探索补给包' };
         }
@@ -288,7 +300,7 @@ const IntentRouter = {
         }
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
-            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”“卖掉短剑”“加一点敏捷”。';
+            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”“卖掉短剑”“加一点敏捷”。';
     },
 
     _routePendingCheck(raw, normalized, scene) {
