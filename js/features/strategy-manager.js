@@ -248,6 +248,8 @@ const StrategyManager = {
         const MAX_RELATION_UPDATES_PER_UPDATE = 30;
         const MAX_ITEMS_PER_UPDATE = 50;
         const MAX_LOCATIONS_PER_UPDATE = 20;
+        const MAX_TOTAL_FACTIONS = 40;
+        const MAX_TOTAL_LOCATIONS = 80;
         const MAX_TOTAL_INVENTORY = 200;
         const MAX_STRATEGIES_PER_UPDATE = this.maxStrategiesPerUpdate;
         const MAX_STRATEGY_UPDATES_PER_UPDATE = this.maxStrategyUpdatesPerUpdate;
@@ -451,9 +453,9 @@ const StrategyManager = {
             }
             for (const f of update.factionsUpdate.slice(0, MAX_FACTIONS_PER_UPDATE)) {
                 if (!f || typeof f !== 'object' || !f.name) continue;
-                const factionName = String(f.name).trim();
+                const factionName = String(f.name).trim().slice(0, 80);
                 if (!factionName) continue;
-                const existing = scene.factions.find(x => String(x.name) === factionName);
+                const existing = scene.factions.find(x => String(x.name || '').trim() === factionName);
                 const changes = [];
                 if (existing) {
                     if (f.attitude !== undefined) {
@@ -475,12 +477,16 @@ const StrategyManager = {
                         existing.description = next;
                     }
                     if (Array.isArray(f.leverage)) {
-                        const next = this._stringList(f.leverage, 20);
+                        const next = this._stringList(f.leverage, 20, 120);
                         if (!this._sameStringList(existing.leverage, next)) changes.push(`筹码更新（${next.length}项）`);
                         existing.leverage = next;
                     }
                 } else {
-                    const leverage = Array.isArray(f.leverage) ? this._stringList(f.leverage, 20) : [];
+                    if (scene.factions.length >= MAX_TOTAL_FACTIONS) {
+                        console.warn(`[StrategyManager] factions 已达总上限 ${MAX_TOTAL_FACTIONS}，跳过新增势力：${factionName}`);
+                        continue;
+                    }
+                    const leverage = Array.isArray(f.leverage) ? this._stringList(f.leverage, 20, 120) : [];
                     scene.factions.push({
                         name: factionName,
                         attitude: this._clampNumber(f.attitude, -100, 100, 0),
@@ -654,7 +660,7 @@ const StrategyManager = {
             }
             for (const loc of update.locationUpdate.slice(0, MAX_LOCATIONS_PER_UPDATE)) {
                 if (!loc || typeof loc !== 'object' || !loc.id) continue;
-                const locationId = String(loc.id).trim();
+                const locationId = String(loc.id).trim().slice(0, 100);
                 if (!locationId) continue;
                 const existing = scene.locations.find(l => String(l.id) === locationId);
                 const changes = [];
@@ -677,12 +683,16 @@ const StrategyManager = {
                         existing.alertLevel = next;
                     }
                     if (Array.isArray(loc.connections)) {
-                        const next = this._stringList(loc.connections, 20);
+                        const next = this._stringList(loc.connections, 20, 100);
                         if (!this._sameStringList(existing.connections, next)) changes.push(`出口更新（${next.length}处）`);
                         existing.connections = next;
                     }
                 } else {
-                    const connections = Array.isArray(loc.connections) ? this._stringList(loc.connections, 20) : [];
+                    if (scene.locations.length >= MAX_TOTAL_LOCATIONS) {
+                        console.warn(`[StrategyManager] locations 已达总上限 ${MAX_TOTAL_LOCATIONS}，跳过新增地点：${locationId}`);
+                        continue;
+                    }
+                    const connections = Array.isArray(loc.connections) ? this._stringList(loc.connections, 20, 100) : [];
                     scene.locations.push({
                         id: locationId,
                         name: String(loc.name || locationId).trim().slice(0, 80) || locationId,
@@ -798,11 +808,16 @@ const StrategyManager = {
         return Math.max(min, Math.min(max, num));
     },
 
-    _stringList(value, limit = 20) {
-        return (Array.isArray(value) ? value : [value])
-            .map(item => String(item || '').trim())
-            .filter(Boolean)
-            .slice(0, limit);
+    _stringList(value, limit = 20, itemLimit = 160) {
+        const seen = new Set();
+        const output = [];
+        (Array.isArray(value) ? value : [value]).forEach(item => {
+            const text = String(item || '').trim().slice(0, itemLimit);
+            if (!text || seen.has(text)) return;
+            seen.add(text);
+            output.push(text);
+        });
+        return output.slice(0, limit);
     },
 
     _sameStringList(a, b) {

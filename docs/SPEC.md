@@ -562,6 +562,7 @@ UI 要求：
 - `scene.gameState` 进入 `victorious` 或 `defeated` 后，输入框、地图、背包、交易、休息、属性点、任务手动操作和计策创建/更新/放弃不得再改变世界状态；结束后只允许 OOC、帮助和回顾。
 - 日志条目只保存摘要和引用，不复制完整聊天文本。
 - 地图移动统一走 `WorldEngine.moveToLocation()`；UI、输入路由和 `[move:]` 标记不能直接改写 `scene.currentLocation`，必须复用相邻地点校验、结局锁、移动消息和 `eventLog.movement`。
+- `factionsUpdate` 和 `locationUpdate` 必须同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
 - 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志丢失，避免重复刷经验或物资。

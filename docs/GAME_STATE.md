@@ -334,7 +334,7 @@ scene.evidenceLedger = [
 }
 ```
 
-移动状态统一由 `WorldEngine.moveToLocation()` 结算：只允许移动到当前地点 `connections` 中的相邻节点，结局后禁止移动，并由规则层写入当前地点、移动消息和 `eventLog.movement`。`MapView.moveTo()`、输入“我去某地”和 `[move:]` 标记只能委托该规则入口，不能直接改写 `scene.currentLocation`。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`connections`、`alertLevel`；变化会写入事件日志并提示地图/局势。
+移动状态统一由 `WorldEngine.moveToLocation()` 结算：只允许移动到当前地点 `connections` 中的相邻节点，结局后禁止移动，并由规则层写入当前地点、移动消息和 `eventLog.movement`。`MapView.moveTo()`、输入“我去某地”和 `[move:]` 标记只能委托该规则入口，不能直接改写 `scene.currentLocation`。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`connections`、`alertLevel`；单条补丁最多 20 条，场景最多 80 个地点，id/名称/描述/出口都会截断和去重；变化会写入事件日志并提示地图/局势。
 
 ### Item
 
@@ -667,6 +667,8 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
   leverage: ["处决权", "审讯记录"]
 }
 ```
+
+`factionsUpdate` 补丁可以新增或更新势力；单条补丁最多 20 条，场景最多 40 个势力，名称/描述/筹码会截断，筹码列表会去重，变化写入 `eventLog.progress` 并提示右侧局势。
 
 ### StoryArc
 
