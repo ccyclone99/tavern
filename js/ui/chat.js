@@ -922,10 +922,22 @@ const ChatUI = {
 
     _shouldBlockEndedSceneInput(route, scene) {
         if (State.isOOC || route?.kind === 'ooc' || route?.kind === 'help' || route?.kind === 'review') return false;
+        return this._isSceneEnded(scene);
+    },
+
+    _isSceneEnded(scene) {
+        if (!scene) return false;
         if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
             return !WorldEngine.isScenePlaying(scene);
         }
-        return !!scene?.gameState && scene.gameState !== 'playing';
+        return !!scene.gameState && scene.gameState !== 'playing';
+    },
+
+    _showEndedSceneToast(scene) {
+        const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+            ? WorldEngine.endedSceneMessage(scene)
+            : '当前冒险已经结束，不能继续改变游戏状态。';
+        if (typeof showToast !== 'undefined') showToast(message);
     },
 
     async _handleRoutedInput(route, originalText, scene) {
@@ -1145,6 +1157,11 @@ const ChatUI = {
     async preparePendingAction(text, intentMeta = null) {
         const scene = State.scene;
         if (!scene) return;
+        if (this._isSceneEnded(scene)) {
+            this._showEndedSceneToast(scene);
+            this._syncInputMode();
+            return;
+        }
         scene.pendingAction = ActionPlanner.create(scene, text);
         if (intentMeta) scene.pendingAction.intentMeta = JSON.parse(JSON.stringify(intentMeta));
         await State.saveCurrentSceneDebounced();
@@ -1163,6 +1180,11 @@ const ChatUI = {
         const scene = State.scene;
         const action = scene?.pendingAction;
         if (!scene || !action) return;
+        if (this._isSceneEnded(scene)) {
+            this._showEndedSceneToast(scene);
+            this._syncInputMode();
+            return;
+        }
 
         const msg = {
             id: 'msg_' + Date.now(),
@@ -1201,6 +1223,11 @@ const ChatUI = {
     async cancelPendingAction() {
         const scene = State.scene;
         if (!scene || !scene.pendingAction) return;
+        if (this._isSceneEnded(scene)) {
+            this._showEndedSceneToast(scene);
+            this._syncInputMode();
+            return;
+        }
         scene.pendingAction = null;
         await State.saveCurrentSceneDebounced();
         if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
@@ -1224,6 +1251,10 @@ const ChatUI = {
     async deleteMessage(idx) {
         const scene = State.scene;
         if (!scene) return;
+        if (this._isSceneEnded(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
         if (!confirm('确定删除这条消息吗？')) return;
         scene.messages.splice(idx, 1);
         this._renderedCount = 0;
@@ -1235,6 +1266,10 @@ const ChatUI = {
         if (State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
+        if (this._isSceneEnded(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
         // If clicking on a user message, truncate there; otherwise find the preceding user message
         const msg = scene.messages[idx];
         const userIdx = msg && msg.role === 'user' ? idx : (() => {

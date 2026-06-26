@@ -60,8 +60,9 @@ const ActionBar = {
     renderPendingAction() {
         const el = document.getElementById('pendingActionPreview');
         if (!el) return;
-        const action = State.scene?.pendingAction;
-        if (!action) {
+        const scene = State.scene;
+        const action = scene?.pendingAction;
+        if (!action || !this._isScenePlaying(scene)) {
             el.classList.add('hidden');
             el.innerHTML = '';
             return;
@@ -134,15 +135,16 @@ const ActionBar = {
     renderPendingCheck() {
         const el = document.getElementById('pendingCheckPreview');
         if (!el) return;
-        const check = State.scene?.pendingCheck;
-        if (!check) {
+        const scene = State.scene;
+        const check = scene?.pendingCheck;
+        if (!check || !this._isScenePlaying(scene)) {
             el.classList.add('hidden');
             el.innerHTML = '';
             return;
         }
 
         const totals = typeof WorldEngine !== 'undefined' && WorldEngine.getCheckTotals
-            ? WorldEngine.getCheckTotals(State.scene, check)
+            ? WorldEngine.getCheckTotals(scene, check)
             : {
                 mod: Number.isFinite(Number(check.mod)) ? Number(check.mod) : 0,
                 dc: Number.isFinite(Number(check.dc)) ? Number(check.dc) : 15,
@@ -164,10 +166,10 @@ const ActionBar = {
         const selectedItemIds = new Set(Array.isArray(check.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
         const selectedCompanionIds = new Set(Array.isArray(check.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
         const availableItems = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
-            ? WorldEngine.getAvailableCheckItems(State.scene, check)
+            ? WorldEngine.getAvailableCheckItems(scene, check)
             : (check.availableItemModifiers || []);
         const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
-            ? WorldEngine.getAvailableCompanionResources(State.scene, check)
+            ? WorldEngine.getAvailableCompanionResources(scene, check)
             : (check.availableCompanionModifiers || []);
         const isResourceSelected = (modifier, selectedIds) => {
             if (!modifier) return false;
@@ -269,16 +271,20 @@ const ActionBar = {
     },
 
     setCheckResourceSelected(kind, id, selected = null) {
-        const check = State.scene?.pendingCheck;
+        const scene = State.scene;
+        const check = scene?.pendingCheck;
         if (!check || !id) return { ok: false, message: '没有可切换的检定资源。' };
+        if (!this._isScenePlaying(scene)) {
+            return { ok: false, message: this._endedSceneMessage(scene) };
+        }
         const key = kind === 'companion' ? 'selectedCompanionResourceIds' : 'selectedItemModifierIds';
         if (!Array.isArray(check[key])) check[key] = [];
         const available = kind === 'companion'
             ? (typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
-                ? WorldEngine.getAvailableCompanionResources(State.scene, check)
+                ? WorldEngine.getAvailableCompanionResources(scene, check)
                 : (check.availableCompanionModifiers || []))
             : (typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
-                ? WorldEngine.getAvailableCheckItems(State.scene, check)
+                ? WorldEngine.getAvailableCheckItems(scene, check)
                 : (check.availableItemModifiers || []));
         const target = (available || []).find(m => String(m.id) === String(id));
         const aliases = new Set([String(id)]);
@@ -309,5 +315,17 @@ const ActionBar = {
             changed: alreadySelected !== shouldSelect,
             source: target?.source || target?.label || id
         };
+    },
+
+    _isScenePlaying(scene = State.scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) return WorldEngine.isScenePlaying(scene);
+        return !!scene && (!scene.gameState || scene.gameState === 'playing');
+    },
+
+    _endedSceneMessage(scene = State.scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage) {
+            return WorldEngine.endedSceneMessage(scene);
+        }
+        return '当前冒险已经结束，不能继续改变游戏状态。';
     }
 };

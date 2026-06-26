@@ -11,6 +11,10 @@ const GroupChat = {
         if (State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
+        if (!this._isScenePlaying(scene)) {
+            this._showEndedSceneNotice(scene);
+            return { ok: false, blocked: true, reason: 'scene_ended' };
+        }
         const chars = State.activeCharacters;
         if (chars.length === 0) {
             showToast('场景中还没有角色，请在左侧添加');
@@ -37,16 +41,17 @@ const GroupChat = {
 
         ChatUI.clearStreaming();
 
-        if (replyResult?.ok && !replyResult.pendingCheck && typeof WorldEngine !== 'undefined') {
+        if (replyResult?.ok && !replyResult.pendingCheck && this._isScenePlaying(scene) && typeof WorldEngine !== 'undefined') {
             const reason = this._inferTurnReason(scene);
             await WorldEngine.tickAfterPlayerTurn(reason);
         }
 
         // 教学钩子：玩家发消息后检测是否完成当前教学步骤（仅教学世界生效）
-        if (TutorialWorld.isCurrentScene()) {
+        if (this._isScenePlaying(scene) && TutorialWorld.isCurrentScene()) {
             try { await Tutorial.afterPlayerMessage(); }
             catch (e) { console.warn('[Tutorial] afterPlayerMessage 失败:', e); }
         }
+        return replyResult;
     },
 
     /**
@@ -55,6 +60,9 @@ const GroupChat = {
     async replyAs(char) {
         const scene = State.scene;
         const allChars = State.activeCharacters;
+        if (!this._isScenePlaying(scene)) {
+            return { ok: false, pendingCheck: false, blocked: true, reason: 'scene_ended' };
+        }
         ChatUI.appendStreamingMessage(char.id);
 
         let fullContent = '';
@@ -323,6 +331,13 @@ const GroupChat = {
         return !!scene && (!scene.gameState || scene.gameState === 'playing');
     },
 
+    _showEndedSceneNotice(scene = State.scene) {
+        const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+            ? WorldEngine.endedSceneMessage(scene)
+            : '当前冒险已经结束，不能继续改变游戏状态。';
+        if (typeof showToast !== 'undefined') showToast(message);
+    },
+
     /**
      * 处理 [quest:任务名|main或side|描述|目标1,目标2|奖励]
      */
@@ -529,7 +544,13 @@ const GroupChat = {
     async rollPendingCheck() {
         const scene = State.scene;
         const check = scene?.pendingCheck;
-        if (!scene || !check || State.isStreaming || scene.gameState !== 'playing') return;
+        if (!scene || !check || State.isStreaming) return;
+        if (!this._isScenePlaying(scene)) {
+            this._showEndedSceneNotice(scene);
+            ActionBar.renderPendingCheck();
+            ChatUI._syncInputMode?.();
+            return;
+        }
 
         const roll = Math.floor(Math.random() * 20) + 1;
         const totals = typeof WorldEngine !== 'undefined' && WorldEngine.getCheckTotals
@@ -811,6 +832,12 @@ const GroupChat = {
     async cancelPendingCheck() {
         const scene = State.scene;
         if (!scene || !scene.pendingCheck || State.isStreaming) return;
+        if (!this._isScenePlaying(scene)) {
+            this._showEndedSceneNotice(scene);
+            ActionBar.renderPendingCheck();
+            ChatUI._syncInputMode?.();
+            return;
+        }
         scene.pendingCheck = null;
         await State.saveCurrentSceneDebounced();
         ActionBar.renderPendingCheck();
