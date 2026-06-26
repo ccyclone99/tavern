@@ -469,7 +469,7 @@ scene.evidenceLedger = [
 ```
 
 `StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，并夹紧 `risk`/`progress`/`exposure` 到 0-100。
-`WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名，`WorldEngine.consumeStrategyItemResources()` 会扣除一次，并把物品 id/name 写入 `consumedItemResourceIds` 防止重复扣除。
+`WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名或物品 ID，`WorldEngine.consumeStrategyItemResources()` 会扣除一次，并把物品 id/name 写入 `consumedItemResourceIds` 防止重复扣除。标签和效果标签只用于展示可用筹码，不能单独触发扣除。
 
 计策创建、更新和放弃属于玩法状态变更，必须在 `scene.gameState` 为 `playing` 时才允许。结局后右侧计策面板只保留回顾和切换查看，不显示放弃或重新规划入口，也不能再通过 `<state_update>` 修改计策或消耗计策物品。
 

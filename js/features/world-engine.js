@@ -3578,6 +3578,7 @@ const WorldEngine = {
     consumeStrategyItemResources(scene, strategy, patch = {}) {
         if (!scene || !strategy || !Array.isArray(scene.inventory)) return [];
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return [];
         const inventoryCountBefore = scene.inventory.length;
         const phase = String(patch.phase || strategy.phase || '');
         const status = String(patch.status || strategy.status || '');
@@ -3672,8 +3673,7 @@ const WorldEngine = {
         const candidates = [
             resource.name,
             resource.itemId,
-            resource.label,
-            ...(resource.tags || [])
+            resource.id
         ].map(item => String(item || '').trim()).filter(Boolean);
         return candidates.some(candidate => {
             const lower = candidate.toLowerCase();
