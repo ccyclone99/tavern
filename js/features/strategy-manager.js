@@ -174,6 +174,7 @@ const StrategyManager = {
         let evidenceChanged = false;
         let revelationChanged = false;
         let flowGraphChanged = false;
+        let tensionChanged = false;
 
         // 1. strategies.create / update
         if (update.strategies && typeof update.strategies === 'object') {
@@ -379,15 +380,23 @@ const StrategyManager = {
         // 5. scene 字段（仅白名单）
         if (update.scene && typeof update.scene === 'object') {
             if (typeof update.scene.worldTensionDelta === 'number') {
-                const base = Number.isFinite(Number(scene.worldTension)) ? Number(scene.worldTension) : 0;
-                const delta = Number.isFinite(Number(update.scene.worldTensionDelta)) ? Number(update.scene.worldTensionDelta) : 0;
-                scene.worldTension = base + delta;
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.addWorldTension) {
+                    const result = WorldEngine.addWorldTension(scene, update.scene.worldTensionDelta, { source: '状态补丁', silent: true });
+                    tensionChanged = !!result.ok;
+                } else {
+                    const base = Number.isFinite(Number(scene.worldTension)) ? Number(scene.worldTension) : 0;
+                    const delta = Number.isFinite(Number(update.scene.worldTensionDelta)) ? Number(update.scene.worldTensionDelta) : 0;
+                    scene.worldTension = base + delta;
+                    tensionChanged = delta !== 0;
+                }
             }
             if (typeof update.scene.activeStrategyId === 'string') {
                 const target = scene.strategies.find(s => s.id === update.scene.activeStrategyId);
                 if (target) scene.activeStrategyId = update.scene.activeStrategyId;
             }
-            if (typeof WorldEngine !== 'undefined') WorldEngine.checkFailureStates(scene, { type: 'worldTension' });
+            if (typeof WorldEngine !== 'undefined' && !WorldEngine.addWorldTension) {
+                WorldEngine.checkFailureStates(scene, { type: 'worldTension' });
+            }
         }
 
         // 6. 任务/物品/地点的轻量更新（仍走现有系统，避免重复逻辑）
@@ -498,7 +507,7 @@ const StrategyManager = {
         if (discoveryChanged) SidebarRight.markTabNew('detail');
         if (itemAdded) SidebarRight.markTabNew('inventory');
         if (locAdded) SidebarRight.markTabNew('map');
-        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged) SidebarRight.markTabNew('situation');
+        if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged) SidebarRight.markTabNew('situation');
     },
 
     _buildStateUpdateItem(data, quantity) {

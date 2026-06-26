@@ -444,7 +444,7 @@ UI 要求：
 - 检定卡展示自动生效物品、可点选消耗品和可点选同伴协助。
 - 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，选中后随掷骰消耗。
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
-- 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
+- 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。
 - 检定卡中的可消耗物品支持 `check_bonus`、`dc_delta` 和 `risk_delta`；选中后才改变检定总值/DC/风险说明并扣除次数。
 - 带 `uses` 的消耗品用尽后移出背包；直接使用和检定投入使用同一个消耗入口。

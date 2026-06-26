@@ -192,7 +192,7 @@ AI 回复文本
 - 更新势力。
 - 更新角色关系、警觉、心情、秘密。
 - 更新局势时钟、剧情弧、NPC 日程和反制计划。
-- 更新 `worldTensionDelta` 和 `activeStrategyId`。
+- 通过 `WorldEngine.addWorldTension()` 应用 `worldTensionDelta`，并更新 `activeStrategyId`。
 - 更新已有任务目标/状态。
 - 添加物品。
 - 新增/更新地点。
@@ -219,6 +219,7 @@ AI 回复文本
 - `getCheckItemBonus()` / `getAvailableCheckItems()` / `consumeCheckItems()`：把自动物品修正和可用消耗品接入检定卡。
 - `applyEvidenceAdd()`：把探索取得的证据写入证据账本，同步线索链、知识账本、关键结论，并按证据首次取得发放少量经验和主题补给。
 - `addExperience()`：统一任务、剧情标记、探索、挑战和物品的经验结算；负责升级、属性点、最大生命和升级提示。
+- `addWorldTension()`：统一世界紧张度变化、事件日志、局势刷新和世界紧张度失败条件检查。
 - `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()`：处理背包直接使用、休息恢复与基础购买，复杂交易仍交给行动/AI 流程。
 - `createInventoryItemFromReward()` / `grantInventoryItem()` / `removeInventoryItem()` / `addOrMergeInventoryItem()` / `allocateStatPoint()`：把任务/AI 奖励物品语义化，统一物品堆叠、移除、装备槽清理，并处理属性点分配与 HP 重算。
 - `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。

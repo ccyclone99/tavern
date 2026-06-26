@@ -782,6 +782,34 @@ const WorldEngine = {
         return { ok: true, amount: actual, gold: scene.gold, before };
     },
 
+    addWorldTension(scene, amount, options = {}) {
+        if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        const numeric = Number(amount || 0);
+        const delta = Number.isFinite(numeric) ? this._clamp(Math.trunc(numeric), -100, 100) : 0;
+        if (delta === 0) return { ok: false, amount: 0, tension: Number(scene.worldTension || 0), message: '世界紧张度无变化。' };
+
+        const before = this._clamp(Number(scene.worldTension || 0), 0, 100);
+        scene.worldTension = this._clamp(before + delta, 0, 100);
+        const actual = scene.worldTension - before;
+        if (actual === 0) return { ok: false, amount: 0, tension: scene.worldTension, before, message: '世界紧张度无变化。' };
+
+        const source = String(options.source || options.reason || '局势变化').replace(/\s+/g, ' ').trim().slice(0, 120) || '局势变化';
+        const title = actual >= 0 ? '世界紧张度上升' : '世界紧张度下降';
+        const text = `${source}：世界紧张度 ${actual >= 0 ? '+' : ''}${actual}，当前 ${scene.worldTension}/100。`;
+        if (options.silent === true) {
+            if (options.record !== false) this.recordEvent(scene, { category: 'progress', title, text });
+        } else {
+            this.addSystemMessage(scene, `【${title}】${text}`, 'system');
+        }
+
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+        const failure = options.checkFailure === false
+            ? null
+            : this.checkFailureStates(scene, { type: 'worldTension', source, delta: actual });
+        return { ok: true, amount: actual, tension: scene.worldTension, before, failure };
+    },
+
     applyPlayerDamage(scene, amount, options = {}) {
         if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
         this.normalizeScene(scene);
@@ -2551,6 +2579,7 @@ const WorldEngine = {
         if (/购买|交易|金币|花费/.test(clean)) return 'economy';
         if (/物品|背包|使用物品|获得 .+包|获得 .+药|装备|卸下/.test(clean)) return 'inventory';
         if (/升级|经验|属性点/.test(clean)) return 'level';
+        if (/世界紧张度|紧张度|局势压力/.test(clean)) return 'progress';
         if (/生命|伤害|休息|恢复/.test(clean)) return 'survival';
         if (/移动|前往|地点|地图/.test(clean)) return 'movement';
         if (/失败|倒下|死亡|Game Over/.test(clean)) return 'failure';
@@ -2928,8 +2957,9 @@ const WorldEngine = {
                     : { changed: false };
                 if (result.changed) applied.push(`${clock.name || '局势时钟'} ${value >= 0 ? '+' : ''}${value}`);
             } else if (effect.type === 'world_tension') {
-                scene.worldTension = Math.max(0, Number(scene.worldTension || 0) + value);
-                applied.push(`世界紧张度 ${value >= 0 ? '+' : ''}${value}`);
+                const result = this.addWorldTension(scene, value, { source: `使用${item.name}`, silent: true });
+                if (result.ok) applied.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                else applied.push('世界紧张度无变化');
             }
         });
 
