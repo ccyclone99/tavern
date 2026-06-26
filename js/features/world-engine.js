@@ -1840,6 +1840,9 @@ const WorldEngine = {
     applyQuestUpdates(scene, updates, options = {}) {
         if (!scene || !Array.isArray(updates)) return { changed: false, results: [] };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { changed: false, results: [], blocked: true, message: this.endedSceneMessage(scene) };
+        }
         const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
         const results = [];
         let changed = false;
@@ -1960,6 +1963,9 @@ const WorldEngine = {
     applyClockUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return { changed: false, triggered: [] };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) {
+            return { changed: false, triggered: [], blocked: true, message: this.endedSceneMessage(scene) };
+        }
         let changed = false;
         const triggered = [];
 
@@ -2000,6 +2006,8 @@ const WorldEngine = {
 
     applyStoryArcUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
         if (!scene.currentSituation || typeof scene.currentSituation !== 'object') {
             scene.currentSituation = { recentRisks: [], recommendedActions: [] };
@@ -2069,6 +2077,7 @@ const WorldEngine = {
     applyStoryPhaseUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         const statuses = ['locked', 'active', 'completed', 'failed', 'bypassed'];
         let changed = false;
         updates.slice(0, 8).forEach(update => {
@@ -2453,6 +2462,7 @@ const WorldEngine = {
     applyCounterStrategyUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
@@ -2486,6 +2496,7 @@ const WorldEngine = {
     applyClueUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         const statuses = ['hidden', 'hinted', 'suspected', 'confirmed'];
         let changed = false;
         updates.slice(0, 12).forEach(update => {
@@ -2538,6 +2549,7 @@ const WorldEngine = {
     applyFailureStateUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         const statuses = ['armed', 'triggered', 'disabled'];
         let changed = false;
         updates.slice(0, 8).forEach(update => {
@@ -2575,6 +2587,7 @@ const WorldEngine = {
     applyChallengeUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
@@ -3180,6 +3193,7 @@ const WorldEngine = {
     applyRevelationUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
@@ -3209,6 +3223,7 @@ const WorldEngine = {
     applyFlowGraphUpdate(scene, update = {}) {
         if (!scene || !update || typeof update !== 'object') return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         let changed = false;
         if (Array.isArray(update.nodes)) {
             update.nodes.slice(0, 12).forEach(nodeData => {
@@ -3608,6 +3623,8 @@ const WorldEngine = {
 
     applyNpcAgendaUpdate(updates) {
         if (!Array.isArray(updates)) return false;
+        const scene = typeof State !== 'undefined' ? State.scene : null;
+        if (scene && !this.isScenePlaying(scene)) return false;
         let changed = false;
         updates.slice(0, 20).forEach(update => {
             if (!update || typeof update !== 'object' || !update.characterId) return;

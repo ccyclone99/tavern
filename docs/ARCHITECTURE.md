@@ -218,6 +218,8 @@ AI 回复文本
 - `tickAfterPlayerTurn()`：成功完成的玩家回合、休息、部分成功/失败后推进时钟并触发离屏行动；AI 回复失败/中断不推进，待掷检定会延后到掷骰结算后推进。
 - `filterMessagesForCharacter()`：按 `message.visibility` 过滤当前 NPC 可见历史。
 - `getCheckItemBonus()` / `getAvailableCheckItems()` / `consumeCheckItems()`：把自动物品修正和可用消耗品接入检定卡。
+
+所有会推进世界状态的 `apply*Update()` 入口在 `scene.gameState !== "playing"` 时必须 no-op；`StrategyManager` 负责入口拦截，`WorldEngine` 负责二次保护，避免外部 agent 或未来 UI 绕过结局锁。
 - `getStrategyItemResources()` / `consumeStrategyItemResources()`：把 `strategy_leverage` 物品接入计策 prompt/侧栏，并在计策执行或结算时扣除明确投入的可消耗物品。
 - `applyEvidenceAdd()`：把探索取得的证据写入证据账本，同步线索链、知识账本、关键结论，并按证据首次取得发放少量经验和主题补给；背包满时主题补给进入待领取队列，腾出格子后自动补发。
 - `addExperience()`：统一任务、剧情标记、探索、挑战和物品的经验结算；负责升级、属性点、最大生命和升级提示。
