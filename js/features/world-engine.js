@@ -4703,25 +4703,38 @@ const WorldEngine = {
         const evidenceTags = this._asStringList(unlock.evidenceTags || unlock.requiredEvidenceTags, 12);
         if (evidenceTags.length > 0) {
             const knownEvidenceTags = this._collectVisibleEvidenceTags(scene);
-            const missing = evidenceTags.filter(tag => !knownEvidenceTags.has(tag));
+            const missing = evidenceTags.filter(tag => !knownEvidenceTags.has(this._normalizeUnlockToken(tag)));
             if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}` };
         }
 
         const knowledgeTags = this._asStringList(unlock.knowledgeTags || unlock.discoveryTags, 12);
         if (knowledgeTags.length > 0) {
             const knownTags = this._collectKnowledgeTags(scene);
-            const missing = knowledgeTags.filter(tag => !knownTags.has(tag));
+            const missing = knowledgeTags.filter(tag => !knownTags.has(this._normalizeUnlockToken(tag)));
             if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}` };
         }
 
         const revelationIds = this._asStringList(unlock.revelationIds || unlock.revelations, 12);
         if (revelationIds.length > 0) {
-            const confirmed = new Set((scene.flowGraph?.revelations || [])
-                .filter(item => item && ['suspected', 'confirmed'].includes(item.status))
-                .map(item => String(item.id || item.title || ''))
-                .filter(Boolean));
-            const missing = revelationIds.filter(id => !confirmed.has(id));
-            if (missing.length > 0) return { ok: false, reason: `缺少关键结论：${missing.join('、')}` };
+            const requiredStatus = unlock.allowSuspectedRevelation === true
+                ? 'suspected'
+                : (['suspected', 'confirmed'].includes(unlock.revelationStatus) ? unlock.revelationStatus : 'confirmed');
+            const requiredRank = requiredStatus === 'suspected' ? 1 : 2;
+            const ranks = { suspected: 1, confirmed: 2 };
+            const revelationStatus = new Map();
+            (scene.flowGraph?.revelations || []).forEach(item => {
+                if (!item) return;
+                const rank = ranks[item.status] || 0;
+                [item.id, item.title, item.conclusion]
+                    .map(value => this._normalizeUnlockToken(value))
+                    .filter(Boolean)
+                    .forEach(key => revelationStatus.set(key, Math.max(revelationStatus.get(key) || 0, rank)));
+            });
+            const missing = revelationIds.filter(id => (revelationStatus.get(this._normalizeUnlockToken(id)) || 0) < requiredRank);
+            if (missing.length > 0) {
+                const statusText = requiredStatus === 'suspected' ? '发现' : '确认';
+                return { ok: false, reason: `缺少${statusText}关键结论：${missing.join('、')}`, requiredRevelationStatus: requiredStatus };
+            }
         }
 
         return { ok: true, reason: '', trust };
@@ -5067,17 +5080,21 @@ const WorldEngine = {
         const tags = new Set();
         (scene.evidenceLedger || [])
             .filter(item => item && item.visible !== false)
-            .forEach(item => this._asStringList(item.tags, 20).forEach(tag => tags.add(tag)));
+            .forEach(item => this._asStringList(item.tags, 20).forEach(tag => tags.add(this._normalizeUnlockToken(tag))));
         return tags;
     },
 
     _collectKnowledgeTags(scene) {
         const tags = new Set();
-        const addTags = item => this._asStringList(item?.tags, 20).forEach(tag => tags.add(tag));
+        const addTags = item => this._asStringList(item?.tags, 20).forEach(tag => tags.add(this._normalizeUnlockToken(tag)));
         (scene.knowledge?.discoveries || []).forEach(addTags);
         (scene.knowledge?.evidence || []).forEach(addTags);
         (scene.intel || []).forEach(addTags);
         return tags;
+    },
+
+    _normalizeUnlockToken(value) {
+        return String(value || '').trim().toLowerCase();
     },
 
     _asStringList(value, limit = 20) {
