@@ -3293,6 +3293,10 @@ const WorldEngine = {
         }
         challenge = scene.sceneChallenges.find(c => c.id === challengeId) || challenge;
         this._settleChallengeStatus(scene, challenge, challenge.lastReason);
+        if (!this.isScenePlaying(scene)) {
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
+            return { challenge, progressDelta, strainDelta, outcome, ended: true };
+        }
         if (scene.gameState === 'playing') this._activateNextChallenge(scene);
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
         return { challenge, progressDelta, strainDelta, outcome };
@@ -5997,7 +6001,9 @@ const WorldEngine = {
             challenge.status = 'completed';
             this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
             this._grantChallengeReward(scene, challenge);
+            if (!this.isScenePlaying(scene)) return;
             this._completeQuestObjectivesForChallenge(scene, challenge);
+            if (!this.isScenePlaying(scene)) return;
             this._completeLinkedPhaseIfReady(scene, challenge);
         } else if (challenge.status === 'completed') {
             if (Number(challenge.progress || 0) < Number(challenge.targetProgress || 1)) {
@@ -6007,7 +6013,9 @@ const WorldEngine = {
                 this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
             }
             this._grantChallengeReward(scene, challenge);
+            if (!this.isScenePlaying(scene)) return;
             this._completeQuestObjectivesForChallenge(scene, challenge);
+            if (!this.isScenePlaying(scene)) return;
             this._completeLinkedPhaseIfReady(scene, challenge);
         } else if (challenge.strain >= challenge.maxStrain && !['completed', 'failed', 'bypassed'].includes(challenge.status)) {
             challenge.status = 'failed';
@@ -6106,6 +6114,7 @@ const WorldEngine = {
 
     _completeQuestObjectiveBySupport(scene, support, reason = '') {
         if (!scene || !support || !Array.isArray(scene.quests)) return false;
+        if (!this.isScenePlaying(scene)) return false;
         const match = String(support).match(/^([^:]+):(\d+)$/);
         if (!match) return false;
         const [, questId, indexRaw] = match;
@@ -6120,6 +6129,7 @@ const WorldEngine = {
             quest.completedAt = Date.now();
             this.addSystemMessage(scene, `【任务完成：${quest.name}】`, 'system');
             this.grantQuestReward(scene, quest);
+            this.checkVictory(scene);
         }
         if (scene.questProgressGuards) {
             scene.questProgressGuards.autoAdvanceStreak = 0;
@@ -6171,10 +6181,14 @@ const WorldEngine = {
             ? ['onCritical', 'onSuccess']
             : (outcome === 'success' ? ['onSuccess'] : (outcome === 'partial' ? ['onPartial'] : ['onFailure']));
         const effects = keys.flatMap(key => Array.isArray(approach[key]) ? approach[key] : []);
-        effects.forEach(effect => this._applyChallengeEffectString(scene, challenge, approach, effect, check, outcome, effects));
+        for (const effect of effects) {
+            if (!this.isScenePlaying(scene)) break;
+            this._applyChallengeEffectString(scene, challenge, approach, effect, check, outcome, effects);
+        }
     },
 
     _applyChallengeEffectString(scene, challenge, approach, effect, check, outcome, siblingEffects = []) {
+        if (!this.isScenePlaying(scene)) return;
         const text = String(effect || '').trim();
         if (!text) return;
         const sep = text.indexOf(':');
