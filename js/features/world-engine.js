@@ -4259,6 +4259,7 @@ const WorldEngine = {
 
     consumeCheckItems(scene, modifiers = [], options = {}) {
         if (!scene || !Array.isArray(scene.inventory)) return false;
+        if (!this.isScenePlaying(scene)) return false;
         let consumed = false;
         const inventoryCountBefore = scene.inventory.length;
         const consumedKeys = new Set();
@@ -5059,6 +5060,7 @@ const WorldEngine = {
 
     consumeCompanionResources(scene, modifiers = []) {
         if (!scene || !Array.isArray(scene.companionResources)) return false;
+        if (!this.isScenePlaying(scene)) return false;
         let consumed = false;
         const notes = [];
         const consumedResourceIds = new Set();

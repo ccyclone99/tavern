@@ -348,7 +348,7 @@ scene.pendingAction = {
 - 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选或输入“投入资源名”，掷骰时才扣除 `uses` 或数量。
 - 可点选消耗品必须使用基于物品 `id` 或名称的稳定资源 ID；背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
 - `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选或输入“请某人帮忙/投入协助名”，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。同一次检定结算中，同一个 `resourceId` 即使因旧存档或 UI 异常重复出现在 modifiers，也只能扣除一次 uses 和代价。`unlock.revelationIds` 默认要求对应结论已 `confirmed`，不能因 `suspected` 过早公开同伴底牌；需要怀疑阶段解锁时必须显式声明。
-- 检定结算期间，如果消耗品腾出背包格子，已完成任务的待领物品奖励必须延后到当前检定的挑战、反制和后果结算结束后再重试；如果同伴协助、时钟或失败条件在中途把 `gameState` 变为 `defeated/victorious`，后续挑战奖励、反制解除、后果解除和回合推进必须停止。
+- 检定结算期间，如果消耗品腾出背包格子，已完成任务的待领物品奖励必须延后到当前检定的挑战、反制和后果结算结束后再重试；如果同伴协助、时钟或失败条件在中途把 `gameState` 变为 `defeated/victorious`，后续挑战奖励、反制解除、后果解除和回合推进必须停止。`consumeCheckItems()` 和 `consumeCompanionResources()` 在非 `playing` 场景必须 no-op，防止未来 UI 或外部调用在结局后继续扣资源。
 
 ### 4.8 计策与情报资源
 
