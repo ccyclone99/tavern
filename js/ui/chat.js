@@ -334,6 +334,7 @@ const ChatUI = {
             if (!key || chips.some(c => c.text === key)) return;
             chips.push(chip);
         };
+        this._buildPrepSuggestionChips(scene).forEach(add);
         const situation = scene && typeof WorldEngine !== 'undefined' && WorldEngine.getCurrentSituation
             ? WorldEngine.getCurrentSituation(scene)
             : null;
@@ -356,7 +357,132 @@ const ChatUI = {
         });
         add({ label: '制定计划', text: '我想制定一个计划：', behavior: 'fill' });
         add({ label: '问下一步', text: '我现在该干什么？', behavior: 'fill' });
-        return chips.slice(0, 4);
+        return chips.slice(0, 5);
+    },
+
+    _buildPrepSuggestionChips(scene) {
+        if (!scene || (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying && !WorldEngine.isScenePlaying(scene))) {
+            return [];
+        }
+        const chips = [];
+        const add = chip => {
+            if (!chip?.text || chips.some(c => c.text === chip.text)) return;
+            chips.push(chip);
+        };
+        const statSuggestion = this._suggestStatAllocation(scene);
+        if (statSuggestion) {
+            add({
+                label: `${statSuggestion.label}+1`,
+                text: `加一点${statSuggestion.label}`,
+                behavior: 'fill',
+                primary: true
+            });
+        }
+
+        const hp = Number(scene.playerHp ?? scene.playerMaxHp ?? 10);
+        const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
+        const wounded = hp < maxHp;
+        const healingItem = wounded ? this._findHealingItem(scene) : null;
+        if (healingItem?.name) {
+            add({ label: `使用${this._shortChipLabel(healingItem.name)}`, text: `使用${healingItem.name}`, behavior: 'fill' });
+        } else if (wounded) {
+            add({ label: '休息恢复', text: '休息一下', behavior: 'fill' });
+        }
+
+        const equipItem = this._findEquippableItem(scene);
+        if (equipItem?.name) {
+            add({ label: `装备${this._shortChipLabel(equipItem.name)}`, text: `装备${equipItem.name}`, behavior: 'fill' });
+        }
+
+        const usableItem = this._findDirectUsableItem(scene, healingItem);
+        if (usableItem?.name) {
+            add({ label: `使用${this._shortChipLabel(usableItem.name)}`, text: `使用${usableItem.name}`, behavior: 'fill' });
+        }
+
+        if (this._shouldSuggestSupplyPurchase(scene)) {
+            add({ label: '购买补给', text: '购买补给', behavior: 'fill' });
+        }
+        return chips.slice(0, 3);
+    },
+
+    _suggestStatAllocation(scene) {
+        if (Number(scene?.attrPoints || 0) <= 0) return null;
+        const statLabels = {
+            strength: '力量',
+            dexterity: '敏捷',
+            constitution: '体质',
+            intelligence: '智力',
+            wisdom: '感知',
+            charisma: '魅力'
+        };
+        const stats = scene.playerStats || {};
+        const eligible = key => statLabels[key] && Number(stats[key] || 10) < 20;
+        const activeChallenge = typeof WorldEngine !== 'undefined' && WorldEngine.getActiveChallenge
+            ? WorldEngine.getActiveChallenge(scene)
+            : null;
+        const approachStat = (activeChallenge?.approaches || [])
+            .map(a => a?.stat)
+            .find(eligible);
+        if (approachStat) return { key: approachStat, label: statLabels[approachStat] };
+        const priority = ['dexterity', 'intelligence', 'wisdom', 'charisma', 'constitution', 'strength'];
+        const lowest = priority
+            .filter(eligible)
+            .sort((a, b) => Number(stats[a] || 10) - Number(stats[b] || 10))[0];
+        return lowest ? { key: lowest, label: statLabels[lowest] } : null;
+    },
+
+    _findHealingItem(scene) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && this._isDirectUsableItem(item))
+            .find(item => this._itemHasEffect(item, 'heal') || this._itemLooksLikeHealing(item));
+    },
+
+    _findDirectUsableItem(scene, excludedItem = null) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && item !== excludedItem && this._isDirectUsableItem(item))
+            .find(item => !this._itemHasEffect(item, 'check_bonus'));
+    },
+
+    _findEquippableItem(scene) {
+        return (scene?.inventory || [])
+            .filter(item => item?.name && !item.equipped)
+            .filter(item => typeof WorldEngine !== 'undefined' && WorldEngine.canEquipInventoryItem?.(item))
+            .sort((a, b) => this._equipmentPriority(a) - this._equipmentPriority(b))[0];
+    },
+
+    _isDirectUsableItem(item) {
+        if (!item) return false;
+        if (item.uses !== undefined && Number(item.uses || 0) <= 0) return false;
+        if (Number(item.quantity || 1) <= 0) return false;
+        return typeof WorldEngine !== 'undefined' && WorldEngine.canUseInventoryItem?.(item);
+    },
+
+    _itemHasEffect(item, type) {
+        return Array.isArray(item?.effects) && item.effects.some(effect => effect?.type === type);
+    },
+
+    _itemLooksLikeHealing(item) {
+        return /药|医疗|治疗|绷带|急救|回复|恢复/.test(String(item?.name || '') + String(item?.description || ''));
+    },
+
+    _equipmentPriority(item) {
+        const type = String(item?.type || '');
+        if (type === 'weapon') return 0;
+        if (type === 'armor') return 1;
+        return 2;
+    },
+
+    _shouldSuggestSupplyPurchase(scene) {
+        if (!scene || Number(scene.gold || 0) < 15) return false;
+        const inventory = scene.inventory || [];
+        if (inventory.length >= 200) return false;
+        const readyConsumables = inventory.filter(item =>
+            item?.type === 'consumable' &&
+            Number(item.uses ?? item.quantity ?? 0) > 0 &&
+            Array.isArray(item.effects) &&
+            item.effects.some(effect => ['check_bonus', 'heal'].includes(effect?.type))
+        );
+        return readyConsumables.length < 2;
     },
 
     _buildTutorialSuggestionChips(scene) {
