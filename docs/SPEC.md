@@ -646,6 +646,14 @@ Prompt 必须区分以下块：
 
 作者调试入口可保留，但应明显标记为“编辑/剧透”，并默认隐藏。运行时通过 `State.canShowDebugSpoilers()` 判断是否显示。
 
+作者/调试剧透开关开启方式：
+
+- URL 查询参数：`?debug=1` 或 `?spoilers=1`。
+- 本地开关：`localStorage.setItem('tavern_show_character_spoilers', '1')` 或 `localStorage.setItem('tavern_debug', '1')`。
+- 运行时设置：`State.settings.debugMode === true` 或 `State.settings.showCharacterSpoilers === true`。
+
+发布给普通玩家时默认不设置上述开关。
+
 ### 7.2 玩家知识账本
 
 新增右侧 tab 或并入世界书。当前基础实现采用右侧“线索”tab：
@@ -801,5 +809,4 @@ Prompt 必须区分以下块：
 - 高风险行动是否必须二次确认，还是只在特定 DC 以上确认？
 - 隐藏时钟是否应完全不可见，还是以模糊提示显示？
 - AI 关系分析是否继续每轮调用，还是改为事件触发？
-- 调试模式如何开启完整角色卡和隐藏状态？
 - 发布版是否替换第三方 IP 风格预设为原创世界？
