@@ -3,7 +3,7 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 7,
+    version: 8,
 
     ensure(scene) {
         if (!scene) return scene;
@@ -33,6 +33,7 @@ const RunRecorder = {
         const completedAt = Date.now();
         const startedAt = scene.createdAt || scene.messages?.[0]?.timestamp || completedAt;
         const keyMoments = this._buildKeyMoments(scene);
+        const transcript = this._buildTranscript(scene);
         const quests = (scene.quests || []).map(q => ({
             id: q.id || '',
             name: q.name || '任务',
@@ -116,6 +117,8 @@ const RunRecorder = {
             summary: this._summary(scene, endingMessage, keyMoments, phaseSummaries),
             phaseSummaries,
             keyMoments,
+            transcript,
+            transcriptCount: transcript.length,
             quests,
             discoveries,
             challenges,
@@ -225,6 +228,40 @@ const RunRecorder = {
                 return true;
             })
             .slice(-14);
+    },
+
+    _buildTranscript(scene) {
+        const playerName = scene?.playerPersona?.name || scene?.userName || '玩家';
+        const characterName = id => {
+            if (!id || typeof State === 'undefined' || !Array.isArray(State.characters)) return '';
+            return State.characters.find(c => c && c.id === id)?.name || '';
+        };
+        return (scene.messages || [])
+            .map((m, idx) => {
+                const text = this._clean(m.content || '').slice(0, 2000);
+                if (!text) return null;
+                const check = m.checkData || null;
+                const speaker = m.role === 'user'
+                    ? playerName
+                    : (m.role === 'assistant' ? (characterName(m.characterId) || '主持人') : this._momentTitle(m));
+                return {
+                    index: idx + 1,
+                    id: m.id || '',
+                    role: m.role || '',
+                    type: m.type || 'message',
+                    speaker,
+                    text,
+                    timestamp: m.timestamp || 0,
+                    check: check ? {
+                        statName: check.statName || '属性',
+                        total: Number(check.total || 0),
+                        dc: Number(check.dc || 0),
+                        outcome: check.resultLabel || check.outcome || ''
+                    } : null
+                };
+            })
+            .filter(Boolean)
+            .slice(-300);
     },
 
     _momentTitle(msg) {

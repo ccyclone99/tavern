@@ -252,7 +252,7 @@
 
 剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
-结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定和公开时钟。右侧“局势”面板会展示这份冒险回顾。
+结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。右侧“局势”面板会展示这份冒险回顾，完整对话默认折叠，供玩家需要时展开复盘。
 
 ### SceneChallenge / Evidence
 

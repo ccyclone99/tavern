@@ -428,6 +428,22 @@ const SidebarRight = {
         const checks = (record.checks || []).slice(-6).map(c => `
             <span>${Renderer.escapeHtml(c.statName || '检定')} ${c.total || 0}/DC${c.dc || 0} ${Renderer.escapeHtml(c.outcome || '')}</span>
         `).join('');
+        const transcriptEntries = (record.transcript || []).map(entry => {
+            const check = entry.check
+                ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}</small>`
+                : '';
+            return `<li class="run-record-transcript-entry run-record-transcript-${Renderer.escapeAttr(entry.type || 'message')}">
+                <strong>${Renderer.escapeHtml(entry.speaker || '记录')}<em>${Renderer.escapeHtml(this._eventTimeText(entry.timestamp))}</em></strong>
+                <p>${Renderer.escapeHtml(entry.text || '')}</p>
+                ${check}
+            </li>`;
+        }).join('');
+        const transcript = transcriptEntries
+            ? `<details class="run-record-transcript">
+                <summary>完整对话记录（${record.transcriptCount || (record.transcript || []).length}条）</summary>
+                <ol>${transcriptEntries}</ol>
+            </details>`
+            : '';
         return `
             <div class="situation-section run-record run-record-${outcomeCls}">
                 <div class="run-record-head">
@@ -453,8 +469,21 @@ const SidebarRight = {
                 ${checks ? `<div class="situation-tags run-record-tags">${checks}</div>` : ''}
                 ${discoveries ? `<div class="situation-tags run-record-tags">${discoveries}</div>` : ''}
                 ${clocks ? `<div class="situation-tags run-record-tags">${clocks}</div>` : ''}
+                ${transcript}
             </div>
         `;
+    },
+
+    _eventTimeText(timestamp) {
+        if (!timestamp) return '';
+        const d = new Date(timestamp);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     },
 
     _buildEventLogHtml(events) {
