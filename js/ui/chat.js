@@ -727,8 +727,21 @@ const ChatUI = {
                 await GroupChat.cancelPendingCheck();
                 this._syncInputMode();
                 return true;
+            case 'check_resource':
+                this._clearInput();
+                if (typeof ActionBar !== 'undefined' && ActionBar.setCheckResourceSelected) {
+                    const result = ActionBar.setCheckResourceSelected(route.meta.resourceKind, route.meta.resourceId, route.meta.selected);
+                    if (result.ok) {
+                        await State.saveCurrentSceneDebounced();
+                        showToast(`${result.selected ? '已投入' : '已取消投入'}：${result.source || route.meta.source}`);
+                    } else {
+                        showToast(result.message || '无法调整检定资源');
+                    }
+                }
+                this._syncInputMode();
+                return true;
             case 'blocked_by_check':
-                showToast('请先输入“掷骰”完成检定，或输入“取消”放弃');
+                showToast('请先投入资源、输入“掷骰”完成检定，或输入“取消”放弃');
                 if (typeof ActionBar !== 'undefined') ActionBar.renderPendingCheck();
                 this._syncInputMode();
                 return true;

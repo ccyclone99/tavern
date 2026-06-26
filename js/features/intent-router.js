@@ -9,7 +9,7 @@ const IntentRouter = {
         if (!raw) return { kind: 'empty' };
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'review_command' };
-        if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized);
+        if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
         if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const statAllocation = this.matchStatAllocation(raw);
         if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
@@ -272,7 +272,7 @@ const IntentRouter = {
             : (scene?.pendingAction ? 'pending_action' : 'idle');
         if (state === 'pending_check') {
             const check = scene.pendingCheck;
-            return `当前：等待你完成${check.statName || '属性'}检定。输入“掷骰”继续，或输入“取消”放弃这次检定。`;
+            return `当前：等待你完成${check.statName || '属性'}检定。输入“投入资源名”选择物品或同伴协助，输入“不用资源名”取消投入，输入“掷骰”继续，或输入“取消”放弃这次检定。`;
         }
         if (state === 'pending_action') {
             const action = scene.pendingAction;
@@ -291,12 +291,55 @@ const IntentRouter = {
             : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”“卖掉短剑”“加一点敏捷”。';
     },
 
-    _routePendingCheck(raw, normalized) {
+    _routePendingCheck(raw, normalized, scene) {
         if (this._isCancel(normalized)) return { kind: 'cancel_check', text: raw, reason: 'pending_check_cancel' };
         if (this._isRoll(normalized)) return { kind: 'roll_check', text: raw, reason: 'pending_check_roll' };
         if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'pending_check_review' };
         if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'pending_check_help' };
+        const resource = this.matchPendingCheckResource(raw, scene);
+        if (resource) return { kind: 'check_resource', text: raw, meta: resource, reason: 'pending_check_resource' };
         return { kind: 'blocked_by_check', text: raw, reason: 'pending_check_blocks_text' };
+    },
+
+    matchPendingCheckResource(raw, scene) {
+        const check = scene?.pendingCheck;
+        if (!check) return null;
+        const normalized = this._normalize(raw).replace(/\s+/g, '');
+        if (!normalized) return null;
+        const availableItems = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCheckItems
+            ? WorldEngine.getAvailableCheckItems(scene, check)
+            : (check.availableItemModifiers || []);
+        const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
+            ? WorldEngine.getAvailableCompanionResources(scene, check)
+            : (check.availableCompanionModifiers || []);
+        const termsFor = modifier => {
+            const rawTerms = [
+                modifier.source,
+                modifier.label,
+                modifier.itemId,
+                modifier.resourceId,
+                ...(String(modifier.source || '').split(/[的：:()（）,，、\s]+/))
+            ];
+            return rawTerms
+                .map(term => this._normalize(term).replace(/\s+/g, ''))
+                .filter(term => term.length >= 2);
+        };
+        const candidates = [
+            ...availableItems.map(modifier => ({ kind: 'item', modifier, terms: termsFor(modifier) })),
+            ...availableCompanions.map(modifier => ({ kind: 'companion', modifier, terms: termsFor(modifier) }))
+        ].sort((a, b) => String(b.modifier.source || '').length - String(a.modifier.source || '').length);
+        const matched = candidates.find(candidate =>
+            candidate.terms.some(term => normalized.includes(term))
+        );
+        if (!matched) return null;
+        const deselectWords = ['不用', '不使用', '取消投入', '取消使用', '撤回', '移除', '去掉', '别用'];
+        const selected = !deselectWords.some(word => normalized.includes(this._normalize(word).replace(/\s+/g, '')));
+        return {
+            resourceKind: matched.kind,
+            resourceId: matched.modifier.id,
+            source: matched.modifier.source || matched.modifier.label || '资源',
+            selected
+        };
     },
 
     _routePendingAction(raw, normalized) {

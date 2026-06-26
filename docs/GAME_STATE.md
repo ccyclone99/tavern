@@ -581,7 +581,7 @@ scene.evidenceLedger = [
 }
 ```
 
-`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源后再点击“掷骰”或在主输入框输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。消耗品资源 ID 必须基于物品 `id` 或名称保持稳定；旧存档中的 `item:xxx:序号` 形式可通过 `legacyIds` 或旧 ID 前缀兼容识别，但新选择应写入稳定 ID。
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源，或在主输入框输入“投入资源名 / 不用资源名 / 请某人帮忙”后，再点击“掷骰”或输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。消耗品资源 ID 必须基于物品 `id` 或名称保持稳定；旧存档中的 `item:xxx:序号` 形式可通过 `legacyIds` 或旧 ID 前缀兼容识别，但新选择应写入稳定 ID。
 
 检定结算是一个有序事务：先写入检定结果和资源消耗，再结算挑战、反制与持续后果，最后才允许因背包腾位而静默重试已完成任务的待领奖励。任一步骤把 `scene.gameState` 改为 `defeated` 或 `victorious` 后，后续挑战奖励、反制解除、后果解除、补领奖励和回合推进都必须停止。
 

@@ -327,7 +327,7 @@ scene.pendingAction = {
 `[check:]` 现在会生成交互式检定卡：
 
 1. AI 或规则在行动上下文中提出检定。
-2. UI 显示属性、DC、风险、自动加成、可点选消耗品和可点选同伴协助。
+2. UI 显示属性、DC、风险、自动加成、可点选/可输入投入的消耗品和同伴协助。
 3. 玩家点击“掷骰”，或在主输入框输入“掷骰”。
 4. 系统生成结果。
 5. AI 根据结果进行 fail-forward 叙事。
@@ -345,9 +345,9 @@ scene.pendingAction = {
 检定物品语义：
 
 - 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
-- 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选，掷骰时才扣除 `uses` 或数量。
+- 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选或输入“投入资源名”，掷骰时才扣除 `uses` 或数量。
 - 可点选消耗品必须使用基于物品 `id` 或名称的稳定资源 ID；背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
-- `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。
+- `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选或输入“请某人帮忙/投入协助名”，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。
 - 检定结算期间，如果消耗品腾出背包格子，已完成任务的待领物品奖励必须延后到当前检定的挑战、反制和后果结算结束后再重试；如果同伴协助、时钟或失败条件在中途把 `gameState` 变为 `defeated/victorious`，后续挑战奖励、反制解除、后果解除和回合推进必须停止。
 
 ### 4.8 计策与情报资源
@@ -443,8 +443,8 @@ item.tags = ["工具", "伪造", "可疑"];
 
 UI 要求：
 
-- 检定卡展示自动生效物品、可点选消耗品和可点选同伴协助。
-- 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，选中后随掷骰消耗。
+- 检定卡展示自动生效物品、可点选/可输入投入的消耗品和同伴协助。
+- 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，也支持主输入框“投入资源名/不用资源名”，选中后随掷骰消耗。
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
 - 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。

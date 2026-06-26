@@ -248,7 +248,7 @@ const ActionBar = {
             ${itemModsHtml ? `<div class="pending-action-factor-row"><span class="pending-action-factor-label">自动生效</span><div class="pending-action-factors">${itemModsHtml}</div></div>` : ''}
             ${availableItemsHtml ? `<div class="pending-action-factor-row pending-check-available"><span class="pending-action-factor-label">物品</span><div class="pending-resource-list">${availableItemsHtml}</div></div>` : ''}
             ${availableCompanionsHtml ? `<div class="pending-action-factor-row pending-check-available"><span class="pending-action-factor-label">同伴</span><div class="pending-resource-list">${availableCompanionsHtml}</div></div>` : ''}
-            ${availableItemsHtml || availableCompanionsHtml ? `<div class="pending-action-note pending-check-resource-note">点击资源投入本次检定；掷骰时才会消耗。</div>` : ''}
+            ${availableItemsHtml || availableCompanionsHtml ? `<div class="pending-action-note pending-check-resource-note">点击资源或输入“投入资源名”用于本次检定；掷骰时才会消耗。</div>` : ''}
             ${check.stakes ? `<p class="pending-check-stakes">${Renderer.escapeHtml(check.stakes)}</p>` : ''}
             ${risksHtml ? `<ul class="pending-action-risks pending-check-risks">${risksHtml}</ul>` : ''}
             <div class="pending-action-actions">
@@ -265,8 +265,12 @@ const ActionBar = {
     },
 
     toggleCheckResource(kind, id) {
+        return this.setCheckResourceSelected(kind, id, null);
+    },
+
+    setCheckResourceSelected(kind, id, selected = null) {
         const check = State.scene?.pendingCheck;
-        if (!check || !id) return;
+        if (!check || !id) return { ok: false, message: '没有可切换的检定资源。' };
         const key = kind === 'companion' ? 'selectedCompanionResourceIds' : 'selectedItemModifierIds';
         if (!Array.isArray(check[key])) check[key] = [];
         const available = kind === 'companion'
@@ -295,8 +299,15 @@ const ActionBar = {
         };
         const alreadySelected = check[key].some(matchesTarget);
         check[key] = check[key].filter(value => !matchesTarget(value));
-        if (!alreadySelected) check[key].push(String(target?.id || id));
+        const shouldSelect = selected === null ? !alreadySelected : selected === true;
+        if (shouldSelect) check[key].push(String(target?.id || id));
         State.saveCurrentSceneDebounced();
         this.renderPendingCheck();
+        return {
+            ok: true,
+            selected: shouldSelect,
+            changed: alreadySelected !== shouldSelect,
+            source: target?.source || target?.label || id
+        };
     }
 };

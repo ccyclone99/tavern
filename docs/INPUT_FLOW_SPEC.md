@@ -154,7 +154,7 @@ Button: 发送
 
 - idle：观察四周、询问当前对象或在场 NPC、制定计划、我该做什么。
 - pending_action：执行、取消、说明风险、改写行动。
-- pending_check：掷骰、取消检定、解释检定。
+- pending_check：投入资源名、不用资源名、掷骰、取消检定、解释检定。
 
 示例：
 
@@ -803,11 +803,16 @@ NPC 不应抢答系统帮助问题，除非它是教程导师。
 输入：
 
 ```text
+投入应急医疗包
+不用应急医疗包
+请塞拉斯帮忙
 掷骰
 ```
 
 期望：
 
+- 资源输入本地更新 `selectedItemModifierIds` / `selectedCompanionResourceIds`，不进入 AI 回复。
+- “不用/取消投入/撤回”类输入会取消对应资源投入。
 - 直接调用 `rollPendingCheck()`。
 - 插入检定结果卡。
 - AI 根据结果续写。
