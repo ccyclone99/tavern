@@ -334,7 +334,7 @@ scene.evidenceLedger = [
 }
 ```
 
-`MapView.moveTo()` 只允许移动到当前地点 `connections` 中的相邻节点。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`connections`、`alertLevel`；变化会写入事件日志并提示地图/局势。
+移动状态统一由 `WorldEngine.moveToLocation()` 结算：只允许移动到当前地点 `connections` 中的相邻节点，结局后禁止移动，并由规则层写入当前地点、移动消息和 `eventLog.movement`。`MapView.moveTo()`、输入“我去某地”和 `[move:]` 标记只能委托该规则入口，不能直接改写 `scene.currentLocation`。`locationUpdate` 补丁可以新增地点或更新 `name`、`description`、`connections`、`alertLevel`；变化会写入事件日志并提示地图/局势。
 
 ### Item
 

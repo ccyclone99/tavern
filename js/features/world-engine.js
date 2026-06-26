@@ -1166,6 +1166,53 @@ const WorldEngine = {
         return { ok: actual > 0, amount: actual, hp: scene.playerHp, maxHp, before };
     },
 
+    moveToLocation(scene, locId, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        if (!Array.isArray(scene.locations)) return { ok: false, message: '当前世界暂无地图。' };
+
+        const targetId = String(locId || '').trim();
+        const loc = scene.locations.find(item => item && item.id === targetId);
+        if (!loc) return { ok: false, message: '地点不存在。' };
+        if (scene.currentLocation === targetId) return { ok: false, duplicate: true, loc, message: `已经在 ${loc.name || '该地点'}。` };
+
+        const curLoc = scene.locations.find(item => item && item.id === scene.currentLocation);
+        const connections = Array.isArray(curLoc?.connections) ? curLoc.connections.map(String) : [];
+        const reachable = !curLoc || options.ignoreReachability === true || connections.includes(targetId);
+        if (!reachable) return { ok: false, blocked: true, loc, message: `无法直接到达 ${loc.name || targetId}` };
+
+        scene.currentLocation = targetId;
+        if (!Array.isArray(scene.messages)) scene.messages = [];
+        const timestamp = Date.now();
+        const msg = {
+            id: `msg_${timestamp}_${Math.random().toString(36).slice(2, 6)}`,
+            role: 'user',
+            content: `【移动到 ${loc.name || targetId}${loc.description ? ` — ${loc.description}` : ''}】`,
+            type: 'action',
+            visibility: { public: true, locationId: targetId, participants: [], overheardBy: [] },
+            timestamp
+        };
+        if (options.message !== false) scene.messages.push(msg);
+        this.recordEvent(scene, {
+            category: 'movement',
+            title: '移动地点',
+            text: `移动到 ${loc.name || targetId}`,
+            messageId: options.message !== false ? msg.id : '',
+            timestamp
+        });
+
+        if (options.notify !== false && typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded && options.message !== false) {
+            ChatUI.onMessageAdded(msg);
+        }
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderMap?.();
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('map');
+        }
+        return { ok: true, loc, msg: options.message !== false ? msg : null };
+    },
+
     addQuest(scene, questData = {}, options = {}) {
         if (!scene) return { ok: false, message: '没有可用场景。' };
         this.normalizeScene(scene);

@@ -67,9 +67,10 @@ ChatUI 收集输入
 
 ```text
 MapView.moveTo(locId)
-  -> 校验目标是否在当前地点 connections
-  -> scene.currentLocation = locId
-  -> 插入【移动到 ...】 user/action 消息
+  -> WorldEngine.moveToLocation()
+  -> 规则层校验相邻地点/结局锁
+  -> 规则层更新 scene.currentLocation
+  -> 规则层插入【移动到 ...】 user/action 消息并写 eventLog.movement
   -> GroupChat.handleLocationMove()
   -> PromptBuilder.buildDMNarration()
   -> API.stream()

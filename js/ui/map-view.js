@@ -82,53 +82,25 @@ const MapView = {
         if (this._moving || State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
-        if (typeof WorldEngine !== 'undefined' && !WorldEngine.isScenePlaying?.(scene)) {
-            showToast(WorldEngine.endedSceneMessage?.(scene) || '当前冒险已经结束。');
-            return;
-        }
-        const loc = scene.locations.find(l => l.id === locId);
-        if (!loc) return;
-
-        // 已在目标地点，无需移动
-        if (scene.currentLocation === locId) return;
-
-        // 检查是否可到达（当前地点的连接点或直接点击）
-        const curLoc = scene.locations.find(l => l.id === scene.currentLocation);
-        const reachable = !curLoc || curLoc.connections.includes(locId);
-        if (!reachable) {
-            showToast(`无法直接到达 ${loc.name}`);
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.moveToLocation) {
+            console.warn('[MapView] WorldEngine.moveToLocation 不可用，跳过移动');
+            showToast('移动系统不可用。');
             return;
         }
 
         this._moving = true;
         try {
-            // 更新当前地点
-            scene.currentLocation = locId;
+            const result = WorldEngine.moveToLocation(scene, locId);
+            if (!result.ok) {
+                if (!result.duplicate) showToast(result.message || '无法移动到该地点。');
+                return;
+            }
+            const loc = result.loc;
             await State.saveCurrentScene();
 
-            // 插入移动消息
-            const msg = {
-                id: 'msg_' + Date.now(),
-                role: 'user',
-                content: `【移动到 ${loc.name} — ${loc.description}】`,
-                type: 'action',
-                timestamp: Date.now()
-            };
-            scene.messages.push(msg);
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
-                WorldEngine.recordEvent(scene, {
-                    category: 'movement',
-                    title: '移动地点',
-                    text: `移动到 ${loc.name}`,
-                    messageId: msg.id,
-                    timestamp: msg.timestamp
-                });
-            }
-            ChatUI.onMessageAdded(msg);
-
             this.render();
-            QuestTracker.render();
-            SidebarRight.renderMap();
+            if (typeof QuestTracker !== 'undefined') QuestTracker.render?.();
+            if (typeof SidebarRight !== 'undefined') SidebarRight.renderMap?.();
             showToast(`已到达 ${loc.name}`);
 
             // 触发 AI 描述新地点
