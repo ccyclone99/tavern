@@ -163,6 +163,7 @@ Observer 不参与剧情裁决，除非模拟明确把它设为仲裁器。
 - `characterUpdates` 和 `npcAgendaUpdate` 优先使用 `characterId`，也支持当前场景内唯一角色名（`characterName/name/actorName/targetName`）匹配；外部模拟需要复刻重名跳过规则，避免误改。
 - `discoveryUpdate` 支持同样的唯一角色名匹配，并可用该 NPC 下唯一 `factId/factTitle/factType/hint/truth` 解锁隐藏档案；不唯一必须跳过。
 - `questsUpdate` 可用唯一任务名和唯一目标文本定位，但外部模拟仍必须复刻任务推进闸门，不能把名字匹配当作完成依据。
+- `clueUpdate` 和 `revelationUpdate` 可用唯一标题或结论文本定位；不唯一必须跳过，找不到且有明确标题/结论时才可创建新条目。
 - `[move:]` 按地点名匹配（支持部分匹配），外部模拟最好使用精确名称。
 - 动态 `[new_char:]` 支持扩展字段并会自动补齐 `creed/redLines/values/motives/fears/secrets/leverage/profile.hiddenFacts`；外部模拟若绕过浏览器，需要复刻 `PromptGuard` 和 `NewCharacterHandler` 的裁剪、默认值与解锁槽生成逻辑。
 - 自动摘要依赖 LLM API，外部模拟若不调用浏览器实现，需要自己维护 `summary`。

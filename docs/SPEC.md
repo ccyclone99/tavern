@@ -653,6 +653,7 @@ Prompt 必须区分以下块：
 `relationshipUpdate` 是旧字段名，运行时只作为 `characterUpdates` 的兼容别名；新 prompt 和文档均应使用 `characterUpdates`。
 `discoveryUpdate` 每条状态补丁最多处理 10 条 NPC 隐藏档案解锁；目标角色优先用 `characterId`，也可用当前场景内唯一 `characterName/name/actorName/targetName` 匹配；档案槽优先用 `factId`，也可用该 NPC 下唯一 `factTitle/title/factType/type/hint/truth` 匹配。角色或档案槽重名、不唯一、离场或无法匹配时必须跳过，不能猜测解锁。
 `characterUpdates` 每条状态补丁最多处理 30 个角色；目标角色优先使用 `characterId`，也可用当前场景内唯一的 `characterName/name/actorName/targetName` 匹配，重名或不唯一时必须跳过。每个角色单次最多追加 8 条筹码、8 条共同记忆和 1 条 NPC 私密秘密。筹码、记忆、心情、秘密都会截断文本并去重，列表只保留最近的上限条目；`secret` 不会因为状态补丁自动公开给玩家。
+`clueUpdate` 和 `revelationUpdate` 优先用内部 id；模型不知道 id 时可用唯一线索标题、subjectName 或唯一关键结论文本定位。名称不唯一时必须跳过；找不到且提供明确 id/title/conclusion 时仍可由规则层创建新线索链或新结论。`revelationUpdate.conclusion` 可作为定位/创建文本，更新既有结论正文应使用精确 id 或 `newConclusion`，避免短匹配词覆盖原结论。
 `npcAgendaUpdate` 使用同一角色引用规则；模型不知道内部 id 时可以写唯一角色名，但重名或离场角色名不能猜测更新。
 
 每类补丁必须：

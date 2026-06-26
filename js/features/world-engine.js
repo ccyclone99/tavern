@@ -2632,9 +2632,11 @@ const WorldEngine = {
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
-            const id = update.id ? String(update.id) : '';
-            const title = update.title ? String(update.title) : '';
-            let clue = scene.clueGraph.find(c => (id && c.id === id) || (title && c.title === title));
+            const id = String(update.id || update.clueId || '').trim();
+            const title = String(update.title || update.clueTitle || update.name || '').trim();
+            const matchInfo = this.resolveCluePathReference(scene, update, { withStatus: true });
+            if (matchInfo?.ambiguous) return;
+            let clue = matchInfo?.clue || null;
             if (!clue && (id || title)) {
                 clue = this.normalizeCluePath({
                     id: id || undefined,
@@ -2675,6 +2677,55 @@ const WorldEngine = {
             changed = true;
         });
         return changed;
+    },
+
+    resolveCluePathReference(scene, ref = {}, options = {}) {
+        const clues = Array.isArray(scene?.clueGraph) ? scene.clueGraph.filter(Boolean) : [];
+        const result = { clue: null, ambiguous: false };
+        if (clues.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.clueId || '').trim();
+        if (rawId) {
+            const byId = clues.find(clue => String(clue.id || '') === rawId);
+            if (byId) {
+                result.clue = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.title,
+            ref.clueTitle,
+            ref.name,
+            ref.subjectName,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findClueByTitleRef(clues, value);
+            if (match.ambiguous || match.clue) {
+                result.clue = match.clue;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.clue;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findClueByTitleRef(clues, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { clue: null, ambiguous: false };
+        const exact = clues.filter(clue => this._normalizeQuestText(clue.title || '') === normalized);
+        if (exact.length > 0) return { clue: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = clues.filter(clue => {
+            const title = this._normalizeQuestText(clue.title || '');
+            const subject = this._normalizeQuestText(clue.subjectName || '');
+            return [title, subject].some(value =>
+                value.length >= 2 && normalized.length >= 2 && (value.includes(normalized) || normalized.includes(value))
+            );
+        });
+        return { clue: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
     },
 
     applyFailureStateUpdate(scene, updates) {
@@ -3330,12 +3381,15 @@ const WorldEngine = {
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
-            const id = update.id ? String(update.id) : '';
-            let rev = scene.flowGraph.revelations.find(r => id && r.id === id);
-            if (!rev && (id || update.conclusion)) {
+            const id = String(update.id || update.revelationId || '').trim();
+            const conclusion = String(update.conclusion || update.title || update.revelation || update.name || '').trim();
+            const matchInfo = this.resolveRevelationReference(scene, update, { withStatus: true });
+            if (matchInfo?.ambiguous) return;
+            let rev = matchInfo?.revelation || null;
+            if (!rev && (id || conclusion)) {
                 rev = this.normalizeRevelation({
                     id: id || undefined,
-                    conclusion: update.conclusion || update.title || '新增结论',
+                    conclusion: conclusion || '新增结论',
                     status: update.status || 'suspected'
                 }, scene.flowGraph.revelations.length);
                 if (!rev) return;
@@ -3343,7 +3397,11 @@ const WorldEngine = {
             }
             if (!rev) return;
             if (update.status !== undefined && this.revelationStatuses.includes(update.status)) rev.status = update.status;
-            if (update.conclusion !== undefined) rev.conclusion = String(update.conclusion).slice(0, 260);
+            if (update.newConclusion !== undefined) {
+                rev.conclusion = String(update.newConclusion).slice(0, 260);
+            } else if (update.conclusion !== undefined && id && rev.id === id) {
+                rev.conclusion = String(update.conclusion).slice(0, 260);
+            }
             if (Array.isArray(update.evidenceIds)) rev.evidenceIds = update.evidenceIds.map(String).slice(0, 12);
             if (Array.isArray(update.requiredFor)) rev.requiredFor = update.requiredFor.map(String).slice(0, 12);
             if (update.reason !== undefined || update.lastReason !== undefined) rev.lastReason = String(update.reason || update.lastReason || '').slice(0, 240);
@@ -3351,6 +3409,54 @@ const WorldEngine = {
             changed = true;
         });
         return changed;
+    },
+
+    resolveRevelationReference(scene, ref = {}, options = {}) {
+        const revelations = Array.isArray(scene?.flowGraph?.revelations)
+            ? scene.flowGraph.revelations.filter(Boolean)
+            : [];
+        const result = { revelation: null, ambiguous: false };
+        if (revelations.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.revelationId || '').trim();
+        if (rawId) {
+            const byId = revelations.find(rev => String(rev.id || '') === rawId);
+            if (byId) {
+                result.revelation = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.conclusion,
+            ref.title,
+            ref.revelation,
+            ref.name,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findRevelationByConclusionRef(revelations, value);
+            if (match.ambiguous || match.revelation) {
+                result.revelation = match.revelation;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.revelation;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findRevelationByConclusionRef(revelations, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { revelation: null, ambiguous: false };
+        const exact = revelations.filter(rev => this._normalizeQuestText(rev.conclusion || rev.title || '') === normalized);
+        if (exact.length > 0) return { revelation: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = revelations.filter(rev => {
+            const conclusion = this._normalizeQuestText(rev.conclusion || rev.title || '');
+            return conclusion.length >= 2 && normalized.length >= 2 && (conclusion.includes(normalized) || normalized.includes(conclusion));
+        });
+        return { revelation: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
     },
 
     applyFlowGraphUpdate(scene, update = {}) {
