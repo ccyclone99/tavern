@@ -2005,6 +2005,7 @@ const WorldEngine = {
     applyEvidenceAdd(scene, items) {
         if (!scene || !Array.isArray(items)) return false;
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return false;
         let changed = false;
         items.slice(0, 20).forEach(item => {
             if (!item || typeof item !== 'object') return;
@@ -2100,6 +2101,7 @@ const WorldEngine = {
 
     _grantExplorationReward(scene, evidence, options = {}) {
         if (!scene || !evidence || evidence.visible === false || options.isNew !== true) return false;
+        if (!this.isScenePlaying(scene)) return false;
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         const key = `evidence:${evidence.id}`;
         if (scene.explorationRewardLog.includes(key)) return false;
@@ -2107,19 +2109,20 @@ const WorldEngine = {
         scene.explorationRewardLog = scene.explorationRewardLog.slice(-200);
 
         const exp = evidence.reliability === 'confirmed' ? 8 : 4;
-        this.addExperience(scene, exp, { source: `探索收获：${evidence.title}`, silent: true });
+        const expResult = this.addExperience(scene, exp, { source: `探索收获：${evidence.title}`, silent: true });
 
         const item = this._buildExplorationRewardItem(evidence);
         const itemResult = item
             ? this.grantInventoryItem(scene, item, { source: `探索收获：${evidence.title}` })
             : { ok: false };
         const itemAdded = !!itemResult.ok;
+        const expText = expResult.ok ? `经验 +${exp}` : '经验未变化';
         const itemText = item
             ? (itemAdded ? `，获得 ${item.name}` : `，${itemResult.message || '背包已满'}，未获得 ${item.name}`)
             : '';
         this.addSystemMessage(
             scene,
-            `【探索收获：${evidence.title}】经验 +${exp}${itemText}`,
+            `【探索收获：${evidence.title}】${expText}${itemText}`,
             'system'
         );
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();

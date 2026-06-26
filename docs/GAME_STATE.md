@@ -508,6 +508,8 @@ scene.evidenceLedger = [
 
 右侧“线索”tab 展示 `knowledge.discoveries` 以及已解锁的角色档案槽，支持按观察/传闻/证据/推论/确认和角色/地点/势力/计策等主体类型过滤。未解锁的 `character.profile.hiddenFacts` 不会出现在账本中。
 
+`State.addKnowledgeDiscovery()` 按 `id`、`legacyIntelId` 或重叠的 `evidenceIds` 合并已存在条目；同一证据升级可信度或补充标签时应更新原线索卡，而不是追加重复卡。
+
 ### PendingAction
 
 ```js

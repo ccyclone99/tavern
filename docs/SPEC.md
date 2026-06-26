@@ -470,11 +470,13 @@ UI 要求：
 当前规则：
 
 - `evidenceAdd` 会写入 `evidenceLedger`，同步 `knowledge.discoveries`。
+- 同一证据再次同步到 `knowledge.discoveries` 时必须更新既有条目并合并标签/证据 ID，不能生成重复线索卡。
 - 证据支持某个 `revelation` 或 `clueGraph` 时，会把证据挂到对应线索链，并推进线索阶段或状态。
 - 首次取得可见证据会获得少量经验：confirmed 证据更多，partial 证据较少。
 - 路线、医疗、设备、封印、协议等主题证据会额外生成一次性补给或工具，进入背包并可在后续检定卡点选消耗。
 - `explorationRewardLog` 记录已发放奖励的证据，防止重复刷取。
 - 探索奖励生成的物品必须走 `WorldEngine.grantInventoryItem()`；背包已满且无法合并时，探索收获消息必须明确说明未获得物品，不能静默丢失。
+- `scene.gameState` 不是 `playing` 时，`evidenceAdd` 和探索奖励不得继续改变证据账本、知识账本、经验或背包。
 
 这些奖励不代表自动胜利；它们只把玩家的准备转化为后续检定、谈判或探索中的实际优势。
 

@@ -248,6 +248,30 @@ const State = {
             evidenceIds: Array.isArray(data.evidenceIds) ? data.evidenceIds.map(String).slice(0, 20) : [],
             discoveredAt: typeof data.discoveredAt === 'number' ? data.discoveredAt : Date.now()
         };
+        const existing = scene.knowledge.discoveries.find(item => {
+            if (!item) return false;
+            if (entry.id && item.id === entry.id) return true;
+            if (entry.legacyIntelId && item.legacyIntelId === entry.legacyIntelId) return true;
+            return entry.evidenceIds.length > 0 &&
+                Array.isArray(item.evidenceIds) &&
+                item.evidenceIds.some(id => entry.evidenceIds.includes(id));
+        });
+        if (existing) {
+            existing.id = existing.id || entry.id;
+            existing.legacyIntelId = existing.legacyIntelId || entry.legacyIntelId;
+            if (data.subjectType !== undefined) existing.subjectType = entry.subjectType;
+            if (data.subjectId !== undefined) existing.subjectId = entry.subjectId;
+            if (validLevels.includes(data.level)) existing.level = entry.level;
+            if (data.title !== undefined || data.text !== undefined) existing.title = entry.title;
+            if (data.text !== undefined || data.title !== undefined) existing.text = entry.text;
+            if (data.source !== undefined) existing.source = entry.source;
+            if (validReliability.includes(data.reliability)) existing.reliability = entry.reliability;
+            existing.tags = [...new Set([...(existing.tags || []), ...entry.tags])].slice(0, 12);
+            existing.evidenceIds = [...new Set([...(existing.evidenceIds || []), ...entry.evidenceIds])].slice(0, 20);
+            existing.discoveredAt = Math.min(Number(existing.discoveredAt || entry.discoveredAt), entry.discoveredAt);
+            existing.updatedAt = Date.now();
+            return existing;
+        }
         scene.knowledge.discoveries.push(entry);
         return entry;
     },
