@@ -340,7 +340,9 @@ const WorldEngine = {
             sessionGoals: list('sessionGoals', 8),
             stalledPrompts: list('stalledPrompts', 8),
             failForward: list('failForward', 8, 220),
-            completedMoves: list('completedMoves', 20)
+            completedMoves: list('completedMoves', 20),
+            lastProgressTurn: Math.max(0, Math.floor(Number(guide.lastProgressTurn || 0))),
+            lastSoftMoveTurn: Math.max(0, Math.floor(Number(guide.lastSoftMoveTurn || 0)))
         };
     },
 
@@ -3482,9 +3484,41 @@ const WorldEngine = {
             SidebarRight.markTabNew?.('situation');
         }
         this.checkFailureStates(scene, { type: 'turn', reason });
+        if (this.isScenePlaying(scene)) this._maybeEmitStalledSoftMove(scene, reason);
         this._trimSituation(scene);
         SidebarRight.renderSituation?.();
         await State.saveCurrentSceneDebounced();
+    },
+
+    _maybeEmitStalledSoftMove(scene, reason = 'player_turn') {
+        if (!scene || !this.isScenePlaying(scene)) return null;
+        if (['rest', 'check_success', 'check_partial', 'check_fail'].includes(reason)) return null;
+        const guide = this.normalizeFlowGuide(scene.flowGuide);
+        scene.flowGuide = guide;
+        const turn = Number(scene.turnCount || 0);
+        if (turn < 2) return null;
+
+        const progressTurn = Math.max(Number(guide.lastProgressTurn || 0), this._latestProgressTurn(scene));
+        guide.lastProgressTurn = progressTurn;
+        if (turn - progressTurn < 2) return null;
+        if (turn - Number(guide.lastSoftMoveTurn || 0) < 2) return null;
+
+        const text = this.formatSoftMove(scene, { reason: 'stalled' });
+        if (!text) return null;
+        scene.flowGuide = this.normalizeFlowGuide(scene.flowGuide);
+        scene.flowGuide.lastProgressTurn = progressTurn;
+        scene.flowGuide.lastSoftMoveTurn = turn;
+        this.addSystemMessage(scene, text, 'system');
+        if (typeof SidebarRight !== 'undefined') SidebarRight.markTabNew?.('situation');
+        return text;
+    },
+
+    _latestProgressTurn(scene) {
+        const progressCategories = new Set(['quest', 'exploration', 'challenge', 'progress', 'check', 'movement', 'victory', 'failure']);
+        return (scene?.eventLog || []).reduce((latest, event) => {
+            if (!event || !progressCategories.has(event.category)) return latest;
+            return Math.max(latest, Number(event.turn || 0));
+        }, 0);
     },
 
     runNpcOffscreenActions(scene) {
@@ -5330,6 +5364,75 @@ const WorldEngine = {
         return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, storyTexture };
     },
 
+    buildSoftMove(scene, options = {}) {
+        if (!scene) return null;
+        this.normalizeScene(scene);
+        const situation = this.getCurrentSituation(scene);
+        if (!situation) return null;
+        const challenge = situation.activeChallenge;
+        const quest = situation.activeQuest;
+        const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
+        const unknown = (situation.knownUnknowns || []).find(item => item.actions?.length) || (situation.knownUnknowns || [])[0];
+        const urgentClock = (situation.clocks || [])
+            .filter(clock => Number(clock.value || 0) >= Math.max(1, Number(clock.max || 1) - 2))
+            .sort((a, b) => (b.value / Math.max(1, b.max)) - (a.value / Math.max(1, a.max)))[0];
+        const recentRisk = (situation.recentRisks || []).slice(-1)[0] || '';
+
+        const actions = [];
+        const addAction = action => {
+            const text = String(action || '').trim();
+            if (!text || actions.includes(text)) return;
+            actions.push(text);
+        };
+        if (challenge) {
+            this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
+        }
+        if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
+        (situation.recommendedActions || []).slice(0, 4).forEach(addAction);
+        (scene.flowGuide?.stalledPrompts || []).slice(0, 3).forEach(addAction);
+        if (objective?.text) addAction(`围绕「${objective.text}」采取下一步`);
+        addAction('观察当前地点有什么异常');
+        addAction('询问在场的人下一步该注意什么');
+
+        let title = '把局势重新落到一个具体问题上';
+        let text = '';
+        if (challenge) {
+            title = challenge.title || '当前挑战';
+            text = challenge.goal || challenge.stakes || '当前有一个可推进的挑战；选择一种做法，系统会按风险和属性处理。';
+        } else if (unknown) {
+            title = unknown.title || '关键未知';
+            text = unknown.text || '还有未确认的线索，可以先追查来源或验证证据。';
+        } else if (objective?.text) {
+            title = quest?.name || '当前目标';
+            text = `主线还停在「${objective.text}」。先选择一个具体观察、询问、调查或准备动作。`;
+        } else if (urgentClock) {
+            title = `处理时钟：${urgentClock.name}`;
+            text = `${urgentClock.name} 已到 ${urgentClock.value}/${urgentClock.max}；可以先降低风险、争取资源或确认触发条件。`;
+        } else {
+            text = recentRisk
+                ? `最近的公开风险是「${recentRisk}」。可以调查原因、找 NPC 求证，或先做低风险准备。`
+                : '当前没有强制路线。先观察、询问或提出一个具体计划，系统会在有风险时给出预览。';
+        }
+
+        return {
+            title,
+            text,
+            actions: actions.slice(0, 4),
+            reason: options.reason || 'help'
+        };
+    },
+
+    formatSoftMove(scene, options = {}) {
+        const move = this.buildSoftMove(scene, options);
+        if (!move) return '';
+        const header = options.reason === 'stalled' ? '【下一步提示】' : '【当前可以做什么】';
+        const actions = (move.actions || []).slice(0, 4);
+        const actionText = actions.length > 0
+            ? `\n可以尝试：\n${actions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')}`
+            : '';
+        return `${header}${move.title}\n${move.text}${actionText}`;
+    },
+
     _buildRecommendedActions(scene, data) {
         const actions = [];
         const failureWarning = (data.failureWarnings || [])[0];
@@ -5557,6 +5660,7 @@ const WorldEngine = {
         if (!move || guide.completedMoves.includes(move)) return false;
         guide.completedMoves.push(move);
         guide.completedMoves = guide.completedMoves.slice(-20);
+        guide.lastProgressTurn = Math.max(Number(guide.lastProgressTurn || 0), Number(scene.turnCount || 0));
         scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         return true;
     },

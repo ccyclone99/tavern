@@ -225,6 +225,7 @@ AI 回复文本
 - `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()` / `sellInventoryItem()`：处理背包直接使用、休息恢复、基础购买与出售非关键物品，复杂交易仍交给行动/AI 流程。
 - `createInventoryItemFromReward()` / `grantInventoryItem()` / `removeInventoryItem()` / `addOrMergeInventoryItem()` / `allocateStatPoint()`：把任务/AI 奖励物品语义化，统一物品堆叠、移除、装备槽清理，并处理属性点分配与 HP 重算。
 - `getPreparationHints()`：统一生成属性点、回血、装备、可用物品、购买和待领取探索奖励提示，供聊天 chips、顶部摘要和局势面板复用。
+- `buildSoftMove()` / `formatSoftMove()`：基于当前挑战、关键未知、主线目标、时钟和推荐行动生成防卡住提示；`tickAfterPlayerTurn()` 会在连续无进展时自动插入一次本地提示。
 - `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。
 - `recordConsequence()` / `getActiveConsequences()` / `getConsequenceRiskModifier()`：把持续后果写入账本、展示到局势面板，并反馈到行动预览风险/DC。
 

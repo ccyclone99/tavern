@@ -299,6 +299,18 @@ const IntentRouter = {
             const action = scene.pendingAction;
             return `当前：行动预览还没有进入剧情。你准备做的是“${action.intent || '这个行动'}”。输入“执行”确认，输入“取消”放弃，或直接输入新的动作来改写。`;
         }
+        const normalized = this._normalize(raw);
+        const ruleHelpPatterns = [
+            '怎么玩', '怎么操作', '如何操作', '怎么使用', '如何使用',
+            '怎么存档', '怎么读档', '怎么设置', '怎么掷骰', '如何掷骰',
+            '什么是检定', '检定是什么', '这是什么检定', '怎么检定', 'api key'
+        ].map(item => this._normalize(item));
+        const wantsRuleHelp = ruleHelpPatterns.some(pattern => normalized.includes(pattern));
+        if (wantsRuleHelp) return this._buildRuleHelpText(raw, scene);
+        if (!wantsRuleHelp && typeof WorldEngine !== 'undefined' && WorldEngine.formatSoftMove) {
+            const softMove = WorldEngine.formatSoftMove(scene, { reason: 'help' });
+            if (softMove) return softMove;
+        }
         const objective = this._currentObjective(scene);
         const actions = this._recommendedActions(scene);
         const actionText = actions.length > 0
@@ -310,6 +322,20 @@ const IntentRouter = {
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
             : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”“卖掉短剑”“加一点敏捷”。';
+    },
+
+    _buildRuleHelpText(raw, scene) {
+        const normalized = this._normalize(raw);
+        if (normalized.includes('检定') || normalized.includes('掷骰') || normalized.includes('roll')) {
+            return '检定不是主动切换的功能。你只要描述想做的事；当行动有风险、推进主线、改变 NPC 立场或取得关键线索时，系统会先给行动预览或检定卡。检定卡出现后，可以输入“投入资源名”“不用资源名”“掷骰”或“取消”。';
+        }
+        if (normalized.includes('存档') || normalized.includes('读档')) {
+            return '存档和读档在输入框旁边的按钮里；普通剧情里也可以继续输入行动，不需要切换模式。';
+        }
+        if (normalized.includes('设置') || normalized.includes('api key')) {
+            return '设置入口在右上角齿轮。API Key 只用于你本地调用模型；剧情输入里不要粘贴密钥。';
+        }
+        return '直接在同一个输入框里写你想说的话、观察、询问、移动、行动或计划。系统会自动识别对话、行动预览、计策、帮助和 OOC；有风险时先让你确认，需要骰子时才会出现检定卡。';
     },
 
     _routePendingCheck(raw, normalized, scene) {
