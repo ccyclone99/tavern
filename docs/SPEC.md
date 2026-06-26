@@ -446,6 +446,7 @@ UI 要求：
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
 - 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。
+- 直接使用的消耗品只有在至少一个直接效果真实改变状态时才扣除；满血治疗、金币/经验/时钟/紧张度无变化或找不到目标时，只给失败提示，不消耗物品。
 - 检定卡中的可消耗物品支持 `check_bonus`、`dc_delta` 和 `risk_delta`；选中后才改变检定总值/DC/风险说明并扣除次数。
 - 带 `uses` 的消耗品用尽后移出背包；直接使用和检定投入使用同一个消耗入口。
 - `strategy_leverage` 会让物品进入当前计策的“可用物品”列表；系统按物品名、标签、`effect.tag` 与计策目标/资源/情报文本匹配，并把风险修正注入计策 prompt。

@@ -3506,12 +3506,27 @@ const WorldEngine = {
         }
 
         const applied = [];
+        const inactive = [];
+        let changed = false;
+        const noteInactive = text => {
+            const clean = String(text || '').trim();
+            if (clean && !inactive.includes(clean)) inactive.push(clean);
+        };
         const applyHeal = value => {
             const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
+            const beforeHp = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
+            if (beforeHp >= maxHp) {
+                noteInactive('生命已满');
+                return;
+            }
             const amount = this._clamp(Number(value || 0), 1, maxHp);
             const result = this.applyPlayerHealing(scene, amount, { reason: `使用${item.name}`, silent: true });
-            if (result.amount > 0) applied.push(`生命 +${result.amount}`);
-            else applied.push('生命已满');
+            if (result.amount > 0) {
+                applied.push(`生命 +${result.amount}`);
+                changed = true;
+            } else {
+                noteInactive('生命已满');
+            }
         };
 
         if (fallback) {
@@ -3524,35 +3539,59 @@ const WorldEngine = {
                 applyHeal(value || 1);
             } else if (effect.type === 'gold') {
                 const result = this.addGold(scene, value, { source: `使用${item.name}`, silent: true });
-                if (result.ok) applied.push(`金币 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
-                else applied.push('金币无变化');
+                if (result.ok) {
+                    applied.push(`金币 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                    changed = true;
+                } else {
+                    noteInactive('金币无变化');
+                }
             } else if (effect.type === 'exp') {
                 const amount = this._clamp(value, 1, 200);
-                this.addExperience(scene, amount, { source: `使用${item.name}`, silent: true });
-                applied.push(`经验 +${amount}`);
+                const result = this.addExperience(scene, amount, { source: `使用${item.name}`, silent: true });
+                if (result.ok) {
+                    applied.push(`经验 +${amount}`);
+                    changed = true;
+                } else {
+                    noteInactive('经验无变化');
+                }
             } else if (effect.type === 'clock_delta' || effect.type === 'clock_resist') {
                 const clock = this._findItemTargetClock(scene, item, effect);
                 const result = clock
                     ? this.applyClockUpdate(scene, [{ id: clock.id, delta: value, reason: `使用${item.name}` }])
                     : { changed: false };
-                if (result.changed) applied.push(`${clock.name || '局势时钟'} ${value >= 0 ? '+' : ''}${value}`);
+                if (result.changed) {
+                    applied.push(`${clock.name || '局势时钟'} ${value >= 0 ? '+' : ''}${value}`);
+                    changed = true;
+                } else {
+                    noteInactive(clock ? '局势时钟无变化' : '没有匹配的局势时钟');
+                }
             } else if (effect.type === 'world_tension') {
                 const result = this.addWorldTension(scene, value, { source: `使用${item.name}`, silent: true });
-                if (result.ok) applied.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
-                else applied.push('世界紧张度无变化');
+                if (result.ok) {
+                    applied.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                    changed = true;
+                } else {
+                    noteInactive('世界紧张度无变化');
+                }
             }
         });
 
         const shouldConsume = item.type === 'consumable' || item.uses !== undefined || effects.some(e => e.consume === true) || !!fallback;
-        if (shouldConsume) this._consumeInventoryItem(scene, item);
-        const summary = applied.length > 0 ? applied.join('，') : '没有直接效果';
+        if (!changed) {
+            const reason = inactive.length > 0 ? inactive.join('，') : '没有可结算的直接效果';
+            return { ok: false, itemName: item.name, applied: [], consumed: false, message: `${item.name} 未消耗：${reason}。` };
+        }
+        const consumed = shouldConsume ? this._consumeInventoryItem(scene, item) : false;
+        const summary = applied.join('，');
         this.addSystemMessage(scene, `【使用物品：${item.name}】${summary}`, 'system');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
             SidebarRight.renderDetail?.();
+            if (consumed) SidebarRight.markTabNew?.('inventory');
+            SidebarRight.markTabNew?.('situation');
         }
-        return { ok: true, itemName: item.name, applied, consumed: shouldConsume };
+        return { ok: true, itemName: item.name, applied, consumed };
     },
 
     async restPlayer(scene, options = {}) {
