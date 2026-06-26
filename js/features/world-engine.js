@@ -723,6 +723,16 @@ const WorldEngine = {
         return { ok: true, itemName: normalized.name, quantity, item: normalized };
     },
 
+    isScenePlaying(scene) {
+        return !!scene && (!scene.gameState || scene.gameState === 'playing');
+    },
+
+    endedSceneMessage(scene) {
+        if (scene?.gameState === 'victorious') return '本次冒险已经通关，不能再改变角色、背包、地图或任务状态。可以查看通关记录，或回到大厅开始新的世界。';
+        if (scene?.gameState === 'defeated') return '本次冒险已经失败，不能再改变角色、背包、地图或任务状态。可以查看失败记录，或读取存档重试。';
+        return '当前冒险已经结束，不能继续改变游戏状态。';
+    },
+
     calculatePlayerMaxHp(scene) {
         const con = Number(scene?.playerStats?.constitution ?? 10);
         const level = Number(scene?.level || 1);
@@ -984,6 +994,7 @@ const WorldEngine = {
             return { ok: false, message: '没有可更新的任务目标。' };
         }
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const idx = Math.trunc(Number(objectiveIdx));
         if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
             return { ok: false, message: '任务目标不存在。' };
@@ -1032,6 +1043,7 @@ const WorldEngine = {
             return { ok: false, message: '没有可回退的任务目标。' };
         }
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const idx = Math.trunc(Number(objectiveIdx));
         if (!Number.isFinite(idx) || idx < 0 || idx >= quest.objectives.length) {
             return { ok: false, message: '任务目标不存在。' };
@@ -1149,6 +1161,7 @@ const WorldEngine = {
         const statLabels = { strength: '力量', dexterity: '敏捷', constitution: '体质', intelligence: '智力', wisdom: '感知', charisma: '魅力' };
         if (!scene || !statLabels[key]) return { ok: false, message: '未知属性。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (Number(scene.attrPoints || 0) <= 0) return { ok: false, message: '没有可分配属性点。' };
         const before = this._clamp(Number(scene.playerStats[key] || 10), 1, 30);
         if (before >= 20) return { ok: false, message: `${statLabels[key]} 已达到当前上限。` };
@@ -2135,6 +2148,7 @@ const WorldEngine = {
     sellInventoryItem(scene, itemRef, quantity = 1, options = {}) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (item.type === 'quest') return { ok: false, message: `${item.name} 是关键物品，不能直接出售。` };
@@ -3488,6 +3502,7 @@ const WorldEngine = {
     equipInventoryItem(scene, itemRef) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
@@ -3512,6 +3527,7 @@ const WorldEngine = {
     unequipInventoryItem(scene, itemRef) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
@@ -3532,6 +3548,7 @@ const WorldEngine = {
     useInventoryItem(scene, itemRef) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (item.uses !== undefined && Number(item.uses || 0) <= 0) return { ok: false, message: `${item.name} 已经没有可用次数。` };
@@ -3635,6 +3652,7 @@ const WorldEngine = {
     async restPlayer(scene, options = {}) {
         if (!scene) return { ok: false, message: '没有可休息的场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const maxHp = Math.max(1, Number(scene.playerMaxHp || 10));
         const amount = options.amount !== undefined
             ? this._clamp(Number(options.amount), 1, maxHp)
@@ -3653,6 +3671,7 @@ const WorldEngine = {
     buyBasicSupply(scene, supplyType = 'supply') {
         if (!scene) return { ok: false, message: '没有可交易的场景。' };
         this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const key = String(supplyType || 'supply');
         const catalog = {
             supply: { price: 15, item: { id: 'shop_field_supply', name: '探索补给包', description: '基础补给，可辅助一次观察、穿越或野外判断。', type: 'consumable', quantity: 1, uses: 1, tags: ['探索', '路线', '补给'], effects: [{ type: 'check_bonus', value: 2, consume: true }, { type: 'heal', value: 2, consume: true }] } },

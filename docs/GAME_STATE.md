@@ -240,7 +240,7 @@
 }
 ```
 
-主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会把 `scene.gameState` 设为 `victorious` 并插入胜利消息。
+主线任务全部 `completed` 后，`GroupChat._checkVictory()` 会把 `scene.gameState` 设为 `victorious` 并插入胜利消息。`gameState` 不是 `playing` 时，输入框、地图、背包、交易、休息、属性点和任务手动操作都不能继续改变世界状态；只允许 OOC、帮助和回顾类操作。
 
 剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零仍由 `GroupChat._triggerGameOver()` 处理。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 

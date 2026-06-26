@@ -82,6 +82,10 @@ const MapView = {
         if (this._moving || State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
+        if (typeof WorldEngine !== 'undefined' && !WorldEngine.isScenePlaying?.(scene)) {
+            showToast(WorldEngine.endedSceneMessage?.(scene) || '当前冒险已经结束。');
+            return;
+        }
         const loc = scene.locations.find(l => l.id === locId);
         if (!loc) return;
 

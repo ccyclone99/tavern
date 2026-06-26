@@ -645,6 +645,16 @@ const ChatUI = {
             }
         }
 
+        if (this._shouldBlockEndedSceneInput(route, scene)) {
+            this._clearInput();
+            const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+                ? WorldEngine.endedSceneMessage(scene)
+                : '当前冒险已经结束，不能继续改变游戏状态。';
+            this._appendLocalSystemMessage(`【冒险已结束】${message}`);
+            this._syncInputMode();
+            return;
+        }
+
         if (!State.isOOC && await this._handleRoutedInput(route, text, scene)) return;
 
         const isActionIntent = State.inputMode === 'action' && !State.isOOC && route.kind === 'talk';
@@ -696,6 +706,14 @@ const ChatUI = {
                 }
             }
         }
+    },
+
+    _shouldBlockEndedSceneInput(route, scene) {
+        if (State.isOOC || route?.kind === 'ooc' || route?.kind === 'help') return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return !WorldEngine.isScenePlaying(scene);
+        }
+        return !!scene?.gameState && scene.gameState !== 'playing';
     },
 
     async _handleRoutedInput(route, originalText, scene) {
