@@ -209,6 +209,7 @@ const CharacterEditor = {
                 await Storage.saveCharacter(existing);
             }
         } else {
+            const previousCharacterId = State.currentCharacterId;
             const char = {
                 id: 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
                 ...data,
@@ -220,7 +221,17 @@ const CharacterEditor = {
             await Storage.saveCharacter(char);
             State.characters.push(char);
             State.setCurrentCharacter(char.id);
-            if (State.scene) State.addCharacterToScene(char.id);
+            if (State.scene) {
+                const result = State.addCharacterToScene(char.id);
+                if (!result?.ok) {
+                    await Storage.deleteCharacter(char.id);
+                    State.characters = State.characters.filter(item => item.id !== char.id);
+                    State.setCurrentCharacter(previousCharacterId || null);
+                    State.emit('charactersChanged', State.characters);
+                    showToast(result?.message || '角色未加入当前场景，已取消创建。');
+                    return;
+                }
+            }
         }
 
         State.emit('charactersChanged', State.characters);

@@ -4,17 +4,25 @@
 const CharacterCard = {
     async importFile(file) {
         const char = await PNGMetadata.importFile(file);
+        const previousCharacterId = State.currentCharacterId;
 
         await Storage.saveCharacter(char);
         State.characters.push(char);
-        State.emit('charactersChanged', State.characters);
         State.setCurrentCharacter(char.id);
 
         let addedToScene = false;
         if (State.scene) {
             const result = State.addCharacterToScene(char.id);
             addedToScene = !!result?.ok;
+            if (!addedToScene) {
+                await Storage.deleteCharacter(char.id);
+                State.characters = State.characters.filter(item => item.id !== char.id);
+                State.setCurrentCharacter(previousCharacterId || null);
+                State.emit('charactersChanged', State.characters);
+                throw new Error(result?.message || '角色未加入当前场景，已取消导入。');
+            }
         }
+        State.emit('charactersChanged', State.characters);
 
         // 如果导入的角色卡有嵌入式世界书，仅在角色成功加入当前场景后合并
         if (addedToScene && char.character_book && char.character_book.entries && State.scene) {
