@@ -492,7 +492,7 @@ scene.evidenceLedger = [
 }
 ```
 
-旧模板和旧存档中的 `intel` 会被 `State.normalizeKnowledge()` 视为玩家已知内容，迁移为 `knowledge.discoveries` 条目；字段仍保留用于兼容。
+旧模板和旧存档中的 `intel` 会被 `State.normalizeKnowledge()` 视为玩家已知内容，迁移为 `knowledge.discoveries` 条目；字段仍保留用于兼容。`<state_update>.intelAdd` 写入时会裁剪文本、来源和标签，按 `text + source` 去重，并把 `scene.intel` 控制在最近 120 条，同时同步到知识账本。
 
 ### KnowledgeDiscovery
 

@@ -318,20 +318,44 @@ const StrategyManager = {
         }
 
         if (!stoppedByEnding && Array.isArray(update.intelAdd)) {
+            if (!Array.isArray(scene.intel)) scene.intel = [];
             if (update.intelAdd.length > MAX_INTEL_PER_UPDATE) {
                 console.warn(`[StrategyManager] intelAdd 超过单条上限 ${MAX_INTEL_PER_UPDATE}，已截断`);
             }
             for (const intel of update.intelAdd.slice(0, MAX_INTEL_PER_UPDATE)) {
                 if (intel && typeof intel === 'object') {
+                    const text = String(intel.text || '').trim().slice(0, 500);
+                    if (!text) continue;
+                    const source = String(intel.source || '未知来源').trim().slice(0, 120) || '未知来源';
+                    const reliability = ['rumor', 'confirmed', 'false'].includes(intel.reliability) ? intel.reliability : 'rumor';
+                    const reliabilityRank = { rumor: 1, confirmed: 2, false: 2 };
+                    const tags = Array.isArray(intel.tags)
+                        ? intel.tags.map(item => String(item || '').trim().slice(0, 60)).filter(Boolean).slice(0, 12)
+                        : [];
+                    const existing = scene.intel.find(item =>
+                        item &&
+                        String(item.text || '').trim() === text &&
+                        String(item.source || '').trim() === source
+                    );
+                    const nextReliability = existing && (reliabilityRank[existing.reliability] || 0) >= reliabilityRank[reliability]
+                        ? existing.reliability
+                        : reliability;
                     const entry = {
-                        id: 'intel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                        text: String(intel.text || ''),
-                        source: String(intel.source || '未知来源'),
-                        reliability: ['rumor', 'confirmed', 'false'].includes(intel.reliability) ? intel.reliability : 'rumor',
-                        tags: Array.isArray(intel.tags) ? intel.tags.map(String) : [],
-                        discoveredAt: Date.now()
+                        id: existing?.id || 'intel_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                        text,
+                        source,
+                        reliability: nextReliability,
+                        tags: existing
+                            ? [...new Set([...(existing.tags || []), ...tags])].slice(0, 12)
+                            : tags,
+                        discoveredAt: Number(existing?.discoveredAt || 0) || Date.now()
                     };
-                    scene.intel.push(entry);
+                    if (existing) {
+                        Object.assign(existing, entry);
+                    } else {
+                        scene.intel.push(entry);
+                        scene.intel = scene.intel.slice(-120);
+                    }
                     const added = State.addKnowledgeDiscovery(scene, {
                         legacyIntelId: entry.id,
                         subjectType: intel.subjectType || 'event',
