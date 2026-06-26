@@ -1175,6 +1175,22 @@ const WorldEngine = {
         return item.effects.filter(effect => directTypes.has(effect.type));
     },
 
+    _findInventoryItem(scene, itemRef) {
+        if (!scene || !Array.isArray(scene.inventory)) return null;
+        const ref = String(itemRef || '').trim();
+        if (!ref) return null;
+        const item = scene.inventory.find(i => i && ((i.id && i.id === ref) || i.name === ref));
+        if (item) this.normalizeItem(item);
+        return item || null;
+    },
+
+    _equipmentSlotForItem(item) {
+        if (!item) return 'accessory';
+        if (item.type === 'weapon') return 'weapon';
+        if (item.type === 'armor') return 'armor';
+        return 'accessory';
+    },
+
     _fallbackDirectUse(item) {
         if (!item) return null;
         const text = `${item.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
@@ -1995,7 +2011,7 @@ const WorldEngine = {
             }
             consumed = true;
         });
-        if (consumed) SidebarRight.renderInventory?.();
+        if (consumed && typeof SidebarRight !== 'undefined') SidebarRight.renderInventory?.();
         return consumed;
     },
 
@@ -2005,13 +2021,64 @@ const WorldEngine = {
         return this._directItemEffects(item).length > 0 || this._fallbackDirectUse(item) !== null;
     },
 
+    canEquipInventoryItem(item) {
+        if (!item || typeof item !== 'object') return false;
+        this.normalizeItem(item);
+        if (item.type === 'consumable') return false;
+        if (Number(item.quantity || 1) <= 0) return false;
+        if (item.uses !== undefined && Number(item.uses || 0) <= 0) return false;
+        return true;
+    },
+
+    equipInventoryItem(scene, itemRef) {
+        if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
+        this.normalizeScene(scene);
+        if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
+        const item = this._findInventoryItem(scene, itemRef);
+        if (!item) return { ok: false, message: '没有找到这个物品。' };
+        if (!this.canEquipInventoryItem(item)) return { ok: false, message: `${item.name} 不能作为装备使用。` };
+
+        const slot = this._equipmentSlotForItem(item);
+        const previous = scene.inventory.find(i => i && i !== item && i.equipped === true && this._equipmentSlotForItem(i) === slot);
+        if (previous) previous.equipped = false;
+        item.equipped = true;
+        scene.equipment[slot] = item.name;
+        const slotLabels = { weapon: '武器', armor: '防具', accessory: '饰品' };
+        const replaced = previous ? previous.name : '';
+        this.addSystemMessage(scene, `【装备】${slotLabels[slot] || '装备'}：${item.name}${replaced ? `（替换 ${replaced}）` : ''}`, 'system');
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName: item.name, slot, replaced };
+    },
+
+    unequipInventoryItem(scene, itemRef) {
+        if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
+        this.normalizeScene(scene);
+        if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
+        const item = this._findInventoryItem(scene, itemRef);
+        if (!item) return { ok: false, message: '没有找到这个物品。' };
+        if (!item.equipped) return { ok: false, message: `${item.name} 当前没有装备。` };
+
+        item.equipped = false;
+        const slot = this._equipmentSlotForItem(item);
+        if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
+        this.addSystemMessage(scene, `【卸下装备】${item.name}`, 'system');
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName: item.name, slot };
+    },
+
     useInventoryItem(scene, itemRef) {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
-        const ref = String(itemRef || '').trim();
-        const item = scene.inventory.find(i => (ref && i.id === ref) || i.name === ref);
+        const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
-        this.normalizeItem(item);
         if (item.uses !== undefined && Number(item.uses || 0) <= 0) return { ok: false, message: `${item.name} 已经没有可用次数。` };
         if (Number(item.quantity || 1) <= 0) return { ok: false, message: `${item.name} 已经用完。` };
 

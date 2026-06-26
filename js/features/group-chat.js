@@ -853,30 +853,15 @@ const GroupChat = {
     _handleItemEquip(raw) {
         const scene = State.scene;
         if (!scene || !scene.inventory) return;
-        if (!scene.equipment) scene.equipment = { weapon: null, armor: null, accessory: null };
         const name = raw.split('|')[0].trim();
-        const item = scene.inventory.find(item => item.name === name);
-        if (!item) return;
-
-        // 先卸下同槽位已有装备
-        const slotMap = { weapon: 'weapon', armor: 'armor' };
-        const slot = slotMap[item.type] || 'accessory';
-        const currentEquipped = scene.inventory.find(i => i.equipped && i !== item &&
-            ((slot === 'accessory' && (i.type !== 'weapon' && i.type !== 'armor' || i.type === item.type)) ||
-             (slot !== 'accessory' && (slotMap[i.type] || 'accessory') === slot)));
-        if (currentEquipped) {
-            currentEquipped.equipped = false;
-            if (scene.equipment[slot] === currentEquipped.name) scene.equipment[slot] = null;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.equipInventoryItem) {
+            const result = WorldEngine.equipInventoryItem(scene, name);
+            if (!result.ok) {
+                showToast(result.message || '无法装备这个物品');
+                return;
+            }
+            showToast(`装备了：${result.itemName}`);
         }
-
-        item.equipped = true;
-        scene.equipment[slot] = item.name;
-        showToast(`装备了：${name}`);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'inventory',
-            title: '装备物品',
-            text: `装备 ${name}`
-        });
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
     },
@@ -885,19 +870,14 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene || !scene.inventory) return;
         const name = raw.split('|')[0].trim();
-        const item = scene.inventory.find(item => item.name === name);
-        if (!item) return;
-
-        item.equipped = false;
-        const slotMap = { weapon: 'weapon', armor: 'armor' };
-        const slot = slotMap[item.type] || 'accessory';
-        if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
-        showToast(`卸下了：${name}`);
-        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-            category: 'inventory',
-            title: '卸下物品',
-            text: `卸下 ${name}`
-        });
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.unequipInventoryItem) {
+            const result = WorldEngine.unequipInventoryItem(scene, name);
+            if (!result.ok) {
+                showToast(result.message || '无法卸下这个物品');
+                return;
+            }
+            showToast(`卸下了：${result.itemName}`);
+        }
         State.saveCurrentSceneDebounced();
         SidebarRight.renderInventory();
     },

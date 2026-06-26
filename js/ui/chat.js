@@ -736,6 +736,24 @@ const ChatUI = {
                 }
                 this._syncInputMode();
                 return true;
+            case 'equip_inventory_item':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.equipInventoryItem) {
+                    const result = WorldEngine.equipInventoryItem(scene, route.meta.itemId || route.meta.itemName);
+                    if (!result.ok) showToast(result.message || '无法装备这个物品');
+                    else await State.saveCurrentSceneDebounced();
+                }
+                this._syncInputMode();
+                return true;
+            case 'unequip_inventory_item':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.unequipInventoryItem) {
+                    const result = WorldEngine.unequipInventoryItem(scene, route.meta.itemId || route.meta.itemName);
+                    if (!result.ok) showToast(result.message || '无法卸下这个物品');
+                    else await State.saveCurrentSceneDebounced();
+                }
+                this._syncInputMode();
+                return true;
             case 'local_rest':
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.restPlayer) {

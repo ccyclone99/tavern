@@ -766,7 +766,9 @@ const SidebarRight = {
                     ? WorldEngine.canUseInventoryItem(item) && (item.uses === undefined || Number(item.uses || 0) > 0) && Number(item.quantity || 1) > 0
                     : false;
                 const depleted = (item.uses !== undefined && Number(item.uses || 0) <= 0) || Number(item.quantity || 1) <= 0;
-                const canEquip = item.type !== 'consumable';
+                const canEquip = typeof WorldEngine !== 'undefined' && WorldEngine.canEquipInventoryItem
+                    ? WorldEngine.canEquipInventoryItem(item)
+                    : item.type !== 'consumable';
                 const actionHtml = item.equipped
                     ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>`
                     : `<span class="inv-actions">
@@ -816,32 +818,24 @@ const SidebarRight = {
 
     _equipItem(name) {
         const scene = State.scene;
-        if (!scene) return;
-        const item = scene.inventory.find(i => i.name === name);
-        if (!item) return;
-        const slotMap = { weapon: 'weapon', armor: 'armor' };
-        const slot = slotMap[item.type] || 'accessory';
-        const currentEquipped = scene.inventory.find(i => i.equipped && i !== item &&
-            ((slotMap[i.type] || 'accessory') === slot));
-        if (currentEquipped) {
-            currentEquipped.equipped = false;
-            if (scene.equipment[slot] === currentEquipped.name) scene.equipment[slot] = null;
+        if (!scene || typeof WorldEngine === 'undefined' || !WorldEngine.equipInventoryItem) return;
+        const result = WorldEngine.equipInventoryItem(scene, name);
+        if (!result.ok) {
+            showToast(result.message || '无法装备这个物品');
+            return;
         }
-        item.equipped = true;
-        scene.equipment[slot] = item.name;
         State.saveCurrentSceneDebounced();
         this.renderInventory();
     },
 
     _unequipItem(name) {
         const scene = State.scene;
-        if (!scene) return;
-        const item = scene.inventory.find(i => i.name === name);
-        if (!item) return;
-        item.equipped = false;
-        const slotMap = { weapon: 'weapon', armor: 'armor' };
-        const slot = slotMap[item.type] || 'accessory';
-        if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
+        if (!scene || typeof WorldEngine === 'undefined' || !WorldEngine.unequipInventoryItem) return;
+        const result = WorldEngine.unequipInventoryItem(scene, name);
+        if (!result.ok) {
+            showToast(result.message || '无法卸下这个物品');
+            return;
+        }
         State.saveCurrentSceneDebounced();
         this.renderInventory();
     },

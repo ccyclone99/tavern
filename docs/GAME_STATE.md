@@ -322,7 +322,7 @@ scene.evidenceLedger = [
 }
 ```
 
-`weapon`、`armor` 进入对应槽，其它类型默认进入 `accessory` 槽。
+`weapon`、`armor` 进入对应槽，其它类型默认进入 `accessory` 槽。非消耗品可通过背包按钮或主输入框“装备物品名”“卸下物品名”切换装备状态；同槽位只保留一件装备。
 
 物品效果约定：
 

@@ -12,6 +12,8 @@ const IntentRouter = {
         if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const move = this.matchLocationMove(raw, scene);
         if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
+        const equipment = this.matchInventoryEquipment(raw, scene);
+        if (equipment) return { kind: `${equipment.action}_inventory_item`, text: raw, meta: equipment, reason: `direct_${equipment.action}` };
         const itemUse = this.matchInventoryUse(raw, scene);
         if (itemUse) return { kind: 'use_inventory_item', text: raw, meta: itemUse, reason: 'direct_item_use' };
         const purchase = this.matchPurchase(raw);
@@ -138,6 +140,32 @@ const IntentRouter = {
         const matched = usable.find(item => normalized.includes(this._normalize(item.name)));
         if (!matched) return null;
         return { itemId: matched.id || '', itemName: matched.name };
+    },
+
+    matchInventoryEquipment(raw, scene) {
+        const text = String(raw || '').trim();
+        if (!scene || !Array.isArray(scene.inventory) || scene.inventory.length === 0) return null;
+        const normalized = this._normalize(text);
+        const equipPrefixes = ['装备', '佩戴', '穿上', '拿起', '换上'];
+        const unequipPrefixes = ['卸下', '脱下', '取下', '收起'];
+        const wantsEquip = equipPrefixes.some(p => normalized.startsWith(this._normalize(p)));
+        const wantsUnequip = unequipPrefixes.some(p => normalized.startsWith(this._normalize(p)));
+        if (!wantsEquip && !wantsUnequip) return null;
+
+        const candidates = scene.inventory
+            .filter(item => item && item.name)
+            .filter(item => {
+                if (wantsUnequip) return item.equipped === true;
+                return typeof WorldEngine !== 'undefined' && WorldEngine.canEquipInventoryItem?.(item);
+            })
+            .sort((a, b) => String(b.name).length - String(a.name).length);
+        const matched = candidates.find(item => normalized.includes(this._normalize(item.name)));
+        if (!matched) return null;
+        return {
+            action: wantsUnequip ? 'unequip' : 'equip',
+            itemId: matched.id || '',
+            itemName: matched.name
+        };
     },
 
     matchPurchase(raw) {
