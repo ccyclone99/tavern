@@ -185,6 +185,7 @@ const StrategyManager = {
         let relationChanged = false;
         let questChanged = false;
         let stoppedByEnding = false;
+        const stateUpdateItemUnits = new Map();
         const scenePlaying = () => {
             if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) return WorldEngine.isScenePlaying(scene);
             return !scene.gameState || scene.gameState === 'playing';
@@ -505,8 +506,10 @@ const StrategyManager = {
                 const qtyRaw = Number(it.quantity);
                 const qty = Number.isFinite(qtyRaw) && qtyRaw >= 0 ? qtyRaw : 1;
                 if (qty <= 0) continue;
+                const safeItemData = this._sanitizeStateUpdateItemData(it, qty, stateUpdateItemUnits);
+                if (!safeItemData) continue;
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.grantInventoryItem) {
-                    const item = this._buildStateUpdateItem(it, qty);
+                    const item = this._buildStateUpdateItem(safeItemData, safeItemData.quantity);
                     const result = WorldEngine.grantInventoryItem(scene, item, { source: '状态补丁' });
                     if (!result.ok) {
                         console.warn(`[StrategyManager] ${result.message || `背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`}`);
@@ -592,6 +595,44 @@ const StrategyManager = {
         if (clockChanged || storyChanged || phaseChanged || clueChanged || failureChanged || counterChanged || agendaChanged || challengeChanged || evidenceChanged || revelationChanged || flowGraphChanged || tensionChanged || factionChanged || relationChanged || questChanged || locAdded) SidebarRight.markTabNew('situation');
     },
 
+    _sanitizeStateUpdateItemData(data, quantity, unitCounts) {
+        if (!data || typeof data !== 'object' || !data.name) return null;
+        const limit = 20;
+        const clean = { ...data };
+        const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
+        clean.name = String(data.name || '').trim().slice(0, 80);
+        if (!clean.name) return null;
+        clean.type = validTypes.includes(data.type) ? data.type : 'misc';
+        clean.quantity = Math.max(1, Math.min(limit, Math.floor(Number(quantity || 1))));
+
+        const hasUses = data.uses !== undefined && Number.isFinite(Number(data.uses));
+        const requestedUnits = hasUses
+            ? Math.max(0, Math.min(limit, Math.floor(Number(data.uses))))
+            : clean.quantity;
+        if (requestedUnits <= 0) return null;
+
+        const key = `${clean.type}:${clean.name}`;
+        const used = unitCounts.get(key) || 0;
+        const remaining = Math.max(0, limit - used);
+        if (remaining <= 0) {
+            console.warn(`[StrategyManager] itemAdd「${clean.name}」超过单次补丁单位上限 ${limit}，已跳过`);
+            return null;
+        }
+        const allowedUnits = Math.min(requestedUnits, remaining);
+        unitCounts.set(key, used + allowedUnits);
+        if (allowedUnits < requestedUnits) {
+            console.warn(`[StrategyManager] itemAdd「${clean.name}」超过单次补丁单位上限 ${limit}，已截断`);
+        }
+
+        if (hasUses) {
+            clean.uses = allowedUnits;
+            clean.quantity = 1;
+        } else {
+            clean.quantity = allowedUnits;
+        }
+        return clean;
+    },
+
     _buildStateUpdateItem(data, quantity) {
         const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
         const type = validTypes.includes(data.type) ? data.type : 'misc';
@@ -614,7 +655,7 @@ const StrategyManager = {
         }
         if (Array.isArray(data.effects) && typeof WorldEngine !== 'undefined') {
             const effects = data.effects.map(e => WorldEngine.normalizeItemEffect(e)).filter(Boolean);
-            base.effects = [...(base.effects || []), ...effects].slice(0, 10);
+            if (effects.length > 0) base.effects = effects.slice(0, 10);
         }
         if (data.uses !== undefined && Number.isFinite(Number(data.uses))) {
             base.uses = Math.max(0, Math.floor(Number(data.uses)));

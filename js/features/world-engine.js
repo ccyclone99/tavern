@@ -609,6 +609,17 @@ const WorldEngine = {
         const value = [effect.value, effect.checkBonus, effect.dcDelta, effect.riskDelta, effect.clockDelta]
             .map(Number)
             .find(Number.isFinite);
+        const rawValue = value ?? 0;
+        const lowerType = type.toLowerCase();
+        let safeValue = rawValue;
+        if (lowerType === 'check_bonus') safeValue = this._clamp(rawValue, -10, 10);
+        else if (lowerType === 'dc_delta') safeValue = this._clamp(rawValue, -10, 10);
+        else if (lowerType === 'risk_delta' || lowerType === 'strategy_leverage') safeValue = this._clamp(rawValue, -50, 50);
+        else if (lowerType === 'heal') safeValue = this._clamp(rawValue, 0, 50);
+        else if (lowerType === 'gold') safeValue = this._clamp(rawValue, -500, 500);
+        else if (lowerType === 'exp') safeValue = this._clamp(rawValue, 0, 200);
+        else if (lowerType === 'clock_delta' || lowerType === 'clock_resist') safeValue = this._clamp(rawValue, -12, 12);
+        else if (lowerType === 'world_tension') safeValue = this._clamp(rawValue, -100, 100);
         return {
             type,
             stat: statMap[stat] || stat,
@@ -617,7 +628,7 @@ const WorldEngine = {
             clockId: effect.clockId ? String(effect.clockId).slice(0, 100) : '',
             clockTag: effect.clockTag ? String(effect.clockTag).slice(0, 60) : '',
             clockName: effect.clockName ? String(effect.clockName).slice(0, 100) : '',
-            value: value ?? 0,
+            value: safeValue,
             when: effect.when ? String(effect.when).slice(0, 120) : '',
             consume: effect.consume === true
         };

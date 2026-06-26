@@ -363,6 +363,7 @@ scene.evidenceLedger = [
 - `heal/gold/exp/clock_delta/clock_resist/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。`heal`/`gold`/`world_tension` 复用生命、经济和世界紧张度规则入口，时钟效果优先按 `clockId`、`clockTag`、`clockName` 匹配，否则按物品标签匹配公开时钟。
 - 直接使用效果必须绑定消耗语义：物品是 `consumable`、带 `uses`，或对应 effect 写 `consume:true`。非消耗装备/杂物不允许反复直接使用来刷资源。
 - 直接使用消耗品只有在直接效果真实生效时才扣除；例如生命已满时使用治疗物品、或时钟物品找不到可影响的公开时钟，都应提示未消耗。
+- 物品效果值会在 `WorldEngine.normalizeItemEffect()` 中按类型限幅；`<state_update>.itemAdd` 单次补丁同名物品最多增加 20 个单位或次数，显式 `effects` 会替换名称推断效果，防止 AI 生成超大加成或超大 `uses`。
 - `dc_delta/risk_delta`：可作为检定卡可选消耗资源，玩家点选后才生效并扣除次数。
 - `strategy_leverage`：可作为计策筹码；`tag`、物品标签、名称或描述与当前计策文本匹配时，右侧计策面板和计策 prompt 会展示该物品及风险修正。
 - 带 `uses` 的同名物品合并时累加 uses，效果按语义去重，避免一次使用重复结算。
