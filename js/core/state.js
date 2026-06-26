@@ -138,6 +138,17 @@ const State = {
         if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
         if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
         if (!Array.isArray(scene.consequenceLedger)) scene.consequenceLedger = [];
+        if (!Array.isArray(scene.failureStates)) scene.failureStates = [];
+        if (!Array.isArray(scene.runHistory)) scene.runHistory = [];
+        if (!Array.isArray(scene.sceneChallenges)) scene.sceneChallenges = [];
+        if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
+        if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
+        if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
+        if (!scene.gameplayProfile || typeof scene.gameplayProfile !== 'object') scene.gameplayProfile = {};
+        if (!scene.questProgressGuards || typeof scene.questProgressGuards !== 'object') {
+            scene.questProgressGuards = { autoAdvanceStreak: 0, lastAdvancedAt: 0 };
+        }
+        if (scene.runRecord && typeof scene.runRecord !== 'object') scene.runRecord = null;
         if (!Array.isArray(scene.clocks)) scene.clocks = [];
         if (!Array.isArray(scene.counterStrategies)) scene.counterStrategies = [];
         if (!scene.flowGuide || typeof scene.flowGuide !== 'object') {
@@ -248,6 +259,15 @@ const State = {
             storyPhases: [],
             clueGraph: [],
             consequenceLedger: [],
+            failureStates: [],
+            gameplayProfile: {},
+            flowGraph: { nodes: [], revelations: [] },
+            sceneChallenges: [],
+            evidenceLedger: [],
+            companionResources: [],
+            questProgressGuards: { autoAdvanceStreak: 0, lastAdvancedAt: 0 },
+            runRecord: null,
+            runHistory: [],
             clocks: [],
             counterStrategies: [],
             flowGuide: { openingMoves: [], sessionGoals: [], stalledPrompts: [], failForward: [], completedMoves: [] },

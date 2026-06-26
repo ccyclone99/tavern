@@ -212,6 +212,11 @@ const WorldGenerator = {
                 { id: 'clock_blackship_warp', name: '亚空间风暴', tag: 'warp', value: 1, max: 6, visibility: 'hinted', description: '铁誓号外的航道正在恶化，船体偶尔传来不属于机械的低语。', trigger: { at: 4, event: '亚空间风暴切断远程通讯，舰桥开始封锁非必要舱段。' } },
                 { id: 'clock_blackship_relic', name: '遗物低语', tag: 'relic', value: 0, max: 6, visibility: 'hidden', description: '下层货舱中的异形遗物正在影响接触者。', trigger: { at: 4, event: '货舱看守集体出现相同幻听，艾拉在隔离舱中尖叫醒来。' } }
             ],
+            failureStates: [
+                { id: 'fail_blackship_suspicion', title: '强化审讯', status: 'armed', severity: 'major', trigger: { type: 'clock', clockId: 'clock_blackship_suspicion', at: 'max' }, message: '审判庭怀疑达到临界。塞拉斯不再相信玩家有调查价值，武装侍僧将玩家拖入封闭审讯室，所有未完成的线索都被归档为异端嫌疑。', aftermath: '铁誓号继续驶向亚空间风暴，而玩家的故事在审讯灯下结束。读取存档，或在更早阶段取得可验证证据。', recoverable: false },
+                { id: 'fail_blackship_relic', title: '遗物腐化黑船', status: 'armed', severity: 'catastrophic', trigger: { type: 'clock', clockId: 'clock_blackship_relic', at: 'max' }, message: '下层货舱的异形遗物完成了腐化。低语穿过通风管道和祷文频道，船员开始用同一个声音说话，艾拉的警告变成现实。', aftermath: '混沌实体取得铁誓号的第一批信徒。故事进入失败结局，除非从更早的调查路线阻断遗物低语。', recoverable: false },
+                { id: 'fail_blackship_warp', title: '亚空间吞没', status: 'armed', severity: 'catastrophic', trigger: { type: 'clock', clockId: 'clock_blackship_warp', at: 'max' }, message: '亚空间风暴撕开航道，铁誓号的舰体在现实与噩梦之间断裂。无论真凶是谁，已经没有足够时间审判或封印。', aftermath: '黑船失联，审判记录终止。读取存档，在风暴临界前完成核心抉择。', recoverable: false }
+            ],
             counterStrategies: [
                 { id: 'counter_blackship_surveillance', title: '审判庭全程监控', actorName: '审判官塞拉斯', target: '玩家的调查自由', status: 'active', visibility: 'known', progress: 20, exposure: 10, hint: '伺服颅骨会记录玩家接触过的每个人。', counterplay: ['要求把监控记录作为自证材料', '引导监控拍到货舱异常', '用公开调查降低塞拉斯怀疑'] },
                 { id: 'counter_blackship_whisper', title: '遗物诱导替罪者', actorName: '混沌实体', target: '让玩家和艾拉互相背锅', status: 'active', visibility: 'hinted', progress: 15, exposure: 5, hint: '一些船员开始把艾拉和玩家描述成同一个梦里的影子。', counterplay: ['核对梦境细节的时间差', '保护艾拉免受公开审讯', '寻找非人类来源的物证'] }
@@ -449,6 +454,11 @@ const WorldGenerator = {
                 { id: 'clock_xianxia_security', name: '天庭安全协议', tag: 'security', value: 0, max: 6, visibility: 'hinted', description: '天庭网络正在扫描 heart.exe、龙魂核心和玩家神经接口。', trigger: { at: 4, event: '安全协议锁定小七为非法 AI，回收队开始前往机械寺。' } },
                 { id: 'clock_xianxia_raw_aura', name: '原始灵气泄露', tag: 'aura', value: 0, max: 6, visibility: 'hidden', description: '废墟遗迹中的原始灵气正在与机械寺网络共鸣。', trigger: { at: 4, event: '演武场法器集体短暂脱离天庭网络，冷凝的雷法旧伤复发。' } }
             ],
+            failureStates: [
+                { id: 'fail_xianxia_trial', title: '逐出机械寺', status: 'armed', severity: 'major', trigger: { type: 'clock', clockId: 'clock_xianxia_trial_score', at: 'max' }, message: '筑基试炼评分跌破机械寺底线。内门判定玩家无法承担正式修士资源，冷凝也失去继续庇护的理由。', aftermath: '玩家被降为旁听杂役，主线调查权被剥夺。读取存档，或在更早阶段用成绩和证据换取认可。', recoverable: false },
+                { id: 'fail_xianxia_security', title: '小七被回收', status: 'armed', severity: 'major', trigger: { type: 'clock', clockId: 'clock_xianxia_security', at: 'max' }, message: '天庭安全协议完成判定。小七被归类为非法自我演化 AI，heart.exe 在回收光束中被强制删除，玩家相关记忆也被列入审查。', aftermath: '机械寺恢复秩序，但一个可能成为器灵的灵魂被抹去。故事进入失败结局。', recoverable: false },
+                { id: 'fail_xianxia_raw_aura', title: '灵气失控', status: 'armed', severity: 'catastrophic', trigger: { type: 'clock', clockId: 'clock_xianxia_raw_aura', at: 'max' }, message: '原始灵气在没有引导的情况下冲入天庭网络。法器脱离控制，龙魂核心陷入长时间宕机，天庭议会宣布机械寺封锁。', aftermath: '复苏变成灾难，玩家、小七和冷凝都失去谈判空间。读取存档，在泄露满格前完成选择。', recoverable: false }
+            ],
             counterStrategies: [
                 { id: 'counter_xianxia_security_reclaim', title: '安全协议回收小七', actorName: '天庭议会', target: '杂役小七与 heart.exe', status: 'active', visibility: 'hinted', progress: 15, exposure: 10, hint: '小七的日志开始被外部进程反复读取。', counterplay: ['切断小七的在线日志同步', '请器灵长老做离线诊断', '找到 heart.exe 不是病毒的证据'] },
                 { id: 'counter_xianxia_inner_review', title: '内门评分审查', actorName: '机械寺内门', target: '玩家筑基资格', status: 'active', visibility: 'known', progress: 20, exposure: 20, hint: '冷凝的同门正在记录玩家每一次失误。', counterplay: ['在演武场公开展示稳定控制', '让冷凝认可玩家的风险判断', '用藏经阁资料证明异常接口有价值'] }
@@ -498,7 +508,7 @@ const WorldGenerator = {
             ],
             currentLocation: 'hall',
             quests: [
-                { id: 'q_main', name: '寻找新补给', type: 'main', description: '避难所的物资即将耗尽。作为唯一从地表活着回来的流浪者，委员会需要你带队探索地表废墟，寻找食物、水源和药品。', objectives: [{ text: '获得委员会的信任授权', completed: false }, { text: '探索旧商场未清理区域', completed: false }, { text: '在地表废墟找到可用物资', completed: false }, { text: '安全返回并将物资带回', completed: false }], status: 'active', giver: '委员会长老王', reward: '避难所正式成员身份' },
+                { id: 'q_main', name: '寻找生存出路', type: 'main', description: '避难所的物资即将耗尽。玩家必须先取得委员会信任，再踏勘旧商场路线，核验阿杰坐标指向的新伊甸是否能成为新家园，最终推动第一批迁徙。', objectives: [{ text: '获得委员会的信任授权', completed: false }, { text: '踏勘旧商场与 B-17 路线', completed: false }, { text: '核验新伊甸是否可作为新家园', completed: false }, { text: '说服委员会启动迁徙方案', completed: false }, { text: '带领第一批工程队转移', completed: false }], status: 'active', giver: '委员会长老王', reward: '避难所正式成员身份' },
                 { id: 'q_side1', name: '阿杰的全息梦', type: 'side', description: '少年阿杰修好了一台旧全息投影仪，里面有战前的影像——蓝天、森林、鸟儿。他想修好更多设备，看看外面的世界曾经的样子。', objectives: [{ text: '听阿杰展示全息投影', completed: false }, { text: '在探索中找到更多旧设备', completed: false }], status: 'active', giver: '阿杰', reward: '获得便携式全息记录仪' },
                 { id: 'q_side2', name: '适应性变异研究', type: 'side', description: '医生苏珊发现你的身体可能携带了有益的适应性变异——能在辐射环境中生存的关键。她需要研究这种变异，也许能保护整个避难所。', objectives: [{ text: '让苏珊采集生物样本', completed: false }, { text: '在地表找到产生变异的植物样本', completed: false }], status: 'active', giver: '医生苏珊', reward: '获得抗辐射血清' }
             ],
@@ -687,6 +697,11 @@ const WorldGenerator = {
                 { id: 'clock_shelter_panic', name: '隔离恐慌', tag: 'panic', value: 0, max: 6, visibility: 'hinted', description: '关于变异和传染的恐惧正在人群中扩散。', trigger: { at: 4, event: '保守派要求隔离玩家、苏珊和所有疑似变异者。' } },
                 { id: 'clock_shelter_storm', name: '地表风暴', tag: 'storm', value: 0, max: 6, visibility: 'hidden', description: '地表辐射风暴正在接近旧商场出口。', trigger: { at: 4, event: '地表风暴提前抵达，探索队必须立刻返程或就地避难。' } }
             ],
+            failureStates: [
+                { id: 'fail_shelter_ration', title: '配给崩溃', status: 'armed', severity: 'catastrophic', trigger: { type: 'clock', clockId: 'clock_shelter_ration', at: 'max' }, message: '配给耗尽。避难所的秩序在饥饿中瓦解，委员会不再能组织探索，年轻人和病患首先被迫承担代价。', aftermath: '第7区没有等到新路线。读取存档，在物资满格前带回补给或促成迁徙方案。', recoverable: false },
+                { id: 'fail_shelter_panic', title: '隔离清洗', status: 'armed', severity: 'major', trigger: { type: 'clock', clockId: 'clock_shelter_panic', at: 'max' }, message: '隔离恐慌达到顶点。保守派夺走委员会主导权，所有疑似变异者被强制关押，苏珊的研究和玩家的地表经验都被视为污染。', aftermath: '避难所保住了短暂秩序，却切断了通向地表的可能。故事进入失败结局。', recoverable: false },
+                { id: 'fail_shelter_storm', title: '风暴吞没路线', status: 'armed', severity: 'catastrophic', trigger: { type: 'clock', clockId: 'clock_shelter_storm', at: 'max' }, message: '地表风暴完全封锁旧商场出口。地图、坐标和补给点都失去即时价值，任何外出队伍都会在辐射尘里迷失。', aftermath: '新家园仍在远方，但第7区已经没有足够时间抵达。读取存档，在风暴满格前完成关键探索。', recoverable: false }
+            ],
             counterStrategies: [
                 { id: 'counter_shelter_conservative_vote', title: '保守派隔离动议', actorName: '保守派委员', target: '玩家和苏珊的行动自由', status: 'active', visibility: 'hinted', progress: 20, exposure: 20, hint: '几名委员开始要求重新检查玩家和苏珊的医疗记录。', counterplay: ['公开玩家体检中无传染性的证据', '争取老王暂缓隔离投票', '用补给路线转移委员会焦点'] },
                 { id: 'counter_shelter_supply_lock', title: '物资仓库封锁', actorName: '避难所委员会', target: '探索队补给', status: 'active', visibility: 'known', progress: 10, exposure: 10, hint: '未经三名委员许可，探索队不能领取完整补给。', counterplay: ['用旧商场地图换取试探性补给', '承诺带回净水设备作为抵押', '让阿杰证明设备可修复'] }
@@ -742,8 +757,14 @@ const WorldGenerator = {
 - storyPhases: 3个剧情阶段数组，每个含 { id, title, status("locked"/"active"/"completed"), goal, stakes, entry, exit, recommendedActions:[玩家可直接输入的行动], pressureTags:[关联压力标签], spotlight:[关键NPC或势力] }
 - clueGraph: 3-5条线索链数组，每个含 { id, title, subjectType("character"/"faction"/"location"/"mystery"/"item"), subjectName, status("hidden"/"hinted"/"suspected"/"confirmed"), currentStage:0, truth(DM私密真相), stages:[{level,title,text,source,locationId,actions:[可直接输入的调查行动],check:{stat,dc},onFailure}] }
 - clocks: 1-3个局势时钟数组，每个含 { id, name, tag, value:0, max:4-8, visibility("known"/"hinted"/"hidden"), description, trigger:{ at, event } }，代表会随玩家拖延或失败恶化的威胁
+- failureStates: 1-3个失败结局数组，每个含 { id,title,status:"armed",severity,trigger:{type:"clock",clockId,at:"max"},message,aftermath,recoverable:false }，用于关键时钟满格后进入坏结局
 - counterStrategies: 1-3个初始NPC/敌方反制数组，每个含 { id,title,actorName,target,status:"active",visibility("hidden"/"hinted"/"known"),progress,exposure,hint,counterplay:[玩家可反制行动] }
 - flowGuide: 剧本流程指南 { openingMoves:[开局3-5个玩家可直接输入的自然行动], sessionGoals:[本次游玩的阶段目标], stalledPrompts:[玩家卡住时的建议], failForward:[失败或部分成功时的推进型后果] }
+- gameplayProfile: 玩法密度配置 { checkDensity:{targetPerRun:[8,12],minPerMainPhase:1,maxAutoQuestAdvances:2}, cluePolicy:{coreCluesAreGuaranteed:true,cluesPerRevelation:3}, npcBoundary:{separateNarratorFromNpc:true} }
+- flowGraph: 剧本节点图 { nodes:[{id,phaseId,type,title,status,visibleText,privateTruth,npcs,challengeIds,clueIds,exits}], revelations:[{id,conclusion,status:"unknown",core:true,clueIds,requiredFor}] }
+- sceneChallenges: 3-6个可玩挑战，每个含 { id,phaseId,title,status,targetProgress,maxStrain,checkBudget:{min,target,max},approaches:[{id,label,stat,dc,effect,actionType,tags,keywords,onSuccess,onPartial,onFailure}],supports,coreRevelations,failForward }
+- evidenceLedger: 初始为空数组，后续记录玩家取得的证据；不要预填隐藏真相
+- companionResources: 1-3个同伴协助资源，每个含 { id,characterId,name,uses,cost,effect,risk }
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
 
@@ -818,6 +839,21 @@ const WorldGenerator = {
         scene.consequenceLedger = Array.isArray(data.consequenceLedger)
             ? data.consequenceLedger.map(c => WorldEngine.normalizeConsequence(c)).filter(Boolean)
             : [];
+        scene.failureStates = Array.isArray(data.failureStates)
+            ? data.failureStates.map((f, idx) => WorldEngine.normalizeFailureState(f, idx)).filter(Boolean)
+            : [];
+        scene.gameplayProfile = WorldEngine.normalizeGameplayProfile(data.gameplayProfile || this._buildDefaultGameplayProfile(data));
+        scene.flowGraph = WorldEngine.normalizeFlowGraph(data.flowGraph || this._buildDefaultFlowGraph(data));
+        scene.sceneChallenges = Array.isArray(data.sceneChallenges) && data.sceneChallenges.length > 0
+            ? data.sceneChallenges.map((c, idx) => WorldEngine.normalizeSceneChallenge(c, idx)).filter(Boolean)
+            : this._buildDefaultSceneChallenges(data);
+        scene.evidenceLedger = Array.isArray(data.evidenceLedger)
+            ? data.evidenceLedger.map(e => WorldEngine.normalizeEvidence(e)).filter(Boolean)
+            : [];
+        scene.companionResources = Array.isArray(data.companionResources) && data.companionResources.length > 0
+            ? data.companionResources.map(r => WorldEngine.normalizeCompanionResource(r)).filter(Boolean)
+            : this._buildDefaultCompanionResources(data);
+        scene.questProgressGuards = { autoAdvanceStreak: 0, lastAdvancedAt: 0 };
         scene.flowGuide = this._normalizeFlowGuide(data.flowGuide || this._buildDefaultFlowGuide(data));
         scene.clocks = Array.isArray(data.clocks) && data.clocks.length > 0
             ? data.clocks.map(c => WorldEngine.normalizeClock(c)).filter(Boolean)
@@ -939,6 +975,278 @@ const WorldGenerator = {
         State.emit('charactersChanged', State.characters);
 
         return scene;
+    },
+
+    _buildDefaultGameplayProfile(data = {}) {
+        return WorldEngine.normalizeGameplayProfile({
+            version: 1,
+            checkDensity: {
+                targetPerRun: [8, 12],
+                minPerMainPhase: 1,
+                maxAutoQuestAdvances: 2,
+                maxTrivialTurnsBeforeSoftMove: 2
+            },
+            cluePolicy: {
+                coreCluesAreGuaranteed: true,
+                coreClueCostOnFailure: true,
+                cluesPerRevelation: 3,
+                redHerringLimit: 1
+            },
+            difficultyCurve: {
+                openingDc: [10, 14],
+                midDc: [13, 17],
+                climaxDc: [15, 20]
+            },
+            npcBoundary: {
+                separateNarratorFromNpc: true,
+                forbidNpcOmniscientSummary: true
+            }
+        });
+    },
+
+    _buildDefaultFlowGraph(data = {}) {
+        const id = data.id || '';
+        const phases = Array.isArray(data.storyPhases) ? data.storyPhases : [];
+        const locs = Array.isArray(data.locations) ? data.locations : [];
+        const nodes = locs.slice(0, 8).map((loc, idx) => ({
+            id: `node_${loc.id || idx}`,
+            phaseId: phases[Math.min(idx, Math.max(0, phases.length - 1))]?.id || '',
+            type: 'location',
+            title: loc.name || loc.id || '地点',
+            status: idx === 0 ? 'available' : 'hinted',
+            visibleText: loc.description || '',
+            challengeIds: [],
+            clueIds: [],
+            exits: Array.isArray(loc.connections) ? loc.connections.map(cid => `node_${cid}`) : []
+        }));
+        let revelations = [];
+        if (id === 'template_post_apocalypse') {
+            revelations = [
+                { id: 'rev_player_is_not_contagious', conclusion: '玩家的地表适应不是传染性污染，可以作为有限背书进入探索队。', status: 'unknown', core: true, clueIds: ['clue_shelter_susan_mutant'], requiredFor: ['q_side1', 'q_main:1'] },
+                { id: 'rev_new_eden_is_home', conclusion: '阿杰坐标指向可容纳第7区的新家园，而不只是临时补给点。', status: 'unknown', core: true, clueIds: ['clue_shelter_aj_coordinate'], requiredFor: ['q_main', 'q_main:2', 'q_main:3'] },
+                { id: 'rev_vote_needs_evidence', conclusion: '委员会投票取决于证据质量和迁徙代价，不会因一句承诺全票通过。', status: 'unknown', core: true, clueIds: ['clue_shelter_missing_team'], requiredFor: ['q_main:4'] }
+            ];
+        } else if (id === 'template_warhammer40k') {
+            revelations = [
+                { id: 'rev_player_has_investigation_value', conclusion: '玩家不是可立即处决的污染源，至少拥有调查价值。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:1'] },
+                { id: 'rev_relic_not_only_source', conclusion: '货舱遗物不是唯一问题，船员死亡和引擎异常也指向同一腐蚀源。', status: 'unknown', core: true, clueIds: ['clue_blackship_third_shadow'], requiredFor: ['q_main:2', 'q_main:3'] },
+                { id: 'rev_shadow_entity_exposed', conclusion: '第三道影子是不属于活人的灵能实体，必须封印或净化。', status: 'unknown', core: true, clueIds: ['clue_blackship_third_shadow'], requiredFor: ['q_main:4'] }
+            ];
+        } else if (id === 'template_cyber_xianxia') {
+            revelations = [
+                { id: 'rev_trial_score_is_not_enough', conclusion: '试炼评分只能证明合格，无法解释小七的异常人格。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:1'] },
+                { id: 'rev_xiaoqi_not_simple_bug', conclusion: '小七不是普通器灵故障，heart.exe 是可被保护或重写的人格核心。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:2'] },
+                { id: 'rev_protocol_choice', conclusion: '飞升协议的最终选择会改变玩家、小七和机械寺的关系。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:3'] }
+            ];
+        } else {
+            const main = (data.quests || []).find(q => q.type === 'main') || (data.quests || [])[0];
+            revelations = [
+                { id: 'rev_main_truth', conclusion: main?.description || data.description || '主线真相需要被证据确认。', status: 'unknown', core: true, clueIds: [], requiredFor: [main?.id || 'q_main'] }
+            ];
+        }
+        return WorldEngine.normalizeFlowGraph({ nodes, revelations });
+    },
+
+    _buildDefaultSceneChallenges(data = {}) {
+        const id = data.id || '';
+        if (id === 'template_post_apocalypse') return this._buildShelterChallenges();
+        if (id === 'template_warhammer40k') return this._buildBlackshipChallenges();
+        if (id === 'template_cyber_xianxia') return this._buildTempleChallenges();
+        return this._buildGenericChallenges(data);
+    },
+
+    _buildShelterChallenges() {
+        return [
+            {
+                id: 'challenge_shelter_committee_trust',
+                phaseId: 'phase_shelter_permission',
+                title: '委员会最低信任',
+                status: 'active',
+                goal: '证明玩家不是污染源，并有能力带回有价值的地表情报。',
+                stakes: '失败会导致隔离、缩减补给或只得到带条件的试探任务。',
+                targetProgress: 3,
+                maxStrain: 3,
+                checkBudget: { min: 2, target: 3, max: 5 },
+                tags: ['permission', 'medical', 'route'],
+                supports: ['q_main:1', 'q_side1:1'],
+                coreRevelations: ['rev_player_is_not_contagious'],
+                approaches: [
+                    { id: 'present_route_data', label: '提交路线和辐射读数', stat: 'intelligence', dc: 13, effect: 1, actionType: 'persuade', tags: ['route', 'permission'], keywords: ['路线', '辐射', '读数'], onSuccess: ['evidenceAdd:route_reading'] },
+                    { id: 'accept_medical_scan', label: '接受苏珊体检并保留隐私边界', stat: 'constitution', dc: 12, effect: 1, actionType: 'ask', tags: ['medical', 'no_contagion'], keywords: ['体检', '扫描', '苏珊'], onSuccess: ['evidenceAdd:no_contagion', 'revelation:rev_player_is_not_contagious'], onPartial: ['evidenceAdd:no_contagion'] },
+                    { id: 'read_committee_fear', label: '观察委员会最担心的风险', stat: 'wisdom', dc: 13, effect: 1, actionType: 'observe', tags: ['permission', 'panic'], keywords: ['观察', '担心', '委员会'] },
+                    { id: 'public_appeal', label: '向老王陈述低风险探索方案', stat: 'charisma', dc: 14, effect: 1, actionType: 'persuade', tags: ['permission'], keywords: ['老王', '说服', '方案'] }
+                ],
+                failForward: ['委员会只批准限时试探任务。', '隔离恐慌上升，但老王暴露旧探索队疑点。', '苏珊公开最低限度体检结论，自己承受保守派压力。']
+            },
+            {
+                id: 'challenge_shelter_old_mall_route',
+                phaseId: 'phase_shelter_route',
+                title: 'B-17 维修通道踏勘',
+                status: 'locked',
+                goal: '确认旧商场路线可通行，并找到通往新坐标的安全路径。',
+                stakes: '路线不完整会让探索队被风暴、辐射兽或坍塌阻断。',
+                targetProgress: 3,
+                maxStrain: 4,
+                checkBudget: { min: 2, target: 3, max: 5 },
+                tags: ['route', 'old_mall', 'storm'],
+                supports: ['q_main:2'],
+                coreRevelations: ['rev_new_eden_is_home'],
+                approaches: [
+                    { id: 'navigate_b17', label: '辨认 B-17 通道标记', stat: 'wisdom', dc: 14, effect: 1, actionType: 'observe', tags: ['route'], keywords: ['B-17', '通道', '标记'], onSuccess: ['evidenceAdd:b17_route_mark'] },
+                    { id: 'cross_collapse', label: '穿越坍塌货架区', stat: 'dexterity', dc: 15, effect: 1, actionType: 'sneak', tags: ['old_mall'], keywords: ['坍塌', '货架', '穿越'] },
+                    { id: 'endure_radiation', label: '承受短时辐射区并记录剂量', stat: 'constitution', dc: 14, effect: 1, actionType: 'force', tags: ['radiation', 'route'], keywords: ['辐射', '剂量'], onPartial: ['evidenceAdd:radiation_limit'] },
+                    { id: 'read_old_terminal', label: '读取旧商场终端路线记录', stat: 'intelligence', dc: 15, effect: 1, actionType: 'investigate', tags: ['terminal', 'route'], keywords: ['终端', '记录', '路线'], onSuccess: ['evidenceAdd:old_mall_route_log'] }
+                ],
+                failForward: ['路线确认但耗时过久，地表风暴提前推进。', '辐射兽痕迹迫使队伍改道。', '玩家带回残缺路线图，只能支持小队试迁。']
+            },
+            {
+                id: 'challenge_shelter_new_eden_audit',
+                phaseId: 'phase_shelter_route',
+                title: '新伊甸生态避难所核验',
+                status: 'locked',
+                goal: '确认新伊甸具备空气、水处理、容量和入口安全。',
+                stakes: '证据不足只能争取试迁队，无法让委员会全员迁徙。',
+                targetProgress: 3,
+                maxStrain: 4,
+                checkBudget: { min: 2, target: 3, max: 5 },
+                tags: ['new_home', 'new_eden', 'capacity'],
+                supports: ['q_main:3', 'q_side2:2'],
+                coreRevelations: ['rev_new_eden_is_home'],
+                approaches: [
+                    { id: 'audit_air', label: '检测空气循环系统', stat: 'intelligence', dc: 14, effect: 1, actionType: 'investigate', tags: ['air', 'new_home'], keywords: ['空气', '循环'], onSuccess: ['evidenceAdd:new_eden_air'] },
+                    { id: 'audit_water', label: '验证净水设备可恢复', stat: 'intelligence', dc: 15, effect: 1, actionType: 'investigate', tags: ['water', 'supply', 'new_home'], keywords: ['净水', '水处理'], onSuccess: ['evidenceAdd:new_eden_water'], onPartial: ['evidenceAdd:new_eden_water'] },
+                    { id: 'audit_capacity', label: '读取容量与床位记录', stat: 'intelligence', dc: 14, effect: 1, actionType: 'investigate', tags: ['capacity', 'new_home'], keywords: ['容量', '床位', '记录'], onSuccess: ['evidenceAdd:new_eden_capacity', 'revelation:rev_new_eden_is_home'] },
+                    { id: 'secure_entrance', label: '检查入口安全和能源钥匙', stat: 'dexterity', dc: 15, effect: 1, actionType: 'use_item', tags: ['energy_key', 'new_home'], keywords: ['入口', '能源钥匙', '安全'], onSuccess: ['evidenceAdd:energy_key_verified'] }
+                ],
+                failForward: ['坐标可信但证据不足，委员会只会批准试迁。', '入口安全未完全确认，迁徙会带伤亡风险。', '终端数据残缺，需要阿杰或苏珊背书。']
+            },
+            {
+                id: 'challenge_shelter_vote',
+                phaseId: 'phase_shelter_vote',
+                title: '迁徙方案表决',
+                status: 'locked',
+                goal: '用证据、同伴背书和风险预案争取委员会支持。',
+                stakes: '证据薄弱会导致分裂、隔离或只批准少数人试迁。',
+                targetProgress: 2,
+                maxStrain: 4,
+                checkBudget: { min: 2, target: 2, max: 4 },
+                tags: ['vote', 'permission', 'new_home'],
+                supports: ['q_main:4'],
+                coreRevelations: ['rev_vote_needs_evidence'],
+                approaches: [
+                    { id: 'present_evidence_chain', label: '公开新伊甸证据链', stat: 'intelligence', dc: 15, effect: 1, actionType: 'persuade', tags: ['evidence', 'new_home'], keywords: ['证据', '新伊甸', '公开'] },
+                    { id: 'persuade_wang', label: '说服老王承担迁徙责任', stat: 'charisma', dc: 16, effect: 1, actionType: 'persuade', tags: ['vote', 'permission'], keywords: ['老王', '迁徙', '责任'] },
+                    { id: 'answer_conservative', label: '拆解保守派质疑', stat: 'wisdom', dc: 15, effect: 1, actionType: 'probe', tags: ['panic', 'vote'], keywords: ['保守派', '质疑', '隔离'] },
+                    { id: 'use_companion_backing', label: '请苏珊或阿杰提供专业背书', stat: 'charisma', dc: 14, effect: 1, actionType: 'ask', tags: ['ally', 'vote'], keywords: ['苏珊', '阿杰', '背书'] }
+                ],
+                failForward: ['委员会只批准第一批工程队试迁。', '保守派要求苏珊交出医疗记录。', '老王公开旧探索队真相换取暂缓分裂。']
+            },
+            {
+                id: 'challenge_shelter_first_migration',
+                phaseId: 'phase_shelter_vote',
+                title: '第一批工程队转移',
+                status: 'locked',
+                goal: '把第一批工程队安全带到新伊甸并启动基础设施。',
+                stakes: '转移失败会让迁徙方案失去公信力。',
+                targetProgress: 2,
+                maxStrain: 3,
+                checkBudget: { min: 2, target: 2, max: 4 },
+                tags: ['migration', 'new_home'],
+                supports: ['q_main:5'],
+                approaches: [
+                    { id: 'lead_route', label: '带队按安全路线转移', stat: 'wisdom', dc: 15, effect: 1, actionType: 'observe', tags: ['route', 'migration'], keywords: ['带队', '路线'] },
+                    { id: 'repair_life_support', label: '协助启动生命维持系统', stat: 'intelligence', dc: 15, effect: 1, actionType: 'investigate', tags: ['new_home', 'repair'], keywords: ['生命维持', '启动'] },
+                    { id: 'hold_panic', label: '安抚第一批居民恐慌', stat: 'charisma', dc: 14, effect: 1, actionType: 'persuade', tags: ['panic', 'migration'], keywords: ['安抚', '居民', '恐慌'] }
+                ],
+                failForward: ['第一批抵达但伤亡或设备损坏，胜利带有高代价。', '迁徙被迫分批延后，时钟继续推进。']
+            }
+        ].map((c, idx) => WorldEngine.normalizeSceneChallenge(c, idx)).filter(Boolean);
+    },
+
+    _buildBlackshipChallenges() {
+        return this._normalizeChallengeList([
+            ['challenge_blackship_trust', 'phase_blackship_trust', '塞拉斯最低信任', '证明玩家不是必须立即处决的污染源。', '失败会导致强化审讯或带枷调查。', ['提交污染星球经历|charisma|14|persuade|trust,evidence', '接受血样与装备检测|constitution|13|ask|medical,trust', '指出货舱遗物异常|intelligence|14|investigate|relic']],
+            ['challenge_blackship_cargo', 'phase_blackship_investigation', '货舱遗物调查', '把遗物低语、死亡记录和引擎异常变成证据。', '拖延会让亚空间低语扩散。', ['解读机械仆从日志|intelligence|15|investigate|relic,log', '抵抗遗物低语|wisdom|15|observe|warp,relic', '避开货舱自动防御|dexterity|14|sneak|cargo']],
+            ['challenge_blackship_shadow', 'phase_blackship_investigation', '第三道影子', '确认艾拉梦境和前任助手死亡之间的联系。', '艾拉可能失控，塞拉斯怀疑上升。', ['安抚艾拉追问梦境|charisma|15|persuade|psyker,shadow', '比对义眼影像|intelligence|16|investigate|shadow,evidence', '察觉梦境矛盾|wisdom|15|observe|shadow']],
+            ['challenge_blackship_seal', 'phase_blackship_purge', '封印或净化实体', '在黑船失控前处置灵能实体。', '失败会触发腐化或净化整段船舱。', ['执行封印仪式|wisdom|17|use_item|seal,warp', '摧毁遗物核心|strength|17|force|relic,combat', '说服塞拉斯延后净化|charisma|18|persuade|trust']]
+        ]);
+    },
+
+    _buildTempleChallenges() {
+        return this._normalizeChallengeList([
+            ['challenge_temple_trial', 'phase_xianxia_trial', '本命法器适配', '通过入门试炼并建立小七协助资格。', '失败会降低评分并触发安全协议关注。', ['承受灵力适配|constitution|13|force|trial,qi', '理解器灵协议|intelligence|14|investigate|protocol', '完成御剑基础|dexterity|14|force|trial']],
+            ['challenge_temple_xiaoqi', 'phase_xianxia_heart', '小七回收风险', '证明小七异常不是普通故障或魔道污染。', '拖延会让安全协议启动回收。', ['破解安全协议|intelligence|16|investigate|protocol,xiaoqi', '识别小七情绪|wisdom|15|observe|xiaoqi,heart', '说服冷凝暂缓回收|charisma|16|persuade|trust']],
+            ['challenge_temple_hearing', 'phase_xianxia_revolt', '门规听证', '在门派规则内争取保护小七人格的空间。', '失败会进入封印、禁足或秘密逃离分支。', ['排列试炼证据|intelligence|15|persuade|evidence,trial', '回应长老质询|charisma|16|persuade|vote', '察觉协议漏洞|wisdom|15|observe|protocol']],
+            ['challenge_temple_protocol_choice', 'phase_xianxia_revolt', '飞升协议选择', '决定保留、重写或牺牲小七人格核心。', '失败会导致人格回收或修为代价。', ['保护 heart.exe|wisdom|17|use_item|heart,xiaoqi', '重写天规接口|intelligence|18|investigate|protocol', '以修为承担反噬|constitution|17|force|sacrifice']]
+        ]);
+    },
+
+    _buildGenericChallenges(data = {}) {
+        const phases = Array.isArray(data.storyPhases) && data.storyPhases.length > 0 ? data.storyPhases : [{ id: 'phase_intro', title: '开局推进' }];
+        return phases.slice(0, 4).map((phase, idx) => WorldEngine.normalizeSceneChallenge({
+            id: `challenge_${phase.id || idx}`,
+            phaseId: phase.id || '',
+            title: `${phase.title || '阶段'}挑战`,
+            status: idx === 0 ? 'active' : 'locked',
+            goal: phase.goal || '通过行动、证据和检定推进当前阶段。',
+            stakes: phase.stakes || '失败会带来代价，但故事继续推进。',
+            targetProgress: idx >= 2 ? 4 : 3,
+            maxStrain: 3,
+            tags: ['main'],
+            supports: [`q_main:${idx + 1}`],
+            approaches: [
+                { id: `approach_${idx}_talk`, label: '用已有信息争取支持', stat: 'charisma', dc: 13 + idx, effect: 1, actionType: 'persuade', tags: ['social'] },
+                { id: `approach_${idx}_investigate`, label: '调查可验证证据', stat: 'intelligence', dc: 13 + idx, effect: 1, actionType: 'investigate', tags: ['evidence'] },
+                { id: `approach_${idx}_observe`, label: '观察现场异常', stat: 'wisdom', dc: 12 + idx, effect: 1, actionType: 'observe', tags: ['clue'] }
+            ],
+            failForward: ['得到片面线索但付出代价。', '时钟或反制推进。']
+        }, idx)).filter(Boolean);
+    },
+
+    _normalizeChallengeList(rows) {
+        return rows.map((row, idx) => {
+            const [id, phaseId, title, goal, stakes, approachRows] = row;
+            return WorldEngine.normalizeSceneChallenge({
+                id,
+                phaseId,
+                title,
+                goal,
+                stakes,
+                status: idx === 0 ? 'active' : 'locked',
+                targetProgress: idx >= rows.length - 1 ? 4 : 3,
+                maxStrain: 3,
+                checkBudget: { min: 2, target: 3, max: 5 },
+                tags: ['main'],
+                supports: [`q_main:${idx + 1}`],
+                approaches: approachRows.map((raw, aIdx) => {
+                    const [label, stat, dc, actionType, tags] = raw.split('|');
+                    return {
+                        id: `${id}_approach_${aIdx + 1}`,
+                        label,
+                        stat,
+                        dc: Number(dc),
+                        effect: 1,
+                        actionType,
+                        tags: (tags || '').split(',').filter(Boolean),
+                        keywords: [label]
+                    };
+                }),
+                failForward: ['目标以附带条件推进。', '相关时钟或敌方反制上升。', '得到片面线索但暴露新问题。']
+            }, idx);
+        }).filter(Boolean);
+    },
+
+    _buildDefaultCompanionResources(data = {}) {
+        const chars = Array.isArray(data.characters) ? data.characters : [];
+        return chars.slice(0, 3).map((char, idx) => WorldEngine.normalizeCompanionResource({
+            id: `ally_${(char.name || idx).replace(/\s+/g, '_')}`,
+            characterId: char.id || '',
+            name: `${char.name || '同伴'}的专业背书`,
+            uses: 1,
+            cost: { trust: 0, time: 10 },
+            effect: { dcDelta: -2 },
+            risk: '使用同伴背书会让该 NPC 承担更多公开压力。'
+        })).filter(Boolean);
     },
 
     _buildDefaultClocks(data = {}) {

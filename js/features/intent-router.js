@@ -30,11 +30,12 @@ const IntentRouter = {
         const contextualRiskWords = ['偷', '抢', '攻击', '威胁', '骗', '潜入', '撬锁', '藏', '打翻', '破坏', '杀', '开枪'];
         const textLower = String(text || '').toLowerCase();
         const hasRiskWord = contextualRiskWords.some(w => textLower.includes(w.toLowerCase()));
-        const isRisky = type !== 'talk' && (
+        const isChallengeAction = !!action?.challengeContext;
+        const isRisky = isChallengeAction || (type !== 'talk' && (
             forcePreviewTypes.includes(type) ||
             risk >= 35 ||
             hasRiskWord
-        );
+        ));
         const currentCharacterId = scene?.currentCharacterId ||
             (typeof State !== 'undefined' ? State.currentCharacterId : '');
         return {
@@ -44,7 +45,7 @@ const IntentRouter = {
             isRisky,
             needsPreview: isRisky,
             risk,
-            reason: isRisky ? 'risky_action' : `classified_${type}`,
+            reason: isRisky ? (isChallengeAction ? 'challenge_action' : 'risky_action') : `classified_${type}`,
             targetCharacterIds: currentCharacterId ? [currentCharacterId] : []
         };
     },
@@ -182,6 +183,10 @@ const IntentRouter = {
     },
 
     _currentObjective(scene) {
+        if (scene && typeof WorldEngine !== 'undefined' && WorldEngine.getActiveChallenge) {
+            const challenge = WorldEngine.getActiveChallenge(scene);
+            if (challenge) return `当前挑战：${challenge.title}${challenge.goal ? `。${challenge.goal}` : ''}`;
+        }
         const quest = (scene?.quests || []).find(q => q.status !== 'completed');
         const obj = quest?.objectives?.find(o => !o.completed);
         if (obj?.text) return `当前目标：${obj.text}`;

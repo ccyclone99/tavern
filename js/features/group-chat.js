@@ -128,6 +128,7 @@ const GroupChat = {
             const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
             const checkMarkers = safeMarkers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
+            this._reconcileQuestProgressFromNarrative(msg);
 
             // 处理检定标记：生成交互式检定卡，等待玩家点击或输入“掷骰”
             for (const cm of checkMarkers) {
@@ -463,6 +464,9 @@ const GroupChat = {
             sourceMessageId,
             actionType: latestAction?.actionData?.type || '',
             intent: latestAction?.actionData?.intent || '',
+            challengeContext: latestAction?.actionData?.challengeContext
+                ? JSON.parse(JSON.stringify(latestAction.actionData.challengeContext))
+                : null,
             adjudicationReason: parsed.adjudicationReason || '',
             adjudicationSource: parsed.adjudicationSource || (actionParsed ? 'local' : 'ai'),
             itemModifiers: itemBonus.modifiers || [],
@@ -539,6 +543,7 @@ const GroupChat = {
         };
         if (typeof WorldEngine !== 'undefined') {
             WorldEngine.consumeCheckItems(scene, check.itemModifiers || []);
+            WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
         }
         scene.pendingCheck = null;
         scene.messages.push(msg);
@@ -872,7 +877,12 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'defeated', 'HP 归零');
         ChatUI.onMessageAdded(msg);
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
         State.saveCurrentSceneDebounced();
         showToast('你倒下了…可读取存档重来');
     },
@@ -897,7 +907,12 @@ const GroupChat = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
+        if (typeof RunRecorder !== 'undefined') RunRecorder.complete(scene, 'victorious', '主线任务完成');
         ChatUI.onMessageAdded(msg);
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
         State.saveCurrentSceneDebounced();
         showToast('🏆 冒险完成！');
     },
@@ -944,7 +959,6 @@ const GroupChat = {
             );
 
             description = result.content || description;
-            ChatUI.updateStreamingContent(description);
 
             // 提取并应用 DM 回复中的状态补丁
             const { content: cleanedDescription, update: dmUpdate } = this._extractStateUpdate(description);
@@ -954,6 +968,12 @@ const GroupChat = {
             }
 
             scene.messages.pop();
+            if (!cleanedDescription.trim()) {
+                ChatUI.removeStreamingMessage();
+                await State.saveCurrentSceneDebounced();
+                return;
+            }
+            ChatUI.updateStreamingContent(cleanedDescription);
             const msg = {
                 id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 role: 'assistant',
@@ -967,6 +987,7 @@ const GroupChat = {
             scene.messages.push(msg);
             ChatUI._renderedCount = scene.messages.length;
             ChatUI.finalizeStreamingMessage(cleanedDescription, null);
+            this._reconcileQuestProgressFromNarrative(msg);
             await State.saveCurrentSceneDebounced();
 
         } catch (err) {
@@ -1015,7 +1036,6 @@ const GroupChat = {
             );
 
             content = result.content || content;
-            ChatUI.updateStreamingContent(content);
 
             // 提取并应用 DM 回复中的状态补丁
             const { content: cleanedContent, update: dmUpdate2 } = this._extractStateUpdate(content);
@@ -1024,6 +1044,12 @@ const GroupChat = {
                 catch (err) { console.warn('DM 状态补丁应用失败（非致命）:', err.message || err); }
             }
 
+            if (!cleanedContent.trim()) {
+                ChatUI.removeStreamingMessage();
+                await State.saveCurrentSceneDebounced();
+                return;
+            }
+            ChatUI.updateStreamingContent(cleanedContent);
             const msg = {
                 id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 role: 'assistant',
@@ -1037,6 +1063,7 @@ const GroupChat = {
             scene.messages.push(msg);
             ChatUI._renderedCount = scene.messages.length;
             ChatUI.finalizeStreamingMessage(cleanedContent, null);
+            this._reconcileQuestProgressFromNarrative(msg);
             await State.saveCurrentSceneDebounced();
 
         } catch (err) {
@@ -1101,5 +1128,16 @@ const GroupChat = {
         const latest = [...(scene?.messages || [])].reverse().find(m => m.role === 'user' && m.type !== 'check');
         if (latest?.actionData?.type === 'rest') return 'rest';
         return 'player_turn';
+    },
+
+    _reconcileQuestProgressFromNarrative(message) {
+        const scene = State.scene;
+        if (!scene || typeof WorldEngine === 'undefined' || !WorldEngine.reconcileQuestProgressFromNarrative) return null;
+        try {
+            return WorldEngine.reconcileQuestProgressFromNarrative(scene, message);
+        } catch (err) {
+            console.warn('任务进展推断失败（非致命）:', err.message || err);
+            return null;
+        }
     }
 };
