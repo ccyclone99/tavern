@@ -4078,6 +4078,32 @@ const WorldEngine = {
         };
     },
 
+    formatBasicSupplyCatalog(scene) {
+        const catalog = this.getBasicSupplyCatalog();
+        const typeLabels = { weapon: '装备', armor: '装备', misc: '工具', consumable: '消耗品', quest: '任务物品' };
+        const effectText = item => {
+            const labels = (item.effects || []).map(effect => {
+                const value = Number(effect.value || 0);
+                if (effect.type === 'heal') return `恢复生命 ${value}`;
+                if (effect.type === 'check_bonus') return `检定 ${value >= 0 ? '+' : ''}${value}${effect.consume ? '（消耗）' : ''}`;
+                if (effect.type === 'risk_delta') return `风险 ${value >= 0 ? '+' : ''}${value}`;
+                if (effect.type === 'dc_delta') return `DC ${value >= 0 ? '+' : ''}${value}`;
+                return '';
+            }).filter(Boolean);
+            return labels.slice(0, 3).join('，') || '剧情用途';
+        };
+        const lines = Object.values(catalog).map(entry => {
+            const item = this.normalizeItem(JSON.parse(JSON.stringify(entry.item)));
+            const owned = Array.isArray(scene?.inventory)
+                ? scene.inventory.some(existing => existing && ((item.id && existing.id === item.id) || existing.name === item.name))
+                : false;
+            const ownedText = owned && item.type !== 'consumable' ? '，已拥有' : '';
+            return `- ${item.name}：${entry.price} 金币，${typeLabels[item.type] || '物品'}，${effectText(item)}${ownedText}`;
+        });
+        const gold = Number(scene?.gold || 0);
+        return `【基础商店】当前金币 ${gold}。\n${lines.join('\n')}\n\n直接输入“购买商品名”即可购买；非消耗装备买到后还需要输入“装备商品名”才会进入常驻修正。`;
+    },
+
     buyBasicSupply(scene, supplyType = 'supply') {
         if (!scene) return { ok: false, message: '没有可交易的场景。' };
         this.normalizeScene(scene);

@@ -21,6 +21,7 @@ const IntentRouter = {
         if (sale) return { kind: 'sell_inventory_item', text: raw, meta: sale, reason: 'direct_sell' };
         const itemUse = this.matchInventoryUse(raw, scene);
         if (itemUse) return { kind: 'use_inventory_item', text: raw, meta: itemUse, reason: 'direct_item_use' };
+        if (this.isShopCatalog(raw, normalized)) return { kind: 'shop_catalog', text: raw, reason: 'shop_catalog' };
         const purchase = this.matchPurchase(raw);
         if (purchase) return { kind: 'buy_supply', text: raw, meta: purchase, reason: 'direct_purchase' };
         if (this.matchRest(raw, normalized)) return { kind: 'local_rest', text: raw, reason: 'direct_rest' };
@@ -104,6 +105,14 @@ const IntentRouter = {
         const patterns = ['计策', '计划', '规划', '打算', '谋划', '策略', '分几步', '嫁祸', '挑拨', '拉拢', '离间'];
         return patterns.some(p => normalized.includes(this._normalize(p))) &&
             !this._startsWithAny(normalized, ['执行', '确认', '取消', '掷骰']);
+    },
+
+    isShopCatalog(raw, normalized = this._normalize(raw)) {
+        const exact = ['商店', '商城', '补给商店', '采购', '买东西', '购买', '买', '可以买什么', '能买什么', '有什么可以买'];
+        if (exact.map(item => this._normalize(item)).includes(normalized)) return true;
+        const hasShopWord = ['商店', '商品', '目录', '货架', '采购', '补给'].some(word => normalized.includes(this._normalize(word)));
+        const hasAskWord = ['看', '查看', '打开', '显示', '列出', '有什么', '可以买', '能买', '买什么'].some(word => normalized.includes(this._normalize(word)));
+        return hasShopWord && hasAskWord;
     },
 
     isOoc(raw, normalized = this._normalize(raw)) {

@@ -1024,6 +1024,15 @@ const ChatUI = {
                 }
                 this._syncInputMode();
                 return true;
+            case 'shop_catalog':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.formatBasicSupplyCatalog) {
+                    this._appendLocalSystemMessage(WorldEngine.formatBasicSupplyCatalog(scene));
+                } else {
+                    this._appendLocalSystemMessage('【基础商店】可以输入“购买补给”“购买医疗包”“购买零件包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”。');
+                }
+                this._syncInputMode();
+                return true;
             case 'sell_inventory_item':
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.sellInventoryItem) {
