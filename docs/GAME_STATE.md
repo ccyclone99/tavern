@@ -373,6 +373,7 @@ scene.evidenceLedger = [
 - `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。
 - `buyBasicSupply()` 会先确认背包可合并或仍有空位，成功扣金币后再走 `grantInventoryItem()`；金币不足或背包满时不会改变金币或背包。
+- 探索奖励生成的一次性物品也走 `grantInventoryItem()`；背包满且无法合并时，探索收获消息会明确说明未获得该物品。
 
 ### 成长字段
 

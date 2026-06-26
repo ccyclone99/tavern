@@ -1994,10 +1994,16 @@ const WorldEngine = {
         this.addExperience(scene, exp, { source: `探索收获：${evidence.title}`, silent: true });
 
         const item = this._buildExplorationRewardItem(evidence);
-        const itemAdded = item ? this._addOrMergeInventoryItem(scene, item) : false;
+        const itemResult = item
+            ? this.grantInventoryItem(scene, item, { source: `探索收获：${evidence.title}` })
+            : { ok: false };
+        const itemAdded = !!itemResult.ok;
+        const itemText = item
+            ? (itemAdded ? `，获得 ${item.name}` : `，${itemResult.message || '背包已满'}，未获得 ${item.name}`)
+            : '';
         this.addSystemMessage(
             scene,
-            `【探索收获：${evidence.title}】经验 +${exp}${itemAdded ? `，获得 ${item.name}` : ''}`,
+            `【探索收获：${evidence.title}】经验 +${exp}${itemText}`,
             'system'
         );
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
