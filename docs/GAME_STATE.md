@@ -173,6 +173,8 @@
 
 `State.normalizeScene(scene)` 会为旧存档补齐以上字段。新增字段必须在 `normalizeScene()` 中提供兼容默认值。
 
+如果旧存档或简化自定义世界已有任务、冲突种子、剧情弧或线索，但缺少 `storyPhases`、`sceneChallenges` 或 `flowGuide`，`WorldEngine.normalizeScene()` 会补一个轻量可玩骨架：至少一个 active phase、一个 active challenge 和基础卡住提示。完全空白的新场景不会被强行补成副本。
+
 `SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `explorationRewardLog`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致探索奖励重复发放、输入状态错乱或 DM 叙事人格丢失。
 
 ## 三、子结构

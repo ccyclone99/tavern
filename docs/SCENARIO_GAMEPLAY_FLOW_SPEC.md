@@ -634,7 +634,7 @@ RunRecorder 需要记录：
 ### 9.3 回归验收
 
 - 旧存档缺少新字段时不报错。
-- 自定义世界缺少新字段时生成默认 gameplay profile。
+- 自定义世界或旧存档缺少新字段时生成默认 gameplay profile；若已有任务、冲突种子、剧情弧或线索，还应补出 active phase、active challenge 和基础 flowGuide。
 - `node --check` 通过所有 JS。
 - 资源引用检查通过。
 - 浏览器控制台无初始化错误。

@@ -57,6 +57,7 @@ const WorldEngine = {
         scene.failureStates = scene.failureStates.map((f, idx) => this.normalizeFailureState(f, idx)).filter(Boolean).slice(0, 24);
         scene.flowGraph = this.normalizeFlowGraph(scene.flowGraph);
         scene.sceneChallenges = scene.sceneChallenges.map((c, idx) => this.normalizeSceneChallenge(c, idx)).filter(Boolean).slice(0, 24);
+        this.ensureGameplayScaffold(scene);
         scene.evidenceLedger = scene.evidenceLedger.map(e => this.normalizeEvidence(e)).filter(Boolean).slice(-120);
         scene.companionResources = scene.companionResources
             .map(r => this._repairCompanionResourceLink(scene, r))
@@ -66,6 +67,160 @@ const WorldEngine = {
         scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
+    },
+
+    ensureGameplayScaffold(scene) {
+        if (!scene || !this._shouldBackfillGameplayScaffold(scene)) return scene;
+        if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
+        if (!Array.isArray(scene.sceneChallenges)) scene.sceneChallenges = [];
+        if (!scene.flowGuide || typeof scene.flowGuide !== 'object') scene.flowGuide = this.normalizeFlowGuide({});
+
+        if (scene.storyPhases.length === 0) {
+            scene.storyPhases = this._buildFallbackStoryPhases(scene);
+        }
+        this._ensureActiveStoryPhase(scene);
+
+        if (scene.sceneChallenges.length === 0) {
+            scene.sceneChallenges = this._buildFallbackSceneChallenges(scene);
+        }
+        this._ensureActiveSceneChallenge(scene);
+
+        if (!this._hasFlowGuideSuggestions(scene.flowGuide)) {
+            scene.flowGuide = this._buildFallbackFlowGuide(scene);
+        } else {
+            scene.flowGuide = this.normalizeFlowGuide(scene.flowGuide);
+        }
+        return scene;
+    },
+
+    _shouldBackfillGameplayScaffold(scene) {
+        if (!scene || !this.isScenePlaying(scene)) return false;
+        return (Array.isArray(scene.quests) && scene.quests.length > 0) ||
+            (Array.isArray(scene.conflictSeeds) && scene.conflictSeeds.length > 0) ||
+            (Array.isArray(scene.storyArcs) && scene.storyArcs.length > 0) ||
+            (Array.isArray(scene.clueGraph) && scene.clueGraph.length > 0);
+    },
+
+    _ensureActiveStoryPhase(scene) {
+        if (!Array.isArray(scene.storyPhases) || scene.storyPhases.length === 0) return null;
+        const active = scene.storyPhases.find(phase => phase.status === 'active');
+        if (active) return active;
+        const next = scene.storyPhases.find(phase => !['completed', 'failed', 'bypassed'].includes(phase.status)) || scene.storyPhases[0];
+        if (next && !['completed', 'failed', 'bypassed'].includes(next.status)) next.status = 'active';
+        return next || null;
+    },
+
+    _ensureActiveSceneChallenge(scene) {
+        if (!Array.isArray(scene.sceneChallenges) || scene.sceneChallenges.length === 0) return null;
+        const active = scene.sceneChallenges.find(challenge => challenge.status === 'active');
+        if (active) return active;
+        const phase = this.getActiveStoryPhase(scene);
+        const next = scene.sceneChallenges.find(challenge =>
+            challenge.status === 'locked' && (!phase?.id || !challenge.phaseId || challenge.phaseId === phase.id)
+        ) || scene.sceneChallenges.find(challenge => !['completed', 'failed', 'bypassed'].includes(challenge.status));
+        if (next && !['completed', 'failed', 'bypassed'].includes(next.status)) next.status = 'active';
+        return next || null;
+    },
+
+    _buildFallbackStoryPhases(scene) {
+        const mainQuest = this._getMainQuest(scene);
+        const objectives = (mainQuest?.objectives || [])
+            .map(obj => String(obj?.text || obj || '').trim())
+            .filter(Boolean);
+        const seeds = Array.isArray(scene.conflictSeeds) ? scene.conflictSeeds.map(String).filter(Boolean) : [];
+        const arc = Array.isArray(scene.storyArcs) ? scene.storyArcs[0] : null;
+        const source = objectives.length > 0
+            ? objectives
+            : (seeds.length > 0 ? seeds : [arc?.synopsis || scene.description || scene.name || '推进当前故事']);
+        return source.slice(0, 3).map((text, idx) => this.normalizeStoryPhase({
+            id: `phase_auto_${idx + 1}`,
+            title: idx === 0 ? '建立立足点' : (idx === source.length - 1 ? '完成关键抉择' : '取得关键证据'),
+            status: idx === 0 ? 'active' : 'locked',
+            goal: text,
+            stakes: seeds[idx] || seeds[0] || '拖延或失败会让局势压力上升。',
+            entry: idx === 0 ? '场景开始' : '上一阶段目标已有明确进展',
+            exit: `围绕「${text}」取得证据、让步或付出代价`,
+            recommendedActions: this._fallbackActionsForObjective(scene, text),
+            pressureTags: ['main'],
+            spotlight: []
+        }, idx)).filter(Boolean);
+    },
+
+    _buildFallbackSceneChallenges(scene) {
+        const phases = Array.isArray(scene.storyPhases) && scene.storyPhases.length > 0
+            ? scene.storyPhases
+            : this._buildFallbackStoryPhases(scene);
+        const mainQuest = this._getMainQuest(scene);
+        return phases.slice(0, 4).map((phase, idx) => this.normalizeSceneChallenge({
+            id: `challenge_auto_${phase.id || idx + 1}`,
+            phaseId: phase.id || '',
+            title: `${phase.title || '阶段'}挑战`,
+            status: phase.status === 'active' ? 'active' : 'locked',
+            goal: phase.goal || '通过行动、证据和检定推进当前阶段。',
+            stakes: phase.stakes || '失败会带来代价，但故事继续推进。',
+            targetProgress: idx >= 2 ? 4 : 3,
+            maxStrain: 3,
+            checkBudget: { min: 1, target: 2, max: 4 },
+            tags: ['main', 'fallback'],
+            supports: mainQuest?.id ? [`${mainQuest.id}:${idx + 1}`] : [],
+            approaches: [
+                { id: `approach_${idx + 1}_talk`, label: '用已有信息争取支持', stat: 'charisma', dc: 13 + idx, effect: 1, actionType: 'persuade', tags: ['social'], keywords: ['说服', '谈判', '争取支持'] },
+                { id: `approach_${idx + 1}_investigate`, label: '调查可验证证据', stat: 'intelligence', dc: 13 + idx, effect: 1, actionType: 'investigate', tags: ['evidence'], keywords: ['调查', '搜索', '验证证据'] },
+                { id: `approach_${idx + 1}_observe`, label: '观察现场异常', stat: 'wisdom', dc: 12 + idx, effect: 1, actionType: 'observe', tags: ['clue'], keywords: ['观察', '察看', '留意异常'] }
+            ],
+            failForward: ['得到片面线索但付出代价。', '公开时钟、反制或关系压力推进。']
+        }, idx)).filter(Boolean);
+    },
+
+    _buildFallbackFlowGuide(scene) {
+        const phase = this.getActiveStoryPhase(scene) || scene.storyPhases?.[0] || null;
+        const challenge = this.getActiveChallenge(scene) || scene.sceneChallenges?.[0] || null;
+        const objective = phase?.goal || this._getMainQuest(scene)?.objectives?.[0]?.text || scene.conflictSeeds?.[0] || '推进当前目标';
+        const openingMoves = [
+            ...(phase?.recommendedActions || []),
+            ...(challenge?.approaches || []).map(approach => approach.label ? `${approach.label}：${objective}` : '')
+        ].map(String).filter(Boolean);
+        const firstChar = this._sceneCharacters(scene)[0];
+        const loc = (scene.locations || []).find(l => l.id === scene.currentLocation);
+        return this.normalizeFlowGuide({
+            openingMoves: [
+                ...openingMoves,
+                loc?.name ? `观察${loc.name}里和目标有关的异常` : '观察当前地点有没有异常',
+                firstChar?.name ? `询问${firstChar.name}当前最紧急的问题` : '询问在场的人当前最紧急的问题'
+            ],
+            sessionGoals: [objective, ...(scene.storyPhases || []).map(p => p.goal).filter(Boolean)].slice(0, 4),
+            stalledPrompts: [
+                '观察当前地点有没有异常',
+                firstChar?.name ? `询问${firstChar.name}下一步该做什么` : '询问在场的人下一步该做什么',
+                '制定一个计划，先收集情报再行动'
+            ],
+            failForward: [
+                '失败时推进局势压力，但给出一个更清晰的新线索。',
+                '部分成功时让目标达成一半，并引入代价或新压力。'
+            ],
+            completedMoves: []
+        });
+    },
+
+    _fallbackActionsForObjective(scene, objective) {
+        const text = String(objective || '当前目标').slice(0, 80);
+        const firstChar = this._sceneCharacters(scene)[0];
+        const loc = (scene.locations || []).find(l => l.id === scene.currentLocation);
+        return [
+            `围绕「${text}」采取下一步`,
+            loc?.name ? `观察${loc.name}里和「${text}」有关的异常` : `观察当前地点和「${text}」有关的线索`,
+            firstChar?.name ? `询问${firstChar.name}关于「${text}」的看法` : `询问在场的人关于「${text}」的线索`
+        ];
+    },
+
+    _getMainQuest(scene) {
+        return (scene?.quests || []).find(q => q?.type === 'main') || (scene?.quests || [])[0] || null;
+    },
+
+    _hasFlowGuideSuggestions(flowGuide) {
+        return ['openingMoves', 'stalledPrompts'].some(key =>
+            Array.isArray(flowGuide?.[key]) && flowGuide[key].some(item => String(item || '').trim())
+        );
     },
 
     _repairCompanionResourceLink(scene, resource) {
@@ -396,7 +551,7 @@ const WorldEngine = {
 
     normalizeStoryPhase(phase = {}, index = 0) {
         if (!phase || typeof phase !== 'object') return null;
-        const statuses = ['locked', 'active', 'completed'];
+        const statuses = ['locked', 'active', 'completed', 'failed', 'bypassed'];
         const status = statuses.includes(phase.status) ? phase.status : (index === 0 ? 'active' : 'locked');
         const list = (key, limit, itemLimit = 160) => (
             Array.isArray(phase[key]) ? phase[key] : []
@@ -1435,7 +1590,7 @@ const WorldEngine = {
     applyStoryPhaseUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
-        const statuses = ['locked', 'active', 'completed'];
+        const statuses = ['locked', 'active', 'completed', 'failed', 'bypassed'];
         let changed = false;
         updates.slice(0, 8).forEach(update => {
             if (!update || typeof update !== 'object') return;
@@ -4472,8 +4627,9 @@ const WorldEngine = {
     getActiveStoryPhase(scene) {
         const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases : [];
         if (phases.length === 0) return null;
+        const terminalStatuses = ['completed', 'failed', 'bypassed'];
         return phases.find(p => p.status === 'active')
-            || phases.find(p => p.status !== 'completed')
+            || phases.find(p => !terminalStatuses.includes(p.status))
             || phases[phases.length - 1]
             || null;
     },
