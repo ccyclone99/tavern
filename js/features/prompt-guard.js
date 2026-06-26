@@ -94,10 +94,82 @@ const PromptGuard = {
 
     sanitizeStateUpdate(update) {
         if (!update || typeof update !== 'object') return null;
-        const forbidden = ['settings', 'apiKey', 'systemPrompt', 'developerPrompt', 'playerStats', 'attrPoints', 'level'];
-        const copy = JSON.parse(JSON.stringify(update));
-        for (const key of forbidden) delete copy[key];
-        return copy;
+        const sanitized = this._sanitizeStateUpdateValue(update, []);
+        return sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized) ? sanitized : null;
+    },
+
+    _sanitizeStateUpdateValue(value, path = []) {
+        const MAX_DEPTH = 8;
+        const MAX_ARRAY_ITEMS = 120;
+        const MAX_OBJECT_KEYS = 120;
+        const MAX_STRING_LENGTH = 2000;
+        if (path.length > MAX_DEPTH) return undefined;
+        if (value === null) return null;
+
+        const type = typeof value;
+        if (type === 'string') return value.slice(0, MAX_STRING_LENGTH);
+        if (type === 'number') return Number.isFinite(value) ? value : undefined;
+        if (type === 'boolean') return value;
+        if (type !== 'object') return undefined;
+
+        if (Array.isArray(value)) {
+            const cleanArray = [];
+            for (const item of value.slice(0, MAX_ARRAY_ITEMS)) {
+                const cleanItem = this._sanitizeStateUpdateValue(item, path.concat('[]'));
+                if (cleanItem !== undefined) cleanArray.push(cleanItem);
+            }
+            if (value.length > MAX_ARRAY_ITEMS) {
+                console.warn(`[PromptGuard] state_update 数组超过上限 ${MAX_ARRAY_ITEMS}，已截断`);
+            }
+            return cleanArray;
+        }
+
+        const entries = Object.entries(value);
+        if (entries.length > MAX_OBJECT_KEYS) {
+            console.warn(`[PromptGuard] state_update 对象字段超过上限 ${MAX_OBJECT_KEYS}，已截断`);
+        }
+        const cleanObject = Object.create(null);
+        for (const [key, child] of entries.slice(0, MAX_OBJECT_KEYS)) {
+            if (this._isForbiddenStateUpdateKey(key, path)) continue;
+            const cleanChild = this._sanitizeStateUpdateValue(child, path.concat(this._normalizeStateUpdateKey(key)));
+            if (cleanChild !== undefined) cleanObject[key] = cleanChild;
+        }
+        return cleanObject;
+    },
+
+    _isForbiddenStateUpdateKey(key, path = []) {
+        const raw = String(key || '').trim().toLowerCase();
+        const normalized = this._normalizeStateUpdateKey(key);
+        const protoKeys = ['__proto__', 'prototype', 'constructor', '__definegetter__', '__definesetter__', '__lookupgetter__', '__lookupsetter__'];
+        if (protoKeys.includes(raw)) return true;
+
+        const sensitiveKeys = [
+            'settings', 'apikey', 'openaiapikey', 'systemprompt', 'developerprompt',
+            'token', 'accesstoken', 'bearertoken', 'password', 'authorization', 'authheader'
+        ];
+        if (sensitiveKeys.includes(normalized)) return true;
+
+        const topLevelAllowed = [
+            'strategies', 'knowledgeadd', 'inteladd', 'discoveryupdate', 'clockupdate',
+            'storyarcupdate', 'storyphaseupdate', 'clueupdate', 'failurestateupdate',
+            'counterstrategyupdate', 'npcagendaupdate', 'challengeupdate', 'evidenceadd',
+            'revelationupdate', 'flowgraphupdate', 'factionsupdate', 'characterupdates',
+            'scene', 'questsupdate', 'itemadd', 'locationupdate'
+        ];
+        if (path.length === 0 && !topLevelAllowed.includes(normalized)) return true;
+
+        const sceneAllowed = ['worldtensiondelta', 'activestrategyid'];
+        if (path.length === 1 && path[0] === 'scene' && !sceneAllowed.includes(normalized)) return true;
+
+        const corePlayerKeys = ['playerstats', 'attrpoints', 'level', 'playerhp', 'playermaxhp', 'gold', 'exp'];
+        if (path.length === 0 && corePlayerKeys.includes(normalized)) return true;
+        if (path.length === 1 && path[0] === 'scene' && corePlayerKeys.includes(normalized)) return true;
+
+        return false;
+    },
+
+    _normalizeStateUpdateKey(key) {
+        return String(key || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
     },
 
     _containsProtocolMarker(raw) {
