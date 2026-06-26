@@ -702,7 +702,18 @@ const GroupChat = {
                 WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             }
             if (scene.gameState === 'playing') {
-                WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+                const challengeResult = WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+                if (challengeResult?.secondaryResults?.length > 0) {
+                    msg.checkData.secondaryResults = challengeResult.secondaryResults.map(item => ({
+                        approachId: item.approachId || '',
+                        label: item.label || '',
+                        outcome: item.outcome || '',
+                        progressDelta: Number(item.progressDelta || 0),
+                        strainDelta: Number(item.strainDelta || 0),
+                        appliedEffects: item.appliedEffects === true,
+                        consequenceId: item.consequenceId || ''
+                    }));
+                }
             }
             if (scene.gameState === 'playing' && WorldEngine.resolveCounterStrategies) {
                 const counterplayResults = WorldEngine.resolveCounterStrategies(scene, {
@@ -857,7 +868,13 @@ const GroupChat = {
         const counters = Array.isArray(data.counterplayResults) && data.counterplayResults.length > 0
             ? ` 反制变化：${data.counterplayResults.map(item => `${item.title}${item.resolved ? '已解决' : (item.revealed ? '被揭示' : '被削弱')}`).join('；')}。`
             : '';
-        return `检定结果：${data.resultLabel || '未知'}。${resources}${counters}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+        const secondary = Array.isArray(data.secondaryResults) && data.secondaryResults.length > 0
+            ? ` 复合行动结算：${data.secondaryResults.map(item => {
+                const delta = item.progressDelta ? `进展+${item.progressDelta}` : (item.strainDelta ? `压力+${item.strainDelta}` : (item.appliedEffects ? '次级方法完整生效' : '形成后续影响'));
+                return `${item.label}（${delta}）`;
+            }).join('；')}。`
+            : '';
+        return `检定结果：${data.resultLabel || '未知'}。${resources}${counters}${secondary}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
     },
 
     async cancelPendingCheck() {

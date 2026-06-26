@@ -320,6 +320,7 @@ scene.pendingAction = {
 - 高风险行动仍生成 `scene.pendingAction`，但触发来源是自然语言，而不是按钮模式。
 - 检定不是主动功能；只有玩家描述了有风险且结果不确定的行动后，系统才要求检定。
 - 当 `pendingAction.suggestedCheck` 或 `pendingAction.adjudication` 存在时，后续检定必须沿用同一个属性和 DC。
+- 复合行动可以记录同一挑战内的次级方法，但不能产生第二个 DC；掷骰后由 `WorldEngine.resolveChallengeCheck()` 结算 `secondaryResults`：大成功触发次级方法完整收益，成功追加进展，部分成功/失败追加压力和持续后果，并把结果注入 DM 续写上下文。
 - 细则见 `docs/INPUT_FLOW_SPEC.md`。
 
 ### 4.7 检定卡

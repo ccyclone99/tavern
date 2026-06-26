@@ -112,7 +112,8 @@ const RunRecorder = {
                 dc: Number(entry.check.dc || 0),
                 outcome: entry.check.outcome || '',
                 intent: entry.check.intent || '',
-                challengeTitle: entry.check.challengeTitle || ''
+                challengeTitle: entry.check.challengeTitle || '',
+                secondaryResults: (entry.check.secondaryResults || []).slice(0, 4)
             }))
             .slice(-12);
         const phaseSummaries = this._buildPhaseSummaries(scene, challenges, evidence, checks, transcript);
@@ -397,7 +398,14 @@ const RunRecorder = {
                 dc: Number(check.dc || 0),
                 outcome: check.resultLabel || check.outcome || '',
                 intent: check.intent || '',
-                challengeTitle: check.challengeContext?.challengeTitle || ''
+                challengeTitle: check.challengeContext?.challengeTitle || '',
+                secondaryResults: (check.secondaryResults || []).slice(0, 4).map(item => ({
+                    label: item.label || '',
+                    outcome: item.outcome || '',
+                    progressDelta: Number(item.progressDelta || 0),
+                    strainDelta: Number(item.strainDelta || 0),
+                    appliedEffects: item.appliedEffects === true
+                }))
             } : null,
             archived: false
         };

@@ -3325,25 +3325,85 @@ const WorldEngine = {
             if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
             return { challenge, progressDelta, strainDelta, outcome, ended: true };
         }
-        if (approach && outcome === 'critical_success' && Array.isArray(ctx.secondaryApproachIds)) {
+        let secondaryResults = [];
+        if (approach && Array.isArray(ctx.secondaryApproachIds)) {
             const secondary = (challenge.approaches || [])
-                .filter(a => ctx.secondaryApproachIds.includes(a.id))
-                .slice(0, 1);
-            secondary.forEach(item => this._applyChallengeApproachEffects(scene, challenge, item, 'success', check));
+                .filter(a => a && a.id !== approach.id && ctx.secondaryApproachIds.includes(a.id))
+                .slice(0, 2);
+            secondaryResults = this._settleSecondaryChallengeApproaches(scene, challenge, secondary, outcome, check);
         }
         if (!this.isScenePlaying(scene)) {
             if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
-            return { challenge, progressDelta, strainDelta, outcome, ended: true };
+            return { challenge, progressDelta, strainDelta, outcome, secondaryResults, ended: true };
         }
         challenge = scene.sceneChallenges.find(c => c.id === challengeId) || challenge;
         this._settleChallengeStatus(scene, challenge, challenge.lastReason);
         if (!this.isScenePlaying(scene)) {
             if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
-            return { challenge, progressDelta, strainDelta, outcome, ended: true };
+            return { challenge, progressDelta, strainDelta, outcome, secondaryResults, ended: true };
         }
         if (scene.gameState === 'playing') this._activateNextChallenge(scene);
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
-        return { challenge, progressDelta, strainDelta, outcome };
+        return { challenge, progressDelta, strainDelta, outcome, secondaryResults };
+    },
+
+    _settleSecondaryChallengeApproaches(scene, challenge, approaches = [], outcome = 'success', check = {}) {
+        if (!scene || !challenge || !Array.isArray(approaches) || approaches.length === 0) return [];
+        const results = [];
+        approaches.forEach(approach => {
+            if (!this.isScenePlaying(scene)) return;
+            const label = approach.label || approach.id || '次级方法';
+            const result = {
+                approachId: approach.id || '',
+                label,
+                outcome,
+                progressDelta: 0,
+                strainDelta: 0,
+                appliedEffects: false,
+                consequenceId: ''
+            };
+
+            if (outcome === 'critical_success') {
+                this._applyChallengeApproachEffects(scene, challenge, approach, 'success', check);
+                result.appliedEffects = true;
+                this.addSystemMessage(scene, `【复合行动收益：${challenge.title}】次级方法“${label}”完整生效。`, 'system');
+            } else if (outcome === 'success') {
+                const before = Number(challenge.progress || 0);
+                if (before < Number(challenge.targetProgress || 1)) {
+                    challenge.progress = this._clamp(before + 1, 0, Number(challenge.targetProgress || 1));
+                    result.progressDelta = challenge.progress - before;
+                }
+                this.addSystemMessage(scene, `【复合行动收益：${challenge.title}】次级方法“${label}”带来额外进展。`, 'system');
+                this.recordEvent(scene, {
+                    category: 'challenge',
+                    title: `复合行动收益：${challenge.title}`,
+                    text: `${label}${result.progressDelta ? `，挑战进展 +${result.progressDelta}` : '，形成后续优势'}`,
+                    refId: challenge.id
+                });
+            } else {
+                const before = Number(challenge.strain || 0);
+                challenge.strain = this._clamp(before + 1, 0, Number(challenge.maxStrain || 3));
+                result.strainDelta = challenge.strain - before;
+                const severity = outcome === 'critical_fail' ? 'high' : 'medium';
+                const effect = outcome === 'partial'
+                    ? `次级方法“${label}”推进不稳，带来额外牵扯。`
+                    : `次级方法“${label}”暴露破绽，增加挑战压力。`;
+                const consequence = this.recordConsequence(scene, {
+                    title: `${challenge.title}的复合行动代价`,
+                    cause: check.intent || `${check.statName || '属性'}检定`,
+                    effect,
+                    severity,
+                    category: check.actionType || 'challenge',
+                    tags: ['challenge', 'secondary', challenge.id, approach.id, check.key].filter(Boolean)
+                });
+                result.consequenceId = consequence?.id || '';
+                this.addSystemMessage(scene, `【复合行动代价：${challenge.title}】${effect}`, 'system');
+            }
+
+            challenge.updatedAt = Date.now();
+            results.push(result);
+        });
+        return results;
     },
 
     reconcileQuestProgressFromNarrative(scene, message = {}, options = {}) {

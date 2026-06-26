@@ -429,8 +429,9 @@ const SidebarRight = {
         `).join('');
         const phases = (record.phaseSummaries || []).slice(0, 5).map(p => {
             const excerpts = (p.excerpts || []).slice(0, 6).map(entry => {
+                const secondary = this._formatCheckSecondaryResults(entry.check);
                 const check = entry.check
-                    ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}</small>`
+                    ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}${secondary ? ` · ${Renderer.escapeHtml(secondary)}` : ''}</small>`
                     : '';
                 return `<li class="run-record-phase-excerpt run-record-transcript-${Renderer.escapeAttr(entry.type || 'message')}">
                     <strong>${Renderer.escapeHtml(entry.speaker || '记录')}<em>${Renderer.escapeHtml(this._eventTimeText(entry.timestamp))}</em></strong>
@@ -471,8 +472,9 @@ const SidebarRight = {
             <span>${Renderer.escapeHtml(c.statName || '检定')} ${c.total || 0}/DC${c.dc || 0} ${Renderer.escapeHtml(c.outcome || '')}</span>
         `).join('');
         const transcriptEntries = (record.transcript || []).map(entry => {
+            const secondary = this._formatCheckSecondaryResults(entry.check);
             const check = entry.check
-                ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}</small>`
+                ? `<small>${Renderer.escapeHtml(entry.check.statName || '检定')} ${entry.check.total || 0}/DC${entry.check.dc || 0} ${Renderer.escapeHtml(entry.check.outcome || '')}${secondary ? ` · ${Renderer.escapeHtml(secondary)}` : ''}</small>`
                 : '';
             return `<li class="run-record-transcript-entry run-record-transcript-${Renderer.escapeAttr(entry.type || 'message')}">
                 <strong>${Renderer.escapeHtml(entry.speaker || '记录')}<em>${Renderer.escapeHtml(this._eventTimeText(entry.timestamp))}</em></strong>
@@ -526,6 +528,19 @@ const SidebarRight = {
             hour: '2-digit',
             minute: '2-digit'
         });
+    },
+
+    _formatCheckSecondaryResults(check) {
+        const items = Array.isArray(check?.secondaryResults) ? check.secondaryResults : [];
+        if (items.length === 0) return '';
+        return `复合：${items.slice(0, 3).map(item => {
+            const delta = Number(item.progressDelta || 0)
+                ? `进展+${Number(item.progressDelta || 0)}`
+                : (Number(item.strainDelta || 0)
+                    ? `压力+${Number(item.strainDelta || 0)}`
+                    : (item.appliedEffects ? '完整生效' : '影响'));
+            return `${item.label || '次级方法'} ${delta}`;
+        }).join('；')}`;
     },
 
     _buildEventLogHtml(events) {
