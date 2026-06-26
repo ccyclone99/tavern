@@ -365,6 +365,7 @@ scene.evidenceLedger = [
 - `strategy_leverage`：可作为计策筹码；`tag`、物品标签、名称或描述与当前计策文本匹配时，右侧计策面板和计策 prompt 会展示该物品及风险修正。
 - 带 `uses` 的同名物品合并时累加 uses，效果按语义去重，避免一次使用重复结算。
 - 带 `uses` 的消耗品在次数降为 0 时从背包移除；直接使用和检定投入共享同一消耗逻辑。
+- 检定投入的消耗品扣除后会生成 `【资源消耗】检定投入` 系统消息，并写入 `eventLog.resource`，方便右侧局势和通关回顾追溯。
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
 - `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
 - `sellInventoryItem()` 只允许出售非任务、未装备物品；出售会复用 `removeInventoryItem()` 和 `addGold()`，同时写入背包、经济和系统事件。

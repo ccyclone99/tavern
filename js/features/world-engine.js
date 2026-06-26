@@ -3036,11 +3036,11 @@ const WorldEngine = {
 
     _eventCategoryFromText(text) {
         const clean = String(text || '');
+        if (/资源消耗|同伴协助|投入资源/.test(clean)) return 'resource';
         if (/检定|D20|掷骰/.test(clean)) return 'check';
         if (/任务|主线|支线/.test(clean)) return 'quest';
         if (/挑战|阶段推进|里程碑/.test(clean)) return 'challenge';
         if (/线索|证据|探索收获|知识/.test(clean)) return 'exploration';
-        if (/资源消耗|同伴协助|投入资源/.test(clean)) return 'resource';
         if (/购买|交易|金币|花费/.test(clean)) return 'economy';
         if (/物品|背包|使用物品|获得 .+包|获得 .+药|装备|卸下/.test(clean)) return 'inventory';
         if (/升级|经验|属性点/.test(clean)) return 'level';
@@ -3190,6 +3190,7 @@ const WorldEngine = {
         if (!scene || !Array.isArray(scene.inventory)) return false;
         let consumed = false;
         const consumedKeys = new Set();
+        const notes = [];
         modifiers.forEach(mod => {
             if (!mod.consume || !mod.source) return;
             const key = mod.itemId || mod.source;
@@ -3199,11 +3200,21 @@ const WorldEngine = {
             );
             if (idx < 0) return;
             const item = scene.inventory[idx];
+            const itemName = item.name || mod.source;
             if (!this._consumeInventoryItem(scene, item)) return;
             consumedKeys.add(key);
             consumed = true;
+            notes.push(`${itemName} -1`);
         });
-        if (consumed && typeof SidebarRight !== 'undefined') SidebarRight.renderInventory?.();
+        if (consumed) {
+            if (!Array.isArray(scene.messages)) scene.messages = [];
+            this.addSystemMessage(scene, `【资源消耗】检定投入：${notes.join('，')}`, 'system');
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderInventory?.();
+                SidebarRight.markTabNew?.('inventory');
+                SidebarRight.markTabNew?.('situation');
+            }
+        }
         return consumed;
     },
 
