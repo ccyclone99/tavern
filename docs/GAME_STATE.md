@@ -480,7 +480,7 @@ scene.evidenceLedger = [
 ```
 
 `StrategyManager.normalizeStrategy()` 会修正非法 `status`、`phase`，夹紧 `risk`/`progress`/`exposure` 到 0-100，并截断标题、目标、赌注、最近结果、步骤、参与者、情报、资源和反制建议等数组字段。单条 `<state_update>` 最多创建 4 条计策、更新 12 条计策；场景最多保留 24 条计策，超过后不再新增。
-`WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名或物品 ID，`WorldEngine.consumeStrategyItemResources()` 会扣除一次，并把物品 id/name 写入 `consumedItemResourceIds` 防止重复扣除。标签和效果标签只用于展示可用筹码，不能单独触发扣除。
+`WorldEngine.getStrategyItemResources()` 会把匹配当前计策文本、`resources`、`requiredIntel` 或 `usedIntel` 的 `strategy_leverage` 物品展示为可用筹码。计策进入执行或结算阶段时，如果本次状态补丁的 `resources` / `usedIntel` 明确提到可消耗物品名或物品 ID，`WorldEngine.consumeStrategyItemResources()` 会扣除一次；如果物品已在筹备阶段登记到计策的 `resources/usedIntel`，首次进入执行/结算阶段也会扣除已登记的可消耗物品。已消耗记录会把物品 id、物品名和 `strategy_item:xxx` UI 资源 ID 一起写入 `consumedItemResourceIds` 防止重复扣除。标签和效果标签只用于展示可用筹码，不能单独触发扣除。
 
 计策创建、更新和放弃属于玩法状态变更，必须在 `scene.gameState` 为 `playing` 时才允许。结局后右侧计策面板只保留回顾和切换查看，不显示放弃或重新规划入口，也不能再通过 `<state_update>` 修改计策或消耗计策物品。
 

@@ -4404,19 +4404,33 @@ const WorldEngine = {
             .slice(0, limit);
     },
 
-    consumeStrategyItemResources(scene, strategy, patch = {}) {
+    consumeStrategyItemResources(scene, strategy, patch = {}, options = {}) {
         if (!scene || !strategy || !Array.isArray(scene.inventory)) return [];
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return [];
         const inventoryCountBefore = scene.inventory.length;
         const phase = String(patch.phase || strategy.phase || '');
         const status = String(patch.status || strategy.status || '');
-        const isResolutionStep = ['action', 'complication', 'resolution'].includes(phase) ||
-            ['executing', 'resolved', 'failed'].includes(status) ||
+        const isSettlementStep = ['action', 'complication', 'resolution'].includes(phase) ||
+            ['executing', 'resolved', 'failed'].includes(status);
+        const isResolutionStep = isSettlementStep ||
             !!String(patch.latestOutcome || '').trim();
         if (!isResolutionStep) return [];
 
-        const selectionText = this._strategyItemSelectionText(patch);
+        const previous = options?.previous && typeof options.previous === 'object' ? options.previous : null;
+        const previousPhase = String(previous?.phase || '');
+        const previousStatus = String(previous?.status || '');
+        const wasSettlementStep = ['action', 'complication', 'resolution'].includes(previousPhase) ||
+            ['executing', 'resolved', 'failed'].includes(previousStatus);
+        const enteredSettlementStep = !!previous && isSettlementStep && !wasSettlementStep;
+        const patchSelectionText = this._strategyItemSelectionText(patch);
+        const plannedSelectionText = enteredSettlementStep
+            ? this._strategyItemSelectionText({
+                resources: strategy.resources || [],
+                usedIntel: strategy.usedIntel || []
+            })
+            : '';
+        const selectionText = patchSelectionText || plannedSelectionText;
         if (!selectionText) return [];
         const normalizedSelection = this._normalizeFlowText(selectionText);
         if (!Array.isArray(strategy.consumedItemResourceIds)) strategy.consumedItemResourceIds = [];
@@ -4427,8 +4441,8 @@ const WorldEngine = {
         const consumed = [];
 
         resources.forEach(resource => {
-            const key = String(resource.itemId || resource.name || '').trim();
-            if (!key || consumedKeys.has(key)) return;
+            const resourceKeys = this._strategyResourceKeys(resource);
+            if (resourceKeys.length === 0 || resourceKeys.some(key => consumedKeys.has(key))) return;
             const idx = scene.inventory.findIndex(item =>
                 item && ((resource.itemId && item.id === resource.itemId) || item.name === resource.name)
             );
@@ -4442,7 +4456,7 @@ const WorldEngine = {
             const after = afterItem
                 ? (afterItem.uses !== undefined ? Number(afterItem.uses || 0) : Number(afterItem.quantity || 1))
                 : 0;
-            consumedKeys.add(key);
+            resourceKeys.forEach(key => consumedKeys.add(key));
             consumed.push({
                 itemId: resource.itemId || '',
                 name: resource.name,
@@ -4467,6 +4481,20 @@ const WorldEngine = {
             SidebarRight.markTabNew?.('strategies');
         }
         return consumed;
+    },
+
+    _strategyResourceKeys(resource = {}) {
+        const keys = [];
+        const add = value => {
+            const text = String(value || '').trim();
+            if (text && !keys.includes(text)) keys.push(text);
+        };
+        add(resource.itemId);
+        add(resource.name);
+        add(resource.id);
+        if (resource.itemId) add(`strategy_item:${resource.itemId}`);
+        if (resource.name) add(`strategy_item:${resource.name}`);
+        return keys;
     },
 
     _strategyItemSelectionText(patch = {}) {

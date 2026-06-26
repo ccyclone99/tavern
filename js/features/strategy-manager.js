@@ -67,6 +67,7 @@ const StrategyManager = {
         const validStatuses = ['draft', 'preparing', 'executing', 'exposed', 'resolved', 'failed'];
         const validPhases = ['intel', 'setup', 'action', 'complication', 'resolution'];
         const strategy = scene.strategies[idx];
+        const previous = JSON.parse(JSON.stringify(strategy));
         for (const key of allowed) {
             if (patch[key] !== undefined) {
                 strategy[key] = patch[key];
@@ -80,7 +81,7 @@ const StrategyManager = {
         strategy.updatedAt = Date.now();
         scene.strategies[idx] = this.normalizeStrategy(strategy);
         if (typeof WorldEngine !== 'undefined' && WorldEngine.consumeStrategyItemResources) {
-            WorldEngine.consumeStrategyItemResources(scene, scene.strategies[idx], patch);
+            WorldEngine.consumeStrategyItemResources(scene, scene.strategies[idx], patch, { previous });
         }
         State.saveCurrentSceneDebounced();
         SidebarRight.renderStrategies();
