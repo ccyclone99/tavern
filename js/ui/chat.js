@@ -71,6 +71,10 @@ const ChatUI = {
         const resourceModsHtml = resourceMods.length > 0
             ? `<div class="check-modifiers check-used-modifiers">${resourceMods.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
             : '';
+        const resolvedConsequences = Array.isArray(d.resolvedConsequences) ? d.resolvedConsequences : [];
+        const resolvedConsequencesHtml = resolvedConsequences.length > 0
+            ? `<div class="check-modifiers check-resolved-consequences">${resolvedConsequences.slice(0, 3).map(item => `<span>解除后果：${Renderer.escapeHtml(item.title || item.id || '后果')}</span>`).join('')}</div>`
+            : '';
         const note = d.consequenceHint
             ? `<div class="check-outcome-note">${Renderer.escapeHtml(d.consequenceHint)}</div>`
             : '';
@@ -86,6 +90,7 @@ const ChatUI = {
             ${breakdown}
             ${itemMods}
             ${resourceModsHtml}
+            ${resolvedConsequencesHtml}
             <div class="check-outcome">
                 <div class="check-result-badge">${Renderer.escapeHtml(resultText)}</div>
                 ${note}

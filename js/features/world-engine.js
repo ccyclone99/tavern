@@ -3096,13 +3096,22 @@ const WorldEngine = {
         });
 
         if (resolved.length > 0) {
+            const text = `解除：${resolved.map(item => item.title).join('、')}`;
             this.recordEvent(scene, {
                 category: 'progress',
                 title: '后果解除',
-                text: `解除：${resolved.map(item => item.title).join('、')}`,
+                text,
                 refId: resolved[0].id,
                 timestamp: now
             });
+            if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+            if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+            scene.currentSituation.recentRisks.push(`后果解除：${resolved.map(item => item.title).join('、')}`);
+            scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderSituation?.();
+                SidebarRight.markTabNew?.('situation');
+            }
         }
         return resolved;
     },
