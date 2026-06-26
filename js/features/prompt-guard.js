@@ -84,6 +84,9 @@ const PromptGuard = {
             case 'item_add':
                 clone.raw = this._sanitizeItemAdd(raw);
                 return clone;
+            case 'quest':
+                clone.raw = this._sanitizeQuest(raw);
+                return clone;
             case 'check':
                 clone.raw = this._sanitizeCheck(raw);
                 return clone;
@@ -219,6 +222,21 @@ const PromptGuard = {
         const type = validTypes.includes((parts[2] || '').trim()) ? parts[2].trim() : 'misc';
         const qty = this._clamp(parseInt(parts[3], 10) || 1, 1, 20);
         return [name, desc, type, String(qty)].join('|');
+    },
+
+    _sanitizeQuest(raw) {
+        const parts = raw.split('|');
+        const name = this._clip(parts[0] || '未知任务', 80);
+        const type = (parts[1] || '').trim() === 'main' ? 'main' : 'side';
+        const desc = this._clip(parts[2] || '', 240);
+        const objectives = String(parts[3] || '')
+            .split(/[,，、;]/)
+            .map(item => this._clip(item, 120))
+            .filter(Boolean)
+            .slice(0, 8)
+            .join(',');
+        const reward = this._clip(parts[4] || '', 160);
+        return [name, type, desc, objectives, reward].join('|');
     },
 
     _sanitizeCheck(raw) {

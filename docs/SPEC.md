@@ -498,6 +498,7 @@ UI 要求：
 
 - `[exp:N]`、任务奖励和挑战/探索里程碑都进入同一经验池。
 - 经验结算统一走 `WorldEngine.addExperience()`；任务面板、剧情标记、物品使用、探索奖励和挑战奖励不能各自只做 `scene.exp += N`。
+- 动态新增任务统一走 `WorldEngine.addQuest()`；`[quest:]`、AI 动态任务和 UI 入口不能直接 push 到 `scene.quests`，必须由规则层规范字段、限制数量、去重、检查结局状态并写系统留痕。
 - 任务奖励统一走 `WorldEngine.grantQuestReward()`；手动完成、叙事自动完成、挑战支持完成和状态补丁完成都必须发放同一套奖励，并用 `quest.rewardGranted` 防重复。
 - 任务奖励中的金币、经验和物品分别落到经济、成长和背包事件日志，另插入一条玩家可见的任务奖励摘要。
 - 任务奖励包含物品时必须先做背包容量预检；背包满且无法合并时整套奖励不发放，`rewardGranted` 保持 `false`，避免金币/经验已发但物品静默丢失。
@@ -578,6 +579,7 @@ UI 要求：
 - 右侧“局势”面板展示未解决后果，帮助玩家理解哪些代价还在生效。
 - `eventLog` 记录“发生过什么”，`consequenceLedger` 记录“仍在影响什么”；两者不能混用。
 - 结构化副本中，`[quest_update]`、`questsUpdate` 和任务面板手动点击不能绕过任务推进闸门；任务面板手动回退必须走 `WorldEngine.reopenQuestObjective()` 留痕；只有普通叙事自动识别可在 `maxAutoQuestAdvances` 内有限 fallback。
+- `[quest:]` 标记必须先经过 `PromptGuard._sanitizeQuest()`，再由 `WorldEngine.addQuest()` 新增；单次最多保留 8 个目标，任务名、描述和奖励会截断，重复活跃任务不会新增。
 
 ## 5. Prompt 规格
 

@@ -44,11 +44,8 @@ const WorldEngine = {
         if (!Array.isArray(scene.currentSituation.recommendedActions)) scene.currentSituation.recommendedActions = [];
         if (typeof scene.turnCount !== 'number') scene.turnCount = 0;
         this.normalizePlayerVitals(scene);
-        if (Array.isArray(scene.quests)) {
-            scene.quests.forEach(quest => {
-                if (quest && quest.rewardGranted !== true) quest.rewardGranted = false;
-            });
-        }
+        if (!Array.isArray(scene.quests)) scene.quests = [];
+        scene.quests = scene.quests.map((quest, idx) => this.normalizeQuest(quest, idx)).filter(Boolean).slice(0, 40);
 
         scene.clocks = scene.clocks.map(c => this.normalizeClock(c)).filter(Boolean).slice(0, 12);
         scene.counterStrategies = scene.counterStrategies.map(c => this.normalizeCounterStrategy(c)).filter(Boolean).slice(0, 20);
@@ -437,6 +434,40 @@ const WorldEngine = {
             lastReason: String(data.lastReason || '').slice(0, 240),
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now()
         };
+    },
+
+    normalizeQuest(data = {}, index = 0) {
+        if (!data || typeof data !== 'object') return null;
+        const rawObjectives = Array.isArray(data.objectives) ? data.objectives : [];
+        const objectives = rawObjectives
+            .map(item => {
+                const text = typeof item === 'object'
+                    ? String(item.text || item.name || '').trim()
+                    : String(item || '').trim();
+                if (!text) return null;
+                return {
+                    text: text.slice(0, 180),
+                    completed: typeof item === 'object' ? item.completed === true : false
+                };
+            })
+            .filter(Boolean)
+            .slice(0, 8);
+        const fallbackName = `任务 ${index + 1}`;
+        const name = String(data.name || fallbackName).trim().slice(0, 80) || fallbackName;
+        const status = ['active', 'completed', 'failed', 'abandoned'].includes(data.status) ? data.status : 'active';
+        const quest = {
+            id: String(data.id || `q_${Date.now()}_${index}`).trim().slice(0, 100),
+            name,
+            type: data.type === 'main' ? 'main' : 'side',
+            description: String(data.description || '').trim().slice(0, 240),
+            objectives: objectives.length > 0 ? objectives : [{ text: '推进任务', completed: false }],
+            status,
+            giver: String(data.giver || '剧情').trim().slice(0, 60),
+            reward: String(data.reward || '').trim().slice(0, 220),
+            rewardGranted: data.rewardGranted === true
+        };
+        if (typeof data.completedAt === 'number') quest.completedAt = data.completedAt;
+        return quest;
     },
 
     normalizeChallengeApproach(data = {}, index = 0) {
@@ -1133,6 +1164,49 @@ const WorldEngine = {
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
         return { ok: actual > 0, amount: actual, hp: scene.playerHp, maxHp, before };
+    },
+
+    addQuest(scene, questData = {}, options = {}) {
+        if (!scene) return { ok: false, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
+        if (!Array.isArray(scene.quests)) scene.quests = [];
+
+        const quest = this.normalizeQuest({
+            ...questData,
+            id: questData.id || `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            status: questData.status || 'active',
+            rewardGranted: false
+        }, scene.quests.length);
+        if (!quest) return { ok: false, message: '任务数据无效。' };
+
+        const normalizedName = this._normalizeQuestText(quest.name);
+        const duplicate = scene.quests.find(existing =>
+            existing &&
+            existing.status === 'active' &&
+            this._normalizeQuestText(existing.name) === normalizedName
+        );
+        if (duplicate) {
+            return { ok: false, duplicate: true, quest: duplicate, message: `任务已存在：${duplicate.name}` };
+        }
+
+        const activeCount = scene.quests.filter(q => q && q.status === 'active').length;
+        if (activeCount >= 12 || scene.quests.length >= 40) {
+            return { ok: false, message: '当前任务过多，无法继续新增。' };
+        }
+
+        scene.quests.push(quest);
+        const objectiveText = quest.objectives.map(o => o.text).filter(Boolean).slice(0, 3).join('；');
+        const content = `【新任务：${quest.name}】${quest.description || objectiveText || '新的目标已加入任务列表。'}`;
+        let msg = null;
+        if (options.message !== false) msg = this.addSystemMessage(scene, content, 'system');
+
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderQuests?.();
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('quests');
+        }
+        return { ok: true, quest, messageId: msg?.id || '' };
     },
 
     grantQuestReward(scene, quest, options = {}) {

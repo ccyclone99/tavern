@@ -172,21 +172,19 @@ const QuestTracker = {
     addQuest(questData) {
         const scene = State.scene;
         if (!scene) return;
-        const quest = {
-            id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            name: questData.name || '未知任务',
-            type: questData.type || 'side',
-            description: questData.description || '',
-            objectives: (questData.objectives || []).map(t => ({ text: t, completed: false })),
-            status: 'active',
-            giver: questData.giver || '命运',
-            reward: questData.reward || ''
-        };
-        scene.quests.push(quest);
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.addQuest) {
+            console.warn('[QuestTracker] WorldEngine.addQuest 不可用，跳过新增任务');
+            return;
+        }
+        const result = WorldEngine.addQuest(scene, questData);
+        if (!result.ok) {
+            if (!result.duplicate && typeof showToast !== 'undefined') showToast(result.message || '新任务未加入。');
+            return;
+        }
         State.saveCurrentScene().catch(e => console.warn('新增任务保存失败:', e));
         this.render();
-        showToast(`新任务：${quest.name}`);
-        SidebarRight.markTabNew('quests');
+        if (typeof showToast !== 'undefined') showToast(`新任务：${result.quest.name}`);
+        if (typeof SidebarRight !== 'undefined') SidebarRight.markTabNew?.('quests');
     },
 
     /** AI 标记任务目标完成 */
