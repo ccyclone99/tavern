@@ -632,6 +632,7 @@ Prompt 必须区分以下块：
 ```
 
 `relationshipUpdate` 是旧字段名，运行时只作为 `characterUpdates` 的兼容别名；新 prompt 和文档均应使用 `characterUpdates`。
+`characterUpdates` 每条状态补丁最多处理 30 个角色；每个角色单次最多追加 8 条筹码、8 条共同记忆和 1 条 NPC 私密秘密。筹码、记忆、心情、秘密都会截断文本并去重，列表只保留最近的上限条目；`secret` 不会因为状态补丁自动公开给玩家。
 
 每类补丁必须：
 

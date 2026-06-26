@@ -246,6 +246,10 @@ const StrategyManager = {
         const MAX_INTEL_PER_UPDATE = 10;
         const MAX_FACTIONS_PER_UPDATE = 20;
         const MAX_RELATION_UPDATES_PER_UPDATE = 30;
+        const MAX_RELATION_ADDITIONS_PER_FIELD = 8;
+        const MAX_RELATION_LEVERAGE = 20;
+        const MAX_RELATION_MEMORIES = 30;
+        const MAX_CHARACTER_SECRETS = 20;
         const MAX_ITEMS_PER_UPDATE = 50;
         const MAX_LOCATIONS_PER_UPDATE = 20;
         const MAX_TOTAL_FACTIONS = 40;
@@ -524,8 +528,8 @@ const StrategyManager = {
                     char._relations[userName] = { affection: 0, trust: 0, suspicion: 0, fear: 0, debt: 0, leverage: [], mood: '平静', memories: [], history: [] };
                 }
                 const rel = char._relations[userName];
-                if (!Array.isArray(rel.leverage)) rel.leverage = [];
-                if (!Array.isArray(rel.memories)) rel.memories = [];
+                rel.leverage = this._stringList(rel.leverage, MAX_RELATION_LEVERAGE, 160);
+                rel.memories = this._stringList(rel.memories, MAX_RELATION_MEMORIES, 220);
                 if (!Array.isArray(rel.history)) rel.history = [];
                 const visibleChanges = [];
                 ['affection', 'trust', 'suspicion', 'fear', 'debt'].forEach(key => {
@@ -541,43 +545,43 @@ const StrategyManager = {
                     }
                 });
                 if (cu.leverageAdd !== undefined) {
-                    const list = Array.isArray(cu.leverageAdd) ? cu.leverageAdd : [cu.leverageAdd];
-                    let added = 0;
-                    list.map(String).filter(Boolean).forEach(item => {
-                        if (!rel.leverage.includes(item)) {
-                            rel.leverage.push(item);
-                            added += 1;
-                        }
-                    });
-                    rel.leverage = rel.leverage.slice(-20);
+                    const result = this._appendUniqueCapped(
+                        rel.leverage,
+                        cu.leverageAdd,
+                        MAX_RELATION_LEVERAGE,
+                        160,
+                        MAX_RELATION_ADDITIONS_PER_FIELD
+                    );
+                    rel.leverage = result.list;
+                    const added = result.added;
                     if (added > 0) visibleChanges.push(`新增筹码 ${added} 条`);
                 }
                 if (cu.memoryAdd !== undefined) {
-                    const list = Array.isArray(cu.memoryAdd) ? cu.memoryAdd : [cu.memoryAdd];
-                    let added = 0;
-                    list.map(String).filter(Boolean).forEach(item => {
-                        if (!rel.memories.includes(item)) {
-                            rel.memories.push(item);
-                            added += 1;
-                        }
-                    });
-                    rel.memories = rel.memories.slice(-30);
+                    const result = this._appendUniqueCapped(
+                        rel.memories,
+                        cu.memoryAdd,
+                        MAX_RELATION_MEMORIES,
+                        220,
+                        MAX_RELATION_ADDITIONS_PER_FIELD
+                    );
+                    rel.memories = result.list;
+                    const added = result.added;
                     if (added > 0) visibleChanges.push(`新增共同记忆 ${added} 条`);
                 }
                 if (cu.mood !== undefined) {
-                    const mood = String(cu.mood).trim();
+                    const mood = String(cu.mood).trim().slice(0, 40);
                     if (mood && mood !== rel.mood) visibleChanges.push(`心情：${mood}`);
                     rel.mood = mood || rel.mood || '平静';
                 }
                 if (cu.secret !== undefined) {
-                    const secretStr = String(cu.secret).trim();
-                    if (secretStr) {
-                        if (!char.secrets) char.secrets = [];
-                        if (!char.secrets.includes(secretStr)) {
-                            char.secrets.push(secretStr);
-                            if (char.secrets.length > 20) char.secrets.shift();
-                        }
-                    }
+                    const result = this._appendUniqueCapped(
+                        char.secrets,
+                        cu.secret,
+                        MAX_CHARACTER_SECRETS,
+                        240,
+                        1
+                    );
+                    char.secrets = result.list;
                 }
                 if (visibleChanges.length > 0) {
                     relationChanged = true;
@@ -820,6 +824,23 @@ const StrategyManager = {
             output.push(text);
         });
         return output.slice(0, limit);
+    },
+
+    _appendUniqueCapped(existing, additions, totalLimit = 20, itemLimit = 160, addLimit = 8) {
+        const source = Array.isArray(existing)
+            ? existing.slice(-Math.max(totalLimit * 2, totalLimit))
+            : existing;
+        const current = this._stringList(source, totalLimit, itemLimit);
+        let added = 0;
+        this._stringList(additions, addLimit, itemLimit).forEach(item => {
+            if (current.includes(item)) return;
+            current.push(item);
+            added += 1;
+        });
+        return {
+            list: current.slice(-totalLimit),
+            added
+        };
     },
 
     _sameStringList(a, b) {
