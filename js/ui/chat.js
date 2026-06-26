@@ -1055,6 +1055,15 @@ const ChatUI = {
                 }
                 this._syncInputMode();
                 return true;
+            case 'inventory_cleanup':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.formatInventoryCleanupAdvice) {
+                    this._appendLocalSystemMessage(WorldEngine.formatInventoryCleanupAdvice(scene));
+                } else {
+                    this._appendLocalSystemMessage('【整理背包】可以出售非任务、未装备物品，或使用可消耗物品来腾出空间。');
+                }
+                this._syncInputMode();
+                return true;
             case 'sell_inventory_item':
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.sellInventoryItem) {

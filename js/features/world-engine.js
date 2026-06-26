@@ -5416,17 +5416,15 @@ const WorldEngine = {
         if (pendingRewards.length > 0) {
             const first = pendingRewards[0];
             const cleanup = this._findInventoryCleanupCandidate(scene);
-            const cleanupCommand = cleanup?.name && !this.canUseInventoryItem(cleanup)
-                ? `出售${cleanup.name}`
-                : '';
+            const cleanupCommand = this._inventoryCleanupCommand(cleanup);
             const cleanupDetail = cleanup?.name
-                ? (cleanupCommand ? `可先出售 ${cleanup.name} 腾出空间。` : `可先使用或整理 ${cleanup.name} 腾出空间。`)
-                : '清理背包后会自动补发。';
+                ? (cleanupCommand ? `可先输入“${cleanupCommand}”腾出空间。` : `可先整理 ${cleanup.name} 腾出空间。`)
+                : '输入“整理背包”查看可清理建议。';
             add({
                 kind: 'pending_reward',
                 title: `待领取探索奖励 ${pendingRewards.length}`,
                 detail: `${first.item?.name || '奖励物品'} 已记录；${cleanupDetail}`,
-                command: cleanupCommand,
+                command: cleanupCommand || '整理背包',
                 label: cleanupCommand ? `腾格：${cleanup.name}` : '整理背包',
                 priority: 82
             });
@@ -5552,6 +5550,45 @@ const WorldEngine = {
                 };
                 return score(a) - score(b) || String(a.name).localeCompare(String(b.name), 'zh-CN');
             })[0] || null;
+    },
+
+    _inventoryItemUnits(item) {
+        if (!item) return 0;
+        if (item.uses !== undefined) return Math.max(0, Math.floor(Number(item.uses || 0)));
+        return Math.max(0, Math.floor(Number(item.quantity || 1)));
+    },
+
+    _inventoryCleanupCommand(item) {
+        if (!item?.name || item.equipped === true || item.type === 'quest') return '';
+        const units = this._inventoryItemUnits(item);
+        if (units <= 0) return '';
+        const salePrice = this._inventoryItemSalePrice(item, units);
+        if (salePrice > 0) return units > 1 ? `出售全部${item.name}` : `出售${item.name}`;
+        if (units === 1 && this.canUseInventoryItem(item)) return `使用${item.name}`;
+        return '';
+    },
+
+    formatInventoryCleanupAdvice(scene) {
+        if (!scene) return '【整理背包】当前没有可整理的背包。';
+        this.normalizeScene(scene);
+        const pendingRewards = (scene.pendingExplorationRewards || []).filter(Boolean);
+        const inventoryCount = Array.isArray(scene.inventory) ? scene.inventory.length : 0;
+        const capacity = 200;
+        const cleanup = this._findInventoryCleanupCandidate(scene);
+        const command = this._inventoryCleanupCommand(cleanup);
+        const pendingText = pendingRewards.length > 0
+            ? `当前有 ${pendingRewards.length} 个待领取探索奖励；腾出 1 个背包格后会自动补发。`
+            : '当前没有待领取探索奖励。';
+        if (cleanup?.name && command) {
+            const units = this._inventoryItemUnits(cleanup);
+            const unitText = units > 1 ? `（剩余 ${units} 次/个）` : '';
+            return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n建议输入“${command}”处理 ${cleanup.name}${unitText}。任务物品和已装备物品不会被直接出售。`;
+        }
+        const equipped = (scene.inventory || []).find(item => item?.name && item.equipped === true && item.type !== 'quest');
+        if (equipped?.name) {
+            return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n没有找到可直接出售的非关键未装备物品。可以先输入“卸下${equipped.name}”，确认不需要后再出售；任务物品不会被直接出售。`;
+        }
+        return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n没有找到安全的自动清理候选。请在背包中确认哪些非关键物品可以出售或消耗；任务物品不会被直接出售。`;
     },
 
     _itemHasRemainingUse(item) {

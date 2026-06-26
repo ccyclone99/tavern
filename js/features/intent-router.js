@@ -25,6 +25,7 @@ const IntentRouter = {
         const purchase = this.matchPurchase(raw);
         if (purchase) return { kind: 'buy_supply', text: raw, meta: purchase, reason: 'direct_purchase' };
         if (this.matchRest(raw, normalized)) return { kind: 'local_rest', text: raw, reason: 'direct_rest' };
+        if (this.isInventoryCleanup(raw, normalized)) return { kind: 'inventory_cleanup', text: raw, reason: 'inventory_cleanup' };
         if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'help_question' };
         if (this.isStrategy(raw, normalized)) return { kind: 'strategy', text: raw, reason: 'strategy_intent' };
 
@@ -251,6 +252,17 @@ const IntentRouter = {
             '休息', '休息一下', '短休', '睡觉', '睡一觉', '扎营', '扎营休息', '疗伤', '原地休息'
         ].map(item => this._normalize(item));
         return restCommands.includes(normalized);
+    },
+
+    isInventoryCleanup(raw, normalized = this._normalize(raw)) {
+        const exact = [
+            '整理背包', '清理背包', '腾背包', '腾格子', '整理物品', '清理物品',
+            '背包满了', '背包满怎么办', '怎么清理背包', '怎么腾格子'
+        ].map(item => this._normalize(item));
+        if (exact.includes(normalized)) return true;
+        const hasInventory = ['背包', '物品', '格子'].some(word => normalized.includes(this._normalize(word)));
+        const hasCleanup = ['整理', '清理', '腾', '满了', '满怎么办'].some(word => normalized.includes(this._normalize(word)));
+        return hasInventory && hasCleanup;
     },
 
     matchStatAllocation(raw) {
