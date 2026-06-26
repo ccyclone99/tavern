@@ -126,7 +126,7 @@ AI 回复文本
 | `action-planner.js` | 本地行动意图分类、风险预览、建议检定估算 |
 | `intent-router.js` | 单输入框自然语言路由，处理帮助、pending action/check、计策、OOC 和高风险行动预览 |
 | `group-chat.js` | 多角色回复调度、AI 标记解析、检定、伤害、经验、胜负、自动摘要 |
-| `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用 |
+| `strategy-manager.js` | 计策创建/更新、`<state_update>` 白名单应用；支持字段以 `API_PROTOCOL.md` 和 `PromptBuilder.buildStateUpdateSchemaHint()` 为准 |
 | `relationship.js` | 好感/情绪规则更新和 LLM 分析更新 |
 | `lorebook.js` | 世界书编辑与管理 |
 | `character-card.js` | 角色卡导入、嵌入世界书合并、角色删除 |
