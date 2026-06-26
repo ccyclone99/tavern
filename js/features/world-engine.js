@@ -645,6 +645,35 @@ const WorldEngine = {
         return this._addOrMergeInventoryItem(scene, item);
     },
 
+    grantInventoryItem(scene, item, options = {}) {
+        if (!scene || !item) return { ok: false, message: '没有可添加的物品。' };
+        this.normalizeScene(scene);
+        const normalized = this.normalizeItem({ ...item });
+        if (!normalized) return { ok: false, message: '物品数据无效。' };
+        const added = this._addOrMergeInventoryItem(scene, normalized);
+        if (!added) return { ok: false, message: '背包已满，无法获得物品。' };
+
+        const quantity = normalized.uses !== undefined
+            ? Number(normalized.uses || 1)
+            : Number(normalized.quantity || 1);
+        const qtyText = quantity > 1 ? ` x${quantity}` : '';
+        const source = String(options.source || '').trim().slice(0, 120);
+        const text = `${source ? `${source}，` : ''}获得 ${normalized.name}${qtyText}`;
+        if (options.record !== false) {
+            this.recordEvent(scene, {
+                category: 'inventory',
+                title: '获得物品',
+                text
+            });
+        }
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName: normalized.name, quantity, item: normalized };
+    },
+
     calculatePlayerMaxHp(scene) {
         const con = Number(scene?.playerStats?.constitution ?? 10);
         const level = Number(scene?.level || 1);
@@ -1597,6 +1626,46 @@ const WorldEngine = {
         return item || null;
     },
 
+    removeInventoryItem(scene, itemRef, quantity = 1, options = {}) {
+        if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
+        this.normalizeScene(scene);
+        const ref = String(itemRef || '').trim();
+        if (!ref) return { ok: false, message: '没有指定物品。' };
+        const idx = scene.inventory.findIndex(item => item && ((item.id && item.id === ref) || item.name === ref));
+        if (idx < 0) return { ok: false, message: '没有找到这个物品。' };
+
+        const item = scene.inventory[idx];
+        this.normalizeItem(item);
+        const itemName = item.name || ref;
+        const requested = this._clamp(Number(quantity || 1), 1, 20);
+        const currentQty = item.uses !== undefined ? 1 : Math.max(1, Number(item.quantity || 1));
+        const removed = Math.min(requested, currentQty);
+
+        if (item.uses === undefined && currentQty > requested) {
+            item.quantity = currentQty - requested;
+        } else {
+            this._clearEquipmentForItem(scene, item);
+            scene.inventory.splice(idx, 1);
+        }
+
+        const qtyText = removed > 1 ? ` x${removed}` : '';
+        const source = String(options.source || '').trim().slice(0, 120);
+        const text = `${source ? `${source}，` : ''}失去 ${itemName}${qtyText}`;
+        if (options.record !== false) {
+            this.recordEvent(scene, {
+                category: 'inventory',
+                title: '失去物品',
+                text
+            });
+        }
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, itemName, quantity: removed, removedAll: item.uses !== undefined || currentQty <= requested };
+    },
+
     _findItemTargetClock(scene, item, effect = {}) {
         const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
         if (clocks.length === 0) return null;
@@ -1638,6 +1707,17 @@ const WorldEngine = {
         if (item.type === 'weapon') return 'weapon';
         if (item.type === 'armor') return 'armor';
         return 'accessory';
+    },
+
+    _clearEquipmentForItem(scene, item) {
+        if (!scene || !item) return;
+        if (!scene.equipment || typeof scene.equipment !== 'object') {
+            scene.equipment = { weapon: null, armor: null, accessory: null };
+        }
+        item.equipped = false;
+        Object.keys(scene.equipment).forEach(slot => {
+            if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
+        });
     },
 
     _fallbackDirectUse(item) {

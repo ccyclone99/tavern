@@ -825,21 +825,15 @@ const GroupChat = {
 
         if (typeof WorldEngine !== 'undefined' &&
             WorldEngine.createInventoryItemFromReward &&
-            WorldEngine.addOrMergeInventoryItem) {
+            WorldEngine.grantInventoryItem) {
             const item = WorldEngine.createInventoryItemFromReward(name, quantity, { description, type });
-            if (!WorldEngine.addOrMergeInventoryItem(scene, item)) {
-                console.warn(`[GroupChat] 背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`);
+            const result = WorldEngine.grantInventoryItem(scene, item, { source: '剧情标记' });
+            if (!result.ok) {
+                console.warn(`[GroupChat] ${result.message || `背包已达上限 ${MAX_TOTAL_INVENTORY}，停止新增物品`}`);
                 return;
             }
             showToast(`获得物品：${name}${quantity > 1 ? ' x' + quantity : ''}`);
-            if (WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-                category: 'inventory',
-                title: '获得物品',
-                text: `获得 ${name}${quantity > 1 ? ' x' + quantity : ''}`
-            });
             State.saveCurrentSceneDebounced();
-            SidebarRight.renderInventory();
-            SidebarRight.markTabNew('inventory');
             return;
         }
 
@@ -869,7 +863,19 @@ const GroupChat = {
     _handleItemRemove(raw) {
         const scene = State.scene;
         if (!scene || !scene.inventory) return;
-        const name = raw.split('|')[0].trim();
+        const parts = raw.split('|');
+        const name = parts[0].trim();
+        const quantity = Math.max(1, Math.min(20, parseInt(parts[1]) || 1));
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.removeInventoryItem) {
+            const result = WorldEngine.removeInventoryItem(scene, name, quantity, { source: '剧情标记' });
+            if (!result.ok) {
+                showToast(result.message || '没有找到这个物品');
+                return;
+            }
+            showToast(`失去物品：${result.itemName}${result.quantity > 1 ? ' x' + result.quantity : ''}`);
+            State.saveCurrentSceneDebounced();
+            return;
+        }
         const idx = scene.inventory.findIndex(item => item.name === name);
         if (idx === -1) return;
         const item = scene.inventory[idx];

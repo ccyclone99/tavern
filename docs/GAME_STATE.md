@@ -362,6 +362,7 @@ scene.evidenceLedger = [
 - 带 `uses` 的同名物品合并时累加 uses，效果按语义去重，避免一次使用重复结算。
 - 带 `uses` 的消耗品在次数降为 0 时从背包移除；直接使用和检定投入共享同一消耗逻辑。
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
+- `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除已装备物品时会同步清理装备槽。
 
 ### 成长字段
 
