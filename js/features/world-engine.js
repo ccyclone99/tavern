@@ -3680,6 +3680,15 @@ const WorldEngine = {
         };
         const entry = catalog[key] || catalog.supply;
         const gold = Number(scene.gold || 0);
+        const item = this.normalizeItem({ ...entry.item });
+        const canMerge = Array.isArray(scene.inventory) && scene.inventory.some(existing =>
+            existing && ((item.id && existing.id === item.id) || existing.name === item.name)
+        );
+        if (!canMerge && Array.isArray(scene.inventory) && scene.inventory.length >= 200) {
+            const message = '背包已满，无法购买。';
+            this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
+            return { ok: false, message };
+        }
         if (gold < entry.price) {
             const message = `金币不足：需要 ${entry.price}，当前 ${gold}。`;
             this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
@@ -3691,14 +3700,20 @@ const WorldEngine = {
             this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
             return { ok: false, message };
         }
-        this._addOrMergeInventoryItem(scene, entry.item);
-        this.addSystemMessage(scene, `【购买】花费 ${entry.price} 金币，获得 ${entry.item.name}。`, 'system');
+        const added = this.grantInventoryItem(scene, item, { source: '购买' });
+        if (!added.ok) {
+            this.addGold(scene, entry.price, { source: `购买失败退款：${item.name}`, silent: true, record: false });
+            const message = `${added.message || '无法获得物品'}，金币已退回。`;
+            this.addSystemMessage(scene, `【交易未完成】${message}`, 'system');
+            return { ok: false, message };
+        }
+        this.addSystemMessage(scene, `【购买】花费 ${entry.price} 金币，获得 ${item.name}。`, 'system');
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
             SidebarRight.markTabNew?.('inventory');
         }
-        return { ok: true, itemName: entry.item.name, price: entry.price, gold: scene.gold };
+        return { ok: true, itemName: item.name, price: entry.price, gold: scene.gold };
     },
 
     getAvailableCompanionResources(scene, check) {
