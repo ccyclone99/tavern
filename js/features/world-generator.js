@@ -789,7 +789,7 @@ const WorldGenerator = {
 - flowGraph: 剧本节点图 { nodes:[{id,phaseId,type,title,status,visibleText,privateTruth,npcs,challengeIds,clueIds,exits}], revelations:[{id,conclusion,status:"unknown",core:true,clueIds,requiredFor}] }
 - sceneChallenges: 3-6个可玩挑战，每个含 { id,phaseId,title,status,targetProgress,maxStrain,checkBudget:{min,target,max},approaches:[{id,label,stat,dc,effect,actionType,tags,keywords,onSuccess,onPartial,onFailure}],supports,coreRevelations,failForward }
 - evidenceLedger: 初始为空数组，后续记录玩家取得的证据；不要预填隐藏真相
-- companionResources: 1-3个同伴协助资源，每个含 { id,characterId,name,unlock,uses,cost,effect,risk }；unlock 可用 trustAtLeast/evidenceTags/knowledgeTags 控制逐步公开；effect 可含 checkBonus/dcDelta/riskDelta/clockDelta/clockId/clockTag/evidenceReliability/resolveConsequenceTags
+- companionResources: 1-3个同伴协助资源，每个含 { id,characterName,name,unlock,uses,cost,effect,risk }；characterName 必须对应上方 characters 中的角色名，系统会回填真实 characterId；unlock 可用 trustAtLeast/evidenceTags/knowledgeTags 控制逐步公开；effect 可含 checkBonus/dcDelta/riskDelta/clockDelta/clockId/clockTag/evidenceReliability/resolveConsequenceTags
 - inventory: 2-4个起始物品，每个含 { id,name,description,type,quantity,uses,tags,effects }；effects 可含 check_bonus/dc_delta/risk_delta/heal/clock_delta/clock_resist/world_tension/strategy_leverage，消耗品必须写 consume:true；至少一个常驻调查/观察工具、一个一次性消耗资源和一个可作为计策筹码的物品
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
@@ -878,9 +878,6 @@ const WorldGenerator = {
         scene.evidenceLedger = Array.isArray(data.evidenceLedger)
             ? data.evidenceLedger.map(e => WorldEngine.normalizeEvidence(e)).filter(Boolean)
             : [];
-        scene.companionResources = Array.isArray(data.companionResources) && data.companionResources.length > 0
-            ? data.companionResources.map(r => WorldEngine.normalizeCompanionResource(r)).filter(Boolean)
-            : this._buildDefaultCompanionResources(data);
         const starterInventory = Array.isArray(data.inventory) && data.inventory.length > 0
             ? clone(data.inventory)
             : this._buildDefaultStarterInventory(data);
@@ -903,6 +900,7 @@ const WorldGenerator = {
         // 2. 创建角色
         const characters = Array.isArray(data.characters) ? data.characters : [];
         let firstCharId = null;
+        const characterBindings = [];
         for (const charData of characters) {
             const char = {
                 id: 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -942,8 +940,11 @@ const WorldGenerator = {
             await Storage.saveCharacter(char);
             State.characters.push(char);
             scene.characters.push(char.id);
+            characterBindings.push({ source: charData, char });
             if (!firstCharId) firstCharId = char.id;
         }
+
+        scene.companionResources = this._buildCompanionResources(data, characterBindings);
 
         // 3. 创建世界书
         const lorebook = Array.isArray(data.lorebook) ? data.lorebook : [];
@@ -1393,11 +1394,59 @@ const WorldGenerator = {
         return [...base, themed].map(item => WorldEngine.normalizeItem(item)).filter(Boolean);
     },
 
-    _buildDefaultCompanionResources(data = {}) {
-        const chars = Array.isArray(data.characters) ? data.characters : [];
+    _buildCompanionResources(data = {}, characterBindings = []) {
+        const rawResources = Array.isArray(data.companionResources) && data.companionResources.length > 0
+            ? data.companionResources
+            : this._buildDefaultCompanionResources(data, characterBindings);
+        return rawResources
+            .map(resource => {
+                const characterId = this._resolveCompanionCharacterId(resource, characterBindings);
+                return WorldEngine.normalizeCompanionResource({
+                    ...resource,
+                    characterId: characterId || resource.characterId || ''
+                });
+            })
+            .filter(Boolean);
+    },
+
+    _resolveCompanionCharacterId(resource = {}, characterBindings = []) {
+        if (!resource || !Array.isArray(characterBindings) || characterBindings.length === 0) return '';
+        const rawId = String(resource.characterId || '').trim();
+        if (rawId) {
+            const byRealId = characterBindings.find(binding => binding.char?.id === rawId);
+            if (byRealId) return byRealId.char.id;
+            const bySourceId = characterBindings.find(binding => String(binding.source?.id || '').trim() === rawId);
+            if (bySourceId) return bySourceId.char.id;
+            const bySourceName = characterBindings.find(binding => String(binding.source?.name || '').trim() === rawId);
+            if (bySourceName) return bySourceName.char.id;
+        }
+
+        const explicitName = String(resource.characterName || resource.character || resource.actorName || '').trim();
+        if (explicitName) {
+            const byName = characterBindings.find(binding => String(binding.char?.name || binding.source?.name || '').trim() === explicitName);
+            if (byName) return byName.char.id;
+        }
+
+        const resourceName = String(resource.name || '').trim();
+        if (resourceName) {
+            const byResourceName = characterBindings.find(binding => {
+                const name = String(binding.char?.name || binding.source?.name || '').trim();
+                return name && resourceName.includes(name);
+            });
+            if (byResourceName) return byResourceName.char.id;
+        }
+
+        return characterBindings.length === 1 ? characterBindings[0].char.id : '';
+    },
+
+    _buildDefaultCompanionResources(data = {}, characterBindings = []) {
+        const chars = characterBindings.length > 0
+            ? characterBindings.map(binding => binding.char).filter(Boolean)
+            : (Array.isArray(data.characters) ? data.characters : []);
         return chars.slice(0, 3).map((char, idx) => WorldEngine.normalizeCompanionResource({
             id: `ally_${(char.name || idx).replace(/\s+/g, '_')}`,
             characterId: char.id || '',
+            characterName: char.name || '',
             name: `${char.name || '同伴'}的专业背书`,
             uses: 1,
             cost: { trust: 0, time: 10 },
