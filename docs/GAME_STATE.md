@@ -464,7 +464,7 @@ scene.evidenceLedger = [
 }
 ```
 
-右侧“线索”tab 只展示 `knowledge.discoveries` 以及已解锁的角色档案槽。未解锁的 `character.profile.hiddenFacts` 不会出现在账本中。
+右侧“线索”tab 展示 `knowledge.discoveries` 以及已解锁的角色档案槽，支持按观察/传闻/证据/推论/确认和角色/地点/势力/计策等主体类型过滤。未解锁的 `character.profile.hiddenFacts` 不会出现在账本中。
 
 ### PendingAction
 

@@ -4,6 +4,7 @@
 const SidebarRight = {
     _tabBadges: {},  // { tabName: count } 未读角标计数
     _knowledgeFilter: 'all',
+    _knowledgeSubjectFilter: 'all',
 
     init() {
         this.el = document.getElementById('rightSidebar');
@@ -581,16 +582,23 @@ const SidebarRight = {
             false: '虚假'
         };
         const subjectLabels = {
+            all: '全部主体',
             character: '角色',
             faction: '势力',
             location: '地点',
             item: '物品',
+            evidence: '证据',
             event: '事件',
             strategy: '计策'
         };
         const counts = entries.reduce((acc, item) => {
             const level = levelLabels[item.level] ? item.level : 'hint';
             acc[level] = (acc[level] || 0) + 1;
+            return acc;
+        }, {});
+        const subjectCounts = entries.reduce((acc, item) => {
+            const subjectType = subjectLabels[item.subjectType] ? item.subjectType : 'event';
+            acc[subjectType] = (acc[subjectType] || 0) + 1;
             return acc;
         }, {});
         const filters = [
@@ -601,15 +609,32 @@ const SidebarRight = {
             ['inference', '推论', counts.inference || 0],
             ['truth', '确认', counts.truth || 0]
         ];
+        const subjectFilters = [
+            ['all', '全部主体', entries.length],
+            ['character', '角色', subjectCounts.character || 0],
+            ['location', '地点', subjectCounts.location || 0],
+            ['faction', '势力', subjectCounts.faction || 0],
+            ['strategy', '计策', subjectCounts.strategy || 0],
+            ['item', '物品', subjectCounts.item || 0],
+            ['evidence', '证据', subjectCounts.evidence || 0],
+            ['event', '事件', subjectCounts.event || 0]
+        ].filter(([key, , count]) => key === 'all' || count > 0);
         const summaryHtml = `
             <div class="knowledge-summary">
                 ${filters.map(([key, label, count]) => `<button class="knowledge-pill ${this._knowledgeFilter === key ? 'active' : ''}" type="button" data-filter="${Renderer.escapeAttr(key)}">${Renderer.escapeHtml(label)} ${count}</button>`).join('')}
             </div>
+            <div class="knowledge-summary knowledge-subject-summary">
+                ${subjectFilters.map(([key, label, count]) => `<button class="knowledge-pill ${this._knowledgeSubjectFilter === key ? 'active' : ''}" type="button" data-subject-filter="${Renderer.escapeAttr(key)}">${Renderer.escapeHtml(label)} ${count}</button>`).join('')}
+            </div>
         `;
 
-        const visibleEntries = this._knowledgeFilter === 'all'
-            ? entries
-            : entries.filter(item => (levelLabels[item.level] ? item.level : 'hint') === this._knowledgeFilter);
+        const visibleEntries = entries.filter(item => {
+            const level = levelLabels[item.level] ? item.level : 'hint';
+            const subjectType = subjectLabels[item.subjectType] ? item.subjectType : 'event';
+            const levelMatches = this._knowledgeFilter === 'all' || level === this._knowledgeFilter;
+            const subjectMatches = this._knowledgeSubjectFilter === 'all' || subjectType === this._knowledgeSubjectFilter;
+            return levelMatches && subjectMatches;
+        });
         const cardsHtml = visibleEntries.map(item => {
             const level = levelLabels[item.level] ? item.level : 'hint';
             const reliability = reliabilityLabels[item.reliability] ? item.reliability : 'unverified';
@@ -648,7 +673,8 @@ const SidebarRight = {
         this.knowledgeEl.innerHTML = summaryHtml + (cardsHtml || '<p class="placeholder">该分类下暂无线索</p>');
         this.knowledgeEl.querySelectorAll('.knowledge-pill').forEach(btn => {
             btn.onclick = () => {
-                this._knowledgeFilter = btn.dataset.filter || 'all';
+                if (btn.dataset.filter !== undefined) this._knowledgeFilter = btn.dataset.filter || 'all';
+                if (btn.dataset.subjectFilter !== undefined) this._knowledgeSubjectFilter = btn.dataset.subjectFilter || 'all';
                 this.renderKnowledge();
             };
         });
