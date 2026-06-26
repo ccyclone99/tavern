@@ -757,13 +757,19 @@ const SidebarRight = {
                         ? `检定${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stat ? ` · ${statLabels[effect.stat] || effect.stat}` : ''}${effect.consume ? ' · 需选择消耗' : ''}`
                         : effect.type === 'heal'
                             ? `使用恢复 ${effect.value}`
+                        : effect.type === 'gold'
+                            ? `金币${effect.value >= 0 ? '+' : ''}${effect.value}`
+                        : effect.type === 'exp'
+                            ? `经验+${effect.value}`
                         : effect.type === 'risk_delta'
                             ? `风险${effect.value >= 0 ? '+' : ''}${effect.value}`
                             : effect.type === 'dc_delta'
                                 ? `DC${effect.value >= 0 ? '+' : ''}${effect.value}`
-                                : effect.type === 'clock_resist'
-                                    ? `时钟抗性${effect.value >= 0 ? '+' : ''}${effect.value}`
-                                    : effect.type;
+                                : (effect.type === 'clock_delta' || effect.type === 'clock_resist')
+                                    ? `时钟${effect.value >= 0 ? '+' : ''}${effect.value}`
+                                    : effect.type === 'world_tension'
+                                        ? `世界紧张${effect.value >= 0 ? '+' : ''}${effect.value}`
+                                        : effect.type;
                     return `<span class="inv-effect-chip">${Renderer.escapeHtml(label)}</span>`;
                 }).join('');
                 const tagsHtml = (item.tags || []).slice(0, 4).map(tag => `<span class="inv-tag">${Renderer.escapeHtml(tag)}</span>`).join('');

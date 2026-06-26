@@ -552,12 +552,17 @@ const WorldEngine = {
             '魅力': 'charisma'
         };
         const stat = effect.stat ? String(effect.stat) : '';
+        const value = [effect.value, effect.checkBonus, effect.dcDelta, effect.riskDelta, effect.clockDelta]
+            .map(Number)
+            .find(Number.isFinite);
         return {
             type,
             stat: statMap[stat] || stat,
             actionType: effect.actionType ? String(effect.actionType) : '',
-            clockTag: effect.clockTag ? String(effect.clockTag) : '',
-            value: Number.isFinite(Number(effect.value)) ? Number(effect.value) : 0,
+            clockId: effect.clockId ? String(effect.clockId).slice(0, 100) : '',
+            clockTag: effect.clockTag ? String(effect.clockTag).slice(0, 60) : '',
+            clockName: effect.clockName ? String(effect.clockName).slice(0, 100) : '',
+            value: value ?? 0,
             when: effect.when ? String(effect.when).slice(0, 120) : '',
             consume: effect.consume === true
         };
@@ -1189,7 +1194,7 @@ const WorldEngine = {
 
     _directItemEffects(item) {
         if (!item || !Array.isArray(item.effects)) return [];
-        const directTypes = new Set(['heal', 'gold', 'exp', 'clock_delta', 'world_tension']);
+        const directTypes = new Set(['heal', 'gold', 'exp', 'clock_delta', 'clock_resist', 'world_tension']);
         return item.effects.filter(effect => directTypes.has(effect.type));
     },
 
@@ -1200,6 +1205,42 @@ const WorldEngine = {
         const item = scene.inventory.find(i => i && ((i.id && i.id === ref) || i.name === ref));
         if (item) this.normalizeItem(item);
         return item || null;
+    },
+
+    _findItemTargetClock(scene, item, effect = {}) {
+        const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
+        if (clocks.length === 0) return null;
+        const clockId = String(effect.clockId || '').trim();
+        const clockTag = String(effect.clockTag || '').trim();
+        const clockName = String(effect.clockName || '').trim();
+        if (clockId) {
+            const byId = clocks.find(clock => clock.id === clockId);
+            if (byId) return byId;
+        }
+        if (clockTag) {
+            const byTag = clocks.find(clock => clock.tag === clockTag);
+            if (byTag) return byTag;
+        }
+        if (clockName) {
+            const byName = clocks.find(clock => clock.name === clockName);
+            if (byName) return byName;
+        }
+        const tags = new Set((item?.tags || []).map(tag => String(tag || '').toLowerCase()).filter(Boolean));
+        const matched = clocks
+            .filter(clock => clock.visibility !== 'hidden')
+            .map(clock => {
+                const haystack = `${clock.id || ''} ${clock.name || ''} ${clock.tag || ''} ${clock.description || ''}`.toLowerCase();
+                let score = 0;
+                tags.forEach(tag => {
+                    if (tag && haystack.includes(tag)) score += 2;
+                });
+                if (String(clock.tag || '').toLowerCase() === 'main') score += 1;
+                return { clock, score };
+            })
+            .filter(entry => entry.score > 0)
+            .sort((a, b) => b.score - a.score || Number(b.clock.value || 0) - Number(a.clock.value || 0));
+        if (matched.length > 0) return matched[0].clock;
+        return clocks.filter(clock => clock.visibility !== 'hidden').sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
     },
 
     _equipmentSlotForItem(item) {
@@ -2135,32 +2176,56 @@ const WorldEngine = {
     },
 
     getAvailableCheckItems(scene, check) {
-        return this.collectApplicableItemEffects(scene, {
+        const matches = this.collectApplicableItemEffects(scene, {
             stat: check?.key || check?.stat,
             actionType: check?.actionType || check?.type || '',
             intent: check?.intent || check?.stakes || '',
             includeUnequipped: true
         })
-            .filter(m => m.effect.type === 'check_bonus' && m.effect.consume === true)
-            .map((m, idx) => ({
-                id: `item:${m.item.id || m.item.name || idx}:${idx}`,
-                kind: 'item',
-                itemId: m.item.id || '',
-                source: m.item.name,
-                label: `${m.effect.value >= 0 ? '+' : ''}${m.effect.value} 检定，可消耗使用`,
-                value: Number(m.effect.value || 0),
-                checkBonus: Number(m.effect.value || 0),
-                dcDelta: 0,
-                riskDelta: 0,
-                consume: true
-            }));
+            .filter(m => ['check_bonus', 'dc_delta', 'risk_delta'].includes(m.effect.type) && m.effect.consume === true);
+        const groups = new Map();
+        matches.forEach((m, idx) => {
+            const key = m.item.id || m.item.name || `idx_${idx}`;
+            if (!groups.has(key)) {
+                groups.set(key, { item: m.item, checkBonus: 0, dcDelta: 0, riskDelta: 0 });
+            }
+            const group = groups.get(key);
+            const value = Number(m.effect.value || 0);
+            if (m.effect.type === 'check_bonus') group.checkBonus += value;
+            if (m.effect.type === 'dc_delta') group.dcDelta += value;
+            if (m.effect.type === 'risk_delta') group.riskDelta += value;
+        });
+        return [...groups.values()]
+            .map((group, idx) => {
+                const labelParts = [];
+                if (group.checkBonus) labelParts.push(`检定 ${group.checkBonus >= 0 ? '+' : ''}${group.checkBonus}`);
+                if (group.dcDelta) labelParts.push(`DC ${group.dcDelta >= 0 ? '+' : ''}${group.dcDelta}`);
+                if (group.riskDelta) labelParts.push(`风险 ${group.riskDelta >= 0 ? '+' : ''}${group.riskDelta}`);
+                if (!labelParts.length) return null;
+                return {
+                    id: `item:${group.item.id || group.item.name || idx}:${idx}`,
+                    kind: 'item',
+                    itemId: group.item.id || '',
+                    source: group.item.name,
+                    label: `${labelParts.join('，')}，可消耗使用`,
+                    value: group.checkBonus,
+                    checkBonus: group.checkBonus,
+                    dcDelta: group.dcDelta,
+                    riskDelta: group.riskDelta,
+                    consume: true
+                };
+            })
+            .filter(Boolean);
     },
 
     consumeCheckItems(scene, modifiers = []) {
         if (!scene || !Array.isArray(scene.inventory)) return false;
         let consumed = false;
+        const consumedKeys = new Set();
         modifiers.forEach(mod => {
             if (!mod.consume || !mod.source) return;
+            const key = mod.itemId || mod.source;
+            if (consumedKeys.has(key)) return;
             const idx = scene.inventory.findIndex(i =>
                 (mod.itemId && i.id === mod.itemId) || i.name === mod.source
             );
@@ -2173,6 +2238,7 @@ const WorldEngine = {
             } else {
                 scene.inventory.splice(idx, 1);
             }
+            consumedKeys.add(key);
             consumed = true;
         });
         if (consumed && typeof SidebarRight !== 'undefined') SidebarRight.renderInventory?.();
@@ -2279,8 +2345,8 @@ const WorldEngine = {
                 if (typeof QuestTracker !== 'undefined' && QuestTracker._addExp) QuestTracker._addExp(amount);
                 else scene.exp = Number(scene.exp || 0) + amount;
                 applied.push(`经验 +${amount}`);
-            } else if (effect.type === 'clock_delta') {
-                const clock = (scene.clocks || []).find(c => effect.clockTag && c.tag === effect.clockTag);
+            } else if (effect.type === 'clock_delta' || effect.type === 'clock_resist') {
+                const clock = this._findItemTargetClock(scene, item, effect);
                 const result = clock
                     ? this.applyClockUpdate(scene, [{ id: clock.id, delta: value, reason: `使用${item.name}` }])
                     : { changed: false };

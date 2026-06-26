@@ -186,11 +186,13 @@ const ActionBar = {
         ).join('');
         const resourceBonus = Number(totals.bonus || 0);
         const dcDelta = Number(totals.dcDelta || 0);
+        const riskDelta = Number(totals.riskDelta || 0);
         const breakdown = [
             `属性 ${statMod >= 0 ? '+' + statMod : statMod}`,
             itemBonus ? `常驻物品 ${itemBonus >= 0 ? '+' + itemBonus : itemBonus}` : '',
             resourceBonus ? `已选资源 ${resourceBonus >= 0 ? '+' + resourceBonus : resourceBonus}` : '',
-            dcDelta ? `资源调整 DC ${dcDelta >= 0 ? '+' + dcDelta : dcDelta}` : ''
+            dcDelta ? `资源调整 DC ${dcDelta >= 0 ? '+' + dcDelta : dcDelta}` : '',
+            riskDelta ? `资源调整风险 ${riskDelta >= 0 ? '+' + riskDelta : riskDelta}` : ''
         ].filter(Boolean).join(' · ');
         const statIcons = {
             strength: 'str',

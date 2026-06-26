@@ -590,6 +590,7 @@ const GroupChat = {
                 itemBonus: Number(check.itemBonus || 0),
                 selectedBonus: Number(totals.bonus || 0),
                 dcDelta: Number(totals.dcDelta || 0),
+                riskDelta: Number(totals.riskDelta || 0),
                 baseDc: totals.baseDc,
                 itemModifiers: [
                     ...(Array.isArray(check.itemModifiers) ? check.itemModifiers : []),

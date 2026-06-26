@@ -286,6 +286,10 @@ const PromptBuilder = {
                         if (effect.type === 'heal') return `恢复${effect.value >= 0 ? '+' : ''}${effect.value}${effect.consume ? '(消耗)' : ''}`;
                         if (effect.type === 'dc_delta') return `DC${effect.value >= 0 ? '+' : ''}${effect.value}`;
                         if (effect.type === 'risk_delta') return `风险${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        if (effect.type === 'clock_delta' || effect.type === 'clock_resist') return `时钟${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        if (effect.type === 'world_tension') return `世界紧张${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        if (effect.type === 'gold') return `金币${effect.value >= 0 ? '+' : ''}${effect.value}`;
+                        if (effect.type === 'exp') return `经验+${effect.value}`;
                         return effect.type;
                     }).join('、')}`
                     : '';
