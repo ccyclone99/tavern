@@ -10,6 +10,8 @@ const IntentRouter = {
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized);
         if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
+        const statAllocation = this.matchStatAllocation(raw);
+        if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
         const move = this.matchLocationMove(raw, scene);
         if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
         const equipment = this.matchInventoryEquipment(raw, scene);
@@ -191,6 +193,40 @@ const IntentRouter = {
         return restCommands.includes(normalized);
     },
 
+    matchStatAllocation(raw) {
+        const text = String(raw || '').trim();
+        if (!text) return null;
+        const normalized = this._normalize(text)
+            .replace(/\s+/g, '')
+            .replace(/[＋]/g, '+');
+        const statDefs = [
+            { key: 'strength', label: '力量', aliases: ['力量', 'str', 'strength'] },
+            { key: 'dexterity', label: '敏捷', aliases: ['敏捷', 'dex', 'dexterity'] },
+            { key: 'constitution', label: '体质', aliases: ['体质', 'con', 'constitution'] },
+            { key: 'intelligence', label: '智力', aliases: ['智力', 'int', 'intelligence'] },
+            { key: 'wisdom', label: '感知', aliases: ['感知', 'wis', 'wisdom'] },
+            { key: 'charisma', label: '魅力', aliases: ['魅力', 'cha', 'charisma'] }
+        ];
+        const matched = statDefs.find(def =>
+            def.aliases.some(alias => normalized.includes(this._normalize(alias).replace(/\s+/g, '')))
+        );
+        if (!matched) return null;
+        const statAliases = matched.aliases
+            .map(alias => this._normalize(alias).replace(/\s+/g, ''))
+            .filter(Boolean);
+        const hasExplicitPointIntent = normalized.includes('属性点') || normalized.includes('加点') || normalized.includes('分配');
+        const hasPlusOne = statAliases.some(alias => normalized.includes(`${alias}+1`) || normalized.includes(`+1${alias}`));
+        const hasChineseVerb = statAliases.some(alias =>
+            [`加一点${alias}`, `加1点${alias}`, `提升${alias}`, `提高${alias}`, `增加${alias}`, `升级${alias}`]
+                .some(pattern => normalized.includes(pattern))
+        );
+        const hasPointTarget = statAliases.some(alias =>
+            normalized.includes(`点到${alias}`) || normalized.includes(`到${alias}`) && hasExplicitPointIntent
+        );
+        if (!hasExplicitPointIntent && !hasPlusOne && !hasChineseVerb && !hasPointTarget) return null;
+        return { stat: matched.key, label: matched.label };
+    },
+
     buildHelpText(raw, scene) {
         const state = scene?.pendingCheck
             ? 'pending_check'
@@ -213,7 +249,7 @@ const IntentRouter = {
         }
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
-            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”。';
+            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买补给”“加一点敏捷”。';
     },
 
     _routePendingCheck(raw, normalized) {

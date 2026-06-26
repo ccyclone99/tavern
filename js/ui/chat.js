@@ -775,6 +775,19 @@ const ChatUI = {
                 }
                 this._syncInputMode();
                 return true;
+            case 'allocate_stat_point':
+                this._clearInput();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.allocateStatPoint) {
+                    const result = WorldEngine.allocateStatPoint(scene, route.meta.stat);
+                    if (!result.ok) {
+                        showToast(result.message || '无法分配属性点');
+                    } else {
+                        await State.saveCurrentSceneDebounced();
+                        showToast(`${result.label || route.meta.label} +1`);
+                    }
+                }
+                this._syncInputMode();
+                return true;
             case 'action_preview':
                 await this.preparePendingAction(originalText, route.meta);
                 return true;
