@@ -175,7 +175,7 @@ const ChatUI = {
         State.isStreaming = true;
         if (this.sendBtn) this.sendBtn.style.display = 'none';
         if (this.stopBtn) this.stopBtn.style.display = 'block';
-        this._renderSuggestionChips();
+        this._syncInputMode();
     },
 
     /** 结束流式状态：恢复发送、隐藏停止 */
@@ -235,6 +235,13 @@ const ChatUI = {
                 send: '执行'
             };
         }
+        if (State.isStreaming) {
+            current = {
+                placeholder: '正在生成回复，可等待或点击“停止”。',
+                hint: 'AI 回复中，暂不能发送新输入；需要中断可点击停止。',
+                send: current.send
+            };
+        }
         if (this.inputEl) this.inputEl.placeholder = current.placeholder;
         if (this.modeHintEl) this.modeHintEl.textContent = current.hint;
         if (this.sendBtn && !State.isStreaming) {
@@ -242,7 +249,7 @@ const ChatUI = {
             this.sendBtn.setAttribute('aria-label', current.send);
         }
         if (scene?.inputContext) {
-            scene.inputContext.state = scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle');
+            scene.inputContext.state = State.isStreaming ? 'blocked_streaming' : (scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle'));
             scene.inputContext.prompt = current.placeholder;
         }
         this._renderSuggestionChips();
@@ -780,7 +787,11 @@ const ChatUI = {
 
     async onSend() {
         let text = this.inputEl.value.trim();
-        if (State.isStreaming) return;
+        if (State.isStreaming) {
+            showToast('AI 正在回复。请等待，或点击“停止”中断。');
+            this._syncInputMode();
+            return;
+        }
 
         let scene = State.scene;
         const blankCheckSubmit = !text && !State.isOOC && !!scene?.pendingCheck;
