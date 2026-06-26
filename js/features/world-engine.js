@@ -4768,16 +4768,29 @@ const WorldEngine = {
         const statMod = Number.isFinite(Number(check?.statMod)) ? Number(check.statMod) : 0;
         const itemBonus = Number(check?.itemBonus || 0);
         const baseDc = Number.isFinite(Number(check?.dc)) ? Number(check.dc) : 15;
+        const riskDcDelta = this._riskDeltaToDcDelta(selected.riskDelta);
+        const dcDelta = Number(selected.dcDelta || 0) + riskDcDelta;
         const mod = statMod + itemBonus + selected.bonus;
-        const dc = this._clamp(baseDc + selected.dcDelta, 5, 30);
+        const dc = this._clamp(baseDc + dcDelta, 5, 30);
         return {
             ...selected,
             statMod,
             itemBonus,
+            explicitDcDelta: Number(selected.dcDelta || 0),
+            riskDcDelta,
+            dcDelta,
             mod,
             dc,
             baseDc
         };
+    },
+
+    _riskDeltaToDcDelta(riskDelta) {
+        const value = Number(riskDelta || 0);
+        if (!Number.isFinite(value)) return 0;
+        if (value <= -8) return Math.max(-3, Math.ceil(value / 8));
+        if (value >= 8) return Math.min(3, Math.floor(value / 8));
+        return 0;
     },
 
     consumeCompanionResources(scene, modifiers = []) {
