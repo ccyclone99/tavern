@@ -53,7 +53,7 @@
 
 - `storyArcs.currentBeat` 可通过 `storyArcUpdate` 推进；浏览器端还会用 `WorldEngine.tickAfterPlayerTurn()` 推进时钟和 NPC 离屏行动。外部 agent 若不驱动浏览器，需要自行应用同等状态推进。
 - `<state_update>` 是安全补丁，不是任意存档写入。玩家 HP、金币、经验、任务创建等优先使用方括号标记。
-- 动态新角色只会补基础角色字段；深层信条、秘密、筹码需要后续人工或 agent 补全。
+- 动态新角色会从 `[new_char:]` 的可选扩展字段或本地保守默认值补齐 `creed/redLines/values/motives/fears/secrets/leverage/profile.hiddenFacts`；私密字段只用于扮演和解锁，不等于玩家已知。
 - 浏览器端使用 IndexedDB 持久化，外部 agent 若不驱动浏览器，需要自行实现等价的读写层。
 
 ## 文档索引

@@ -66,7 +66,8 @@ const PromptGuard = {
     sanitizeMarker(marker, scene) {
         if (!marker || typeof marker !== 'object') return null;
         const raw = String(marker.raw || '').trim();
-        if (!raw || raw.length > 500) return null;
+        const maxRawLength = marker.type === 'new_char' ? 1800 : 500;
+        if (!raw || raw.length > maxRawLength) return null;
         const clone = { ...marker, raw };
         switch (marker.type) {
             case 'gold':
@@ -252,7 +253,14 @@ const PromptGuard = {
         const description = this._clip(parts[2] || '', 240);
         const personality = this._clip(parts[3] || '', 180);
         const firstMes = this._clip(parts[4] || '', 500);
-        return [name, emoji, description, personality, firstMes].join('|');
+        const creed = this._clip(parts[5] || '', 220);
+        const values = this._clip(parts[6] || '', 160);
+        const redLines = this._sanitizeListField(parts[7], 4, 120);
+        const motives = this._sanitizeListField(parts[8], 4, 120);
+        const fears = this._sanitizeListField(parts[9], 4, 120);
+        const secrets = this._sanitizeListField(parts[10], 4, 140);
+        const leverage = this._sanitizeListField(parts[11], 4, 120);
+        return [name, emoji, description, personality, firstMes, creed, values, redLines, motives, fears, secrets, leverage].join('|');
     },
 
     _sanitizeCharacterExit(raw) {
@@ -281,6 +289,15 @@ const PromptGuard = {
 
     _clip(value, max) {
         return String(value || '').trim().replace(/[\[\]<>]/g, '').slice(0, max);
+    },
+
+    _sanitizeListField(value, limit = 4, itemLimit = 120) {
+        return String(value || '')
+            .split(/[,，、;；\n]/)
+            .map(item => this._clip(item, itemLimit))
+            .filter(Boolean)
+            .slice(0, limit)
+            .join('、');
     },
 
     _clamp(value, min, max) {

@@ -776,7 +776,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 - 旧角色或生成角色缺少 `profile.public.firstImpression` 时，UI/生成器应显示非剧透占位或标签化印象，不应从完整 `description` 摘取公开印象。
 - `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；旧字段 `relationshipUpdate` 仅作为兼容别名。公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。关系补丁会对筹码、共同记忆、心情和秘密做截断去重：单角色单次最多追加 8 条筹码、8 条共同记忆和 1 条秘密，列表只保留最近上限。
 - 普通玩家详情页不显示完整角色卡或编辑入口；只有 `State.canShowDebugSpoilers()` 为 true 时才显示作者/调试剧透入口。该开关支持 `?debug=1`、`?spoilers=1`、`localStorage.tavern_show_character_spoilers=1`、`localStorage.tavern_debug=1` 或运行时 settings 标记。
-- 动态新角色由 `[new_char:...]` 创建，标记先经 `PromptGuard` 裁剪字段，再由 `WorldEngine.addExistingCharacterToScene()` 加入当前场景；结局后、重复姓名或场景角色过多时不会加入。`[char_exit:]` 由 `WorldEngine.removeCharacterFromScene()` 结算并写入事件日志。动态角色默认字段较少，不会自动生成信条和谋略素材，也不会绕过玩家知识解锁直接公开私密设定。
+- 动态新角色由 `[new_char:...]` 创建，标记先经 `PromptGuard` 裁剪字段，再由 `WorldEngine.addExistingCharacterToScene()` 加入当前场景；结局后、重复姓名或场景角色过多时不会加入。`[char_exit:]` 由 `WorldEngine.removeCharacterFromScene()` 结算并写入事件日志。动态角色支持扩展字段 `信条/价值排序/底线/动机/恐惧/秘密/筹码`，缺失时由 `NewCharacterHandler` 补入保守默认值，并同步生成 `profile.hiddenFacts` 解锁槽；这些私密设定不会绕过玩家知识解锁直接公开。
 - 手动创建、导入或删除角色卡如果会影响当前场景的 `scene.characters`，必须通过 `State.addCharacterToScene()` / `State.removeCharacterFromScene()`，再由 `WorldEngine` 执行结局锁、去重、数量限制和事件留痕；已结束冒险中的在场角色不能被增删。
 - PNG 角色卡内嵌世界书只有在角色成功加入当前场景后才会合并到 `scene.lorebookEntries`；如果结局锁或去重规则阻止入场，导入仍可保存为全局角色卡，但不会修改当前回顾场景。
 
