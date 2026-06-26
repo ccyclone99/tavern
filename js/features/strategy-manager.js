@@ -179,6 +179,7 @@ const StrategyManager = {
         // 单条补丁上限，防止 AI 回复胀大存储
         const MAX_INTEL_PER_UPDATE = 10;
         const MAX_FACTIONS_PER_UPDATE = 20;
+        const MAX_RELATION_UPDATES_PER_UPDATE = 30;
         const MAX_ITEMS_PER_UPDATE = 50;
         const MAX_LOCATIONS_PER_UPDATE = 20;
         const MAX_TOTAL_INVENTORY = 200;
@@ -400,8 +401,16 @@ const StrategyManager = {
         }
 
         // 4. characterUpdates（仅允许修改关系/警觉/秘密等安全字段）
-        if (!stoppedByEnding && Array.isArray(update.characterUpdates)) {
-            for (const cu of update.characterUpdates) {
+        // relationshipUpdate 是旧 SPEC 字段，兼容到同一处理路径，避免外部 agent 静默失效。
+        const characterUpdates = [
+            ...(Array.isArray(update.characterUpdates) ? update.characterUpdates : []),
+            ...(Array.isArray(update.relationshipUpdate) ? update.relationshipUpdate : [])
+        ];
+        if (!stoppedByEnding && characterUpdates.length > 0) {
+            if (characterUpdates.length > MAX_RELATION_UPDATES_PER_UPDATE) {
+                console.warn(`[StrategyManager] characterUpdates 超过单条上限 ${MAX_RELATION_UPDATES_PER_UPDATE}，已截断`);
+            }
+            for (const cu of characterUpdates.slice(0, MAX_RELATION_UPDATES_PER_UPDATE)) {
                 if (!cu || typeof cu !== 'object' || !cu.characterId) continue;
                 const char = State.characters.find(c => c.id === cu.characterId);
                 if (!char) continue;

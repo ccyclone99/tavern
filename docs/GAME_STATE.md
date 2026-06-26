@@ -757,7 +757,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 - `creed`、`redLines`、`values` 是人格锚点，`PromptBuilder.buildCreedBlock()` 会以高优先级注入。
 - `motives`、`fears`、`secrets`、`leverage` 属于 NPC 私密设定，用于扮演和计策裁决，不等于玩家已知。
 - `profile.public` 是玩家初见可见档案；`profile.hiddenFacts` 需要通过 `knowledgeAdd` / `discoveryUpdate` 逐步解锁。
-- `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。
+- `_relations[userName]` 由 `Relationship` 和 `characterUpdates` 补丁维护；旧字段 `relationshipUpdate` 仅作为兼容别名。公开的关系/心情变化会进入事件日志，但 `secret` 仍属于 NPC 私密设定，不会因为关系补丁自动展示给玩家。
 - 动态新角色由 `[new_char:...]` 创建，默认字段较少，不会自动生成信条和谋略素材。
 
 ## 五、消息类型

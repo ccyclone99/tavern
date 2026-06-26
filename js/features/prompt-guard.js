@@ -154,7 +154,7 @@ const PromptGuard = {
             'storyarcupdate', 'storyphaseupdate', 'clueupdate', 'failurestateupdate',
             'counterstrategyupdate', 'npcagendaupdate', 'challengeupdate', 'evidenceadd',
             'revelationupdate', 'flowgraphupdate', 'factionsupdate', 'characterupdates',
-            'scene', 'questsupdate', 'itemadd', 'locationupdate'
+            'relationshipupdate', 'scene', 'questsupdate', 'itemadd', 'locationupdate'
         ];
         if (path.length === 0 && !topLevelAllowed.includes(normalized)) return true;
 

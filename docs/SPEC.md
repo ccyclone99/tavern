@@ -609,12 +609,14 @@ Prompt 必须区分以下块：
   "knowledgeAdd": [],
   "discoveryUpdate": [],
   "clockUpdate": [],
-  "relationshipUpdate": [],
+  "characterUpdates": [],
   "storyArcUpdate": [],
   "counterStrategyUpdate": [],
   "npcAgendaUpdate": []
 }
 ```
+
+`relationshipUpdate` 是旧字段名，运行时只作为 `characterUpdates` 的兼容别名；新 prompt 和文档均应使用 `characterUpdates`。
 
 每类补丁必须：
 
