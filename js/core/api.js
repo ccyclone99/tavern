@@ -93,6 +93,7 @@ const API = {
             let content = '';
             let reasoningContent = '';
             let usage = null;
+            let sseBuffer = '';
             const thinkParser = { buffer: '', inThink: false, thinkContent: '', outsideContent: '' };
 
             function flushThink() {
@@ -131,30 +132,38 @@ const API = {
                 }
             }
 
+            function processSseLine(line) {
+                if (!line.startsWith('data: ')) return;
+                const ds = line.slice(6).trim();
+                if (!ds || ds === '[DONE]') return;
+                try {
+                    const p = JSON.parse(ds);
+                    const delta = p.choices?.[0]?.delta;
+                    if (delta?.reasoning_content) {
+                        reasoningContent += delta.reasoning_content;
+                    }
+                    if (delta?.content) {
+                        processLegacyThink(delta.content);
+                        content = thinkParser.outsideContent;
+                    }
+                    if (p.usage) usage = p.usage;
+                    if (onToken) onToken(content, reasoningContent);
+                    if (usage && onUsage) onUsage(usage);
+                } catch (e) {
+                    console.warn('SSE 行解析失败:', line, e);
+                }
+            }
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
-                chunk.split('\n').forEach(line => {
-                    if (!line.startsWith('data: ')) return;
-                    const ds = line.slice(6).trim();
-                    if (ds === '[DONE]') return;
-                    try {
-                        const p = JSON.parse(ds);
-                        const delta = p.choices?.[0]?.delta;
-                        if (delta?.reasoning_content) {
-                            reasoningContent += delta.reasoning_content;
-                        }
-                        if (delta?.content) {
-                            processLegacyThink(delta.content);
-                            content = thinkParser.outsideContent;
-                        }
-                        if (p.usage) usage = p.usage;
-                        if (onToken) onToken(content, reasoningContent);
-                        if (usage && onUsage) onUsage(usage);
-                    } catch (e) { console.warn('SSE 行解析失败:', line, e); }
-                });
+                sseBuffer += chunk;
+                const lines = sseBuffer.split(/\r?\n/);
+                sseBuffer = lines.pop() || '';
+                lines.forEach(processSseLine);
             }
+            if (sseBuffer.trim()) processSseLine(sseBuffer.trim());
 
             flushThink();
             // 把 legacy <think> 内容合并到 reasoningContent，供 UI 展示

@@ -888,7 +888,7 @@ const WorldEngine = {
         }
         challenge = scene.sceneChallenges.find(c => c.id === challengeId) || challenge;
         this._settleChallengeStatus(scene, challenge, challenge.lastReason);
-        this._activateNextChallenge(scene);
+        if (scene.gameState === 'playing') this._activateNextChallenge(scene);
         SidebarRight.renderSituation?.();
         return { challenge, progressDelta, strainDelta, outcome };
     },
@@ -1697,6 +1697,7 @@ const WorldEngine = {
         if (challenge.progress >= challenge.targetProgress && challenge.status !== 'completed') {
             challenge.status = 'completed';
             this.addSystemMessage(scene, `【挑战完成：${challenge.title}】${reason || '目标已经达成。'}`, 'system');
+            this._completeQuestObjectivesForChallenge(scene, challenge);
             this._completeLinkedPhaseIfReady(scene, challenge);
         } else if (challenge.strain >= challenge.maxStrain && !['completed', 'failed', 'bypassed'].includes(challenge.status)) {
             challenge.status = 'failed';
@@ -1706,6 +1707,59 @@ const WorldEngine = {
         if (was !== challenge.status && scene.currentSituation?.recentRisks) {
             scene.currentSituation.recentRisks.push(`${challenge.title}：${challenge.status}`);
         }
+    },
+
+    _completeQuestObjectivesForChallenge(scene, challenge) {
+        if (!scene || !challenge || !Array.isArray(scene.quests)) return { changed: false };
+        const supports = new Set((challenge.supports || []).map(item => String(item || '')).filter(Boolean));
+        if (supports.size === 0) return { changed: false };
+
+        const normalizedSupports = new Set([...supports].map(item => this._normalizeQuestText(item)));
+        const completedByQuest = {};
+        const completedQuests = [];
+        let changed = false;
+
+        scene.quests.forEach(quest => {
+            if (!quest || quest.status === 'completed') return;
+            const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
+            objectives.forEach((objective, idx) => {
+                if (!objective || objective.completed) return;
+                const objectiveKeys = [
+                    `${quest.id}:${idx + 1}`,
+                    this._normalizeQuestText(objective.text || '')
+                ].filter(Boolean);
+                const matched = objectiveKeys.some(key =>
+                    supports.has(key) || normalizedSupports.has(this._normalizeQuestText(key))
+                );
+                if (!matched) return;
+                objective.completed = true;
+                changed = true;
+                if (!completedByQuest[quest.name]) completedByQuest[quest.name] = [];
+                completedByQuest[quest.name].push(objective.text || `目标 ${idx + 1}`);
+            });
+
+            if (objectives.length > 0 && objectives.every(o => o.completed)) {
+                quest.status = 'completed';
+                quest.completedAt = Date.now();
+                completedQuests.push(quest.name || '任务');
+            }
+        });
+
+        if (!changed) return { changed: false };
+        Object.entries(completedByQuest).forEach(([questName, objectives]) => {
+            this.addSystemMessage(scene, `【任务进展：${questName}】${objectives.join('；')}`, 'system');
+        });
+        completedQuests.forEach(questName => {
+            this.addSystemMessage(scene, `【任务完成：${questName}】`, 'system');
+        });
+        if (scene.questProgressGuards) {
+            scene.questProgressGuards.autoAdvanceStreak = 0;
+            scene.questProgressGuards.lastAdvancedAt = Date.now();
+        }
+        if (typeof GroupChat !== 'undefined' && GroupChat._checkVictory) {
+            GroupChat._checkVictory();
+        }
+        return { changed: true, completedByQuest, completedQuests };
     },
 
     _completeLinkedPhaseIfReady(scene, challenge) {
