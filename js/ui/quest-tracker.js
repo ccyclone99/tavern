@@ -125,6 +125,9 @@ const QuestTracker = {
     _grantReward(quest) {
         const scene = State.scene;
         if (!scene || !quest.reward) return;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.grantQuestReward) {
+            return WorldEngine.grantQuestReward(scene, quest);
+        }
         const rewards = [];
         // 解析奖励项
         quest.reward.split(/[,，、]/).forEach(raw => {

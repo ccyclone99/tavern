@@ -1000,6 +1000,11 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return;
         const amount = Math.max(-500, Math.min(500, parseInt(raw.split('|')[0]) || 0));
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.addGold) {
+            WorldEngine.addGold(scene, amount, { source: '剧情标记' });
+            State.saveCurrentSceneDebounced();
+            return;
+        }
         scene.gold = Math.max(0, (scene.gold || 0) + amount);
         const msg = {
             id: 'msg_' + Date.now() + '_gold',

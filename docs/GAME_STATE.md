@@ -235,7 +235,8 @@
   ],
   status: "active",          // active | completed | failed | abandoned
   giver: "审判官塞拉斯",
-  reward: "金币x100,经验x50,短剑x1"
+  reward: "金币x100,经验x50,短剑x1",
+  rewardGranted: false       // 防止同一任务通过多条完成路径重复发奖
 }
 ```
 

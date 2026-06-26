@@ -42,6 +42,11 @@ const WorldEngine = {
         if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
         if (!Array.isArray(scene.currentSituation.recommendedActions)) scene.currentSituation.recommendedActions = [];
         if (typeof scene.turnCount !== 'number') scene.turnCount = 0;
+        if (Array.isArray(scene.quests)) {
+            scene.quests.forEach(quest => {
+                if (quest && quest.rewardGranted !== true) quest.rewardGranted = false;
+            });
+        }
 
         scene.clocks = scene.clocks.map(c => this.normalizeClock(c)).filter(Boolean).slice(0, 12);
         scene.counterStrategies = scene.counterStrategies.map(c => this.normalizeCounterStrategy(c)).filter(Boolean).slice(0, 20);
@@ -716,6 +721,119 @@ const WorldEngine = {
             attrPoints: scene.attrPoints,
             levelsGained
         };
+    },
+
+    addGold(scene, amount, options = {}) {
+        if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        const numeric = Number(amount || 0);
+        const delta = Number.isFinite(numeric) ? this._clamp(Math.trunc(numeric), -9999, 9999) : 0;
+        if (delta === 0) return { ok: false, amount: 0, message: '金币无变化。' };
+
+        const before = Math.max(0, Number(scene.gold || 0));
+        const after = Math.max(0, before + delta);
+        const actual = after - before;
+        scene.gold = after;
+        if (actual === 0) return { ok: false, amount: 0, gold: scene.gold, message: '金币无变化。' };
+
+        const source = String(options.source || options.reason || '金币变动').replace(/\s+/g, ' ').trim().slice(0, 120) || '金币变动';
+        const title = actual >= 0 ? '获得金币' : '花费金币';
+        const text = `${source}：${actual >= 0 ? '获得' : '花费'} ${Math.abs(actual)} 金币，当前 ${scene.gold}。`;
+        if (options.silent === true) {
+            this.recordEvent(scene, { category: 'economy', title, text });
+        } else {
+            this.addSystemMessage(scene, `【${title}】${text}`, 'system');
+        }
+
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+        }
+        return { ok: true, amount: actual, gold: scene.gold, before };
+    },
+
+    grantQuestReward(scene, quest, options = {}) {
+        if (!scene || !quest) return { ok: false, rewards: [], message: '没有可发放的任务奖励。' };
+        this.normalizeScene(scene);
+        const rewardText = String(options.reward || quest.reward || '').trim();
+        if (!rewardText) return { ok: false, rewards: [], message: '任务没有奖励。' };
+        if (quest.rewardGranted === true) return { ok: false, rewards: [], duplicate: true, message: '任务奖励已经发放。' };
+
+        const questName = String(options.questName || quest.name || '任务').trim().slice(0, 120) || '任务';
+        const entries = this._parseQuestRewardEntries(rewardText);
+        const rewards = [];
+
+        entries.forEach(entry => {
+            if (!entry) return;
+            if (entry.type === 'gold') {
+                const result = this.addGold(scene, entry.amount, { source: `任务奖励：${questName}`, silent: true });
+                if (result.ok) rewards.push(`金币 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                return;
+            }
+            if (entry.type === 'exp') {
+                const result = this.addExperience(scene, entry.amount, { source: `任务奖励：${questName}`, silent: true, levelMessage: false });
+                if (result.ok) {
+                    const levelText = result.levelsGained > 0
+                        ? `（升级到 ${result.level}，属性点 +${result.levelsGained * 2}）`
+                        : '';
+                    rewards.push(`经验 +${result.amount}${levelText}`);
+                }
+                return;
+            }
+            if (entry.type === 'item') {
+                const item = this.createInventoryItemFromReward(entry.name, entry.quantity);
+                const added = this._addOrMergeInventoryItem(scene, item);
+                if (!added) return;
+                const qtyText = entry.quantity > 1 ? ` x${entry.quantity}` : '';
+                rewards.push(`${item.name}${qtyText}`);
+                this.recordEvent(scene, {
+                    category: 'inventory',
+                    title: '获得物品',
+                    text: `任务奖励：${questName}，获得 ${item.name}${qtyText}`
+                });
+            }
+        });
+
+        if (rewards.length === 0) {
+            return { ok: false, rewards, message: '奖励没有产生有效变化。' };
+        }
+        quest.rewardGranted = true;
+        const msg = this.addSystemMessage(scene, `【任务奖励：${questName}】${rewards.join('，')}`, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderInventory?.();
+            SidebarRight.renderDetail?.();
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('inventory');
+        }
+        return { ok: true, rewards, messageId: msg?.id || '', questName };
+    },
+
+    _parseQuestRewardEntries(rewardText) {
+        return String(rewardText || '')
+            .split(/[,，、;]/)
+            .map(raw => String(raw || '').trim())
+            .filter(raw => raw && !/^(无|none|null)$/i.test(raw))
+            .map(raw => {
+                const countMatch = raw.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+                const label = countMatch ? countMatch[1].trim() : raw;
+                const explicitCount = countMatch ? Number(countMatch[2]) : 0;
+                const numberMatch = raw.match(/([+-]?\d+)/);
+                const numeric = Number(numberMatch ? numberMatch[1] : explicitCount);
+                const lower = raw.toLowerCase();
+                const qty = this._clamp(Number.isFinite(explicitCount) && explicitCount > 0 ? explicitCount : 1, 1, 20);
+
+                if (/金币|gold|铜币|银币|钱/i.test(label) || /金币|gold|铜币|银币|钱/i.test(lower)) {
+                    const amount = Number.isFinite(numeric) && numeric !== 0 ? Math.abs(Math.trunc(numeric)) : 10;
+                    return { type: 'gold', amount: this._clamp(amount, 1, 9999) };
+                }
+                if (/经验|exp|experience/i.test(label) || /经验|exp|experience/i.test(lower)) {
+                    const amount = Number.isFinite(numeric) && numeric !== 0 ? Math.abs(Math.trunc(numeric)) : 20;
+                    return { type: 'exp', amount: this._clamp(amount, 1, 2000) };
+                }
+                return { type: 'item', name: label || raw, quantity: qty };
+            });
     },
 
     allocateStatPoint(scene, key) {
@@ -1623,9 +1741,6 @@ const WorldEngine = {
                     quest.status = 'completed';
                     quest.completedAt = Date.now();
                     completedQuests.push({ questId: quest.id, questName: quest.name });
-                    if (typeof QuestTracker !== 'undefined' && QuestTracker._grantReward) {
-                        QuestTracker._grantReward(quest);
-                    }
                 }
             });
 
@@ -1643,6 +1758,8 @@ const WorldEngine = {
         });
         completedQuests.forEach(item => {
             this.addSystemMessage(scene, `【任务完成：${item.questName}】`, 'system');
+            const quest = scene.quests.find(q => q.id === item.questId);
+            this.grantQuestReward(scene, quest);
         });
 
         if (typeof SidebarRight !== 'undefined') {
@@ -3582,6 +3699,7 @@ const WorldEngine = {
         const normalizedSupports = new Set([...supports].map(item => this._normalizeQuestText(item)));
         const completedByQuest = {};
         const completedQuests = [];
+        const completedQuestRefs = [];
         let changed = false;
 
         scene.quests.forEach(quest => {
@@ -3607,6 +3725,7 @@ const WorldEngine = {
                 quest.status = 'completed';
                 quest.completedAt = Date.now();
                 completedQuests.push(quest.name || '任务');
+                completedQuestRefs.push(quest);
             }
         });
 
@@ -3617,6 +3736,7 @@ const WorldEngine = {
         completedQuests.forEach(questName => {
             this.addSystemMessage(scene, `【任务完成：${questName}】`, 'system');
         });
+        completedQuestRefs.forEach(quest => this.grantQuestReward(scene, quest));
         if (scene.questProgressGuards) {
             scene.questProgressGuards.autoAdvanceStreak = 0;
             scene.questProgressGuards.lastAdvancedAt = Date.now();
@@ -3642,6 +3762,7 @@ const WorldEngine = {
             quest.status = 'completed';
             quest.completedAt = Date.now();
             this.addSystemMessage(scene, `【任务完成：${quest.name}】`, 'system');
+            this.grantQuestReward(scene, quest);
         }
         if (scene.questProgressGuards) {
             scene.questProgressGuards.autoAdvanceStreak = 0;
