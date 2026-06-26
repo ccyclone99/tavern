@@ -753,6 +753,52 @@ const WorldEngine = {
         return { ok: true, amount: actual, gold: scene.gold, before };
     },
 
+    applyPlayerDamage(scene, amount, options = {}) {
+        if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        const maxHp = Math.max(1, Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene)));
+        scene.playerMaxHp = maxHp;
+        const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
+        const requested = Number(amount || 0);
+        const damage = Number.isFinite(requested) ? this._clamp(Math.trunc(requested), 1, maxHp) : 1;
+        scene.playerHp = Math.max(0, before - damage);
+        const actual = before - scene.playerHp;
+        if (actual <= 0) return { ok: false, amount: 0, hp: scene.playerHp, maxHp, message: '生命值无变化。' };
+
+        const reason = String(options.reason || '').trim().slice(0, 160);
+        this.addSystemMessage(
+            scene,
+            `【受伤】受到 ${actual} 点伤害${reason ? `（${reason}）` : ''}，剩余生命 ${scene.playerHp}/${maxHp}。`,
+            'system'
+        );
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
+        if (scene.playerHp <= 0 && options.triggerGameOver !== false && typeof GroupChat !== 'undefined' && GroupChat._triggerGameOver) {
+            GroupChat._triggerGameOver();
+        }
+        return { ok: true, amount: actual, hp: scene.playerHp, maxHp, before };
+    },
+
+    applyPlayerHealing(scene, amount, options = {}) {
+        if (!scene) return { ok: false, amount: 0, message: '没有可用场景。' };
+        this.normalizeScene(scene);
+        const maxHp = Math.max(1, Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene)));
+        scene.playerMaxHp = maxHp;
+        const before = this._clamp(Number(scene.playerHp ?? maxHp), 0, maxHp);
+        const requested = Number(amount || 0);
+        const heal = Number.isFinite(requested) ? this._clamp(Math.trunc(requested), 1, maxHp) : 1;
+        scene.playerHp = Math.min(maxHp, before + heal);
+        const actual = scene.playerHp - before;
+        const reason = String(options.reason || '').trim().slice(0, 160);
+        const content = actual > 0
+            ? `【恢复生命】恢复 ${actual} 点生命${reason ? `（${reason}）` : ''}，当前 ${scene.playerHp}/${maxHp}。`
+            : `【恢复生命】生命已满，当前 ${scene.playerHp}/${maxHp}。`;
+        this.addSystemMessage(scene, content, 'system');
+        if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderDetail?.();
+        return { ok: actual > 0, amount: actual, hp: scene.playerHp, maxHp, before };
+    },
+
     grantQuestReward(scene, quest, options = {}) {
         if (!scene || !quest) return { ok: false, rewards: [], message: '没有可发放的任务奖励。' };
         this.normalizeScene(scene);

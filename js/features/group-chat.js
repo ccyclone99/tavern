@@ -938,6 +938,11 @@ const GroupChat = {
         const parts = raw.split('|');
         const amount = Math.max(1, Math.min(scene.playerMaxHp || 30, parseInt(parts[0]) || 1));
         const reason = (parts[1] || '').trim();
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.applyPlayerDamage) {
+            WorldEngine.applyPlayerDamage(scene, amount, { reason });
+            State.saveCurrentSceneDebounced();
+            return;
+        }
         scene.playerHp = Math.max(0, (scene.playerHp || 0) - amount);
         const msg = {
             id: 'msg_' + Date.now() + '_dmg',
@@ -970,6 +975,12 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return;
         const amount = Math.max(1, Math.min(scene.playerMaxHp || 30, parseInt(raw.split('|')[0]) || 1));
+        const reason = (raw.split('|')[1] || '').trim();
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.applyPlayerHealing) {
+            WorldEngine.applyPlayerHealing(scene, amount, { reason });
+            State.saveCurrentSceneDebounced();
+            return;
+        }
         scene.playerHp = Math.min(scene.playerMaxHp || 20, (scene.playerHp || 0) + amount);
         const msg = {
             id: 'msg_' + Date.now() + '_heal',

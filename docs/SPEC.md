@@ -490,6 +490,12 @@ UI 要求：
 - 体质加点会重新计算最大生命，最大生命提升时同步增加当前生命。
 - 当前属性点分配上限为单项 20；超过上限需要后续专门的突破/装备规则。
 
+生命变化同样必须走规则层：
+
+- `[damage:N|原因]` 调用 `WorldEngine.applyPlayerDamage()`，写入 survival 事件，刷新顶部生命值。
+- `[heal:N|原因]` 调用 `WorldEngine.applyPlayerHealing()`，按实际恢复量写入 survival 事件。
+- HP 降到 0 时触发 HP 归零失败结局，并生成通关/失败回顾记录。
+
 ### 4.15 剧情弧推进
 
 `storyArcs.currentBeat` 已支持通过 `storyArcUpdate` 半自动推进；时钟和离屏行动由 `WorldEngine` 在玩家回合、休息和失败/部分成功后推进。

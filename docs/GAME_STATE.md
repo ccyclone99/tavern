@@ -376,6 +376,10 @@ scene.evidenceLedger = [
 
 属性点通过玩家详情面板分配。单项属性当前上限为 20；分配体质时会重算最大生命，最大生命提升会同步提高当前生命。
 
+### 生命字段
+
+`playerHp` 和 `playerMaxHp` 由规则层维护。AI 标记 `[damage:N|原因]`、`[heal:N|原因]` 会分别调用 `WorldEngine.applyPlayerDamage()` 和 `WorldEngine.applyPlayerHealing()`，写入 survival 事件并刷新顶部状态。生命降到 0 时触发 HP 归零失败结局和失败回顾记录。
+
 ### EventLogEntry
 
 ```js
