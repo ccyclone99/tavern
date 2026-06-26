@@ -51,14 +51,25 @@ const ChatUI = {
         };
         const cls = clsMap[outcome] || (d.success ? 'check-success' : 'check-fail');
         const resultText = d.resultLabel || labelMap[outcome] || (d.success ? '成功' : '失败');
-        const breakdown = d.itemBonus
-            ? `<div class="check-breakdown">属性 ${d.statMod >= 0 ? '+' + d.statMod : d.statMod} · 物品 ${d.itemBonus >= 0 ? '+' + d.itemBonus : d.itemBonus}</div>`
+        const resourceMods = Array.isArray(d.resourceModifiers) ? d.resourceModifiers : [];
+        const resourceKeys = new Set(resourceMods.map(m => `${m.source || ''}|${m.label || ''}`));
+        const passiveItemMods = Array.isArray(d.itemModifiers)
+            ? d.itemModifiers.filter(m => !resourceKeys.has(`${m.source || ''}|${m.label || ''}`))
+            : [];
+        const breakdownParts = [
+            `属性 ${d.statMod >= 0 ? '+' + d.statMod : d.statMod}`
+        ];
+        if (d.itemBonus) breakdownParts.push(`常驻物品 ${d.itemBonus >= 0 ? '+' + d.itemBonus : d.itemBonus}`);
+        if (d.selectedBonus) breakdownParts.push(`投入资源 ${d.selectedBonus >= 0 ? '+' + d.selectedBonus : d.selectedBonus}`);
+        if (d.dcDelta) breakdownParts.push(`DC ${d.dcDelta >= 0 ? '+' + d.dcDelta : d.dcDelta}`);
+        if (d.riskDelta) breakdownParts.push(`风险 ${d.riskDelta >= 0 ? '+' + d.riskDelta : d.riskDelta}`);
+        if (d.baseDc && d.baseDc !== d.dc) breakdownParts.push(`基础DC ${d.baseDc}`);
+        const breakdown = `<div class="check-breakdown">${breakdownParts.map(Renderer.escapeHtml).join(' · ')}</div>`;
+        const itemMods = passiveItemMods.length > 0
+            ? `<div class="check-modifiers">${passiveItemMods.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
             : '';
-        const itemMods = Array.isArray(d.itemModifiers) && d.itemModifiers.length > 0
-            ? `<div class="check-modifiers">${d.itemModifiers.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
-            : '';
-        const availableItems = Array.isArray(d.availableItemModifiers) && d.availableItemModifiers.length > 0
-            ? `<div class="check-modifiers check-available-modifiers">${d.availableItemModifiers.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
+        const resourceModsHtml = resourceMods.length > 0
+            ? `<div class="check-modifiers check-used-modifiers">${resourceMods.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
             : '';
         const note = d.consequenceHint
             ? `<div class="check-outcome-note">${Renderer.escapeHtml(d.consequenceHint)}</div>`
@@ -74,7 +85,7 @@ const ChatUI = {
             </div>
             ${breakdown}
             ${itemMods}
-            ${availableItems}
+            ${resourceModsHtml}
             <div class="check-outcome">
                 <div class="check-result-badge">${Renderer.escapeHtml(resultText)}</div>
                 ${note}

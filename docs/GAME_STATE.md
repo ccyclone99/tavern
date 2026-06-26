@@ -788,10 +788,18 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
   resultLabel: "成功",
   consequenceHint: "目标按预期达成，后果与代价保持合理。",
   consequenceOptions: ["目标按预期推进"],
+  selectedBonus: 2,
+  dcDelta: -1,
+  riskDelta: -4,
+  resourceModifiers: [
+    { source: "苏珊的体检背书", label: "DC -2，使用后消耗", kind: "companion" }
+  ],
   stakes: "失败可能导致：对方提出条件",
   risks: ["对方提出条件"]
 }
 ```
+
+结果卡只展示实际生效的 `itemModifiers` / `resourceModifiers`；`availableItemModifiers` 和 `availableCompanionModifiers` 属于 pending check UI，不应用作通关记录或结果回放中的“已投入资源”。
 
 ## 六、持久化边界
 

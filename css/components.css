@@ -377,7 +377,8 @@
 .check-breakdown {
     color: var(--text-muted);
     font-size: 11px;
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.35;
 }
 .check-modifiers {
     display: flex;
@@ -398,6 +399,11 @@
 .check-available-modifiers span {
     border-style: dashed;
     color: var(--amber);
+}
+
+.check-used-modifiers span {
+    border-color: rgba(52, 211, 153, 0.45);
+    color: var(--success);
 }
 
 /* 结局消息 */
