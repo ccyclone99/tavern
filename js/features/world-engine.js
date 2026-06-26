@@ -5064,13 +5064,14 @@ const WorldEngine = {
         let consumed = false;
         const notes = [];
         const consumedResourceIds = new Set();
-        modifiers.forEach(mod => {
-            if (mod.kind !== 'companion' || !mod.resourceId) return;
+        for (const mod of modifiers) {
+            if (!this.isScenePlaying(scene)) break;
+            if (mod.kind !== 'companion' || !mod.resourceId) continue;
             const resourceId = String(mod.resourceId || '').trim();
-            if (!resourceId || consumedResourceIds.has(resourceId)) return;
+            if (!resourceId || consumedResourceIds.has(resourceId)) continue;
             const resource = scene.companionResources.find(r => r.id === mod.resourceId);
-            if (!resource || Number(resource.uses || 0) <= 0) return;
-            if (!this.getCompanionResourceAvailability(scene, resource).ok) return;
+            if (!resource || Number(resource.uses || 0) <= 0) continue;
+            if (!this.getCompanionResourceAvailability(scene, resource).ok) continue;
             resource.uses = Math.max(0, Number(resource.uses || 0) - 1);
             consumedResourceIds.add(resourceId);
             consumed = true;
@@ -5080,6 +5081,7 @@ const WorldEngine = {
                 : [];
             const detailNotes = [...effectNotes, ...costNotes];
             notes.push(`${resource.name}${detailNotes.length ? `（${detailNotes.join('，')}）` : ''}`);
+            if (!this.isScenePlaying(scene)) break;
             if (resource.risk) {
                 if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
                 if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
@@ -5093,8 +5095,8 @@ const WorldEngine = {
                     tags: ['companion', resource.characterId, ...(resource.tags || [])].filter(Boolean)
                 });
             }
-        });
-        if (consumed) {
+        }
+        if (consumed && this.isScenePlaying(scene)) {
             this.addSystemMessage(scene, `【资源消耗】使用同伴协助：${notes.join('、')}`, 'system');
             if (typeof SidebarRight !== 'undefined') {
                 SidebarRight.renderSituation?.();
