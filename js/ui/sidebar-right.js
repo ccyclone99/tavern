@@ -166,7 +166,7 @@ const SidebarRight = {
         const consequenceHtml = this._buildConsequenceLedgerHtml(
             typeof WorldEngine !== 'undefined' && WorldEngine.getActiveConsequences
                 ? WorldEngine.getActiveConsequences(scene, { limit: 6 })
-                : (scene.consequenceLedger || []).filter(c => c.status !== 'resolved').slice(-6).reverse()
+                : (scene.consequenceLedger || []).filter(c => !c.status || c.status === 'active').slice(-6).reverse()
         );
         const textureHtml = texture && (texture.tone || texture.sensory?.length || texture.motifs?.length || texture.dramaticQuestions?.length) ? `
             <div class="situation-section">

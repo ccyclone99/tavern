@@ -411,6 +411,8 @@ const WorldEngine = {
             tags: list('tags', 10),
             turn: Number.isFinite(Number(data.turn)) ? Number(data.turn) : 0,
             resolvedAt: Number.isFinite(Number(data.resolvedAt)) ? Number(data.resolvedAt) : 0,
+            resolvedBy: String(data.resolvedBy || '').slice(0, 120),
+            resolution: String(data.resolution || '').slice(0, 260),
             createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now()
         };
     },
@@ -1310,7 +1312,7 @@ const WorldEngine = {
         challenge = scene.sceneChallenges.find(c => c.id === challengeId) || challenge;
         this._settleChallengeStatus(scene, challenge, challenge.lastReason);
         if (scene.gameState === 'playing') this._activateNextChallenge(scene);
-        SidebarRight.renderSituation?.();
+        if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
         return { challenge, progressDelta, strainDelta, outcome };
     },
 
@@ -1795,6 +1797,60 @@ const WorldEngine = {
                 return sb - sa || Number(b.createdAt || 0) - Number(a.createdAt || 0);
             })
             .slice(0, limit);
+    },
+
+    resolveRelevantConsequences(scene, context = {}) {
+        if (!scene || !Array.isArray(scene.consequenceLedger)) return [];
+        this.normalizeScene(scene);
+        const outcome = String(context.outcome || '');
+        const canResolve = context.force === true || ['success', 'critical_success'].includes(outcome);
+        if (!canResolve) return [];
+
+        const severityRank = { low: 1, medium: 2, high: 3, critical: 4 };
+        const scored = scene.consequenceLedger
+            .map((item, index) => ({
+                item,
+                index,
+                score: this._consequenceMatchScore(item, context)
+            }))
+            .filter(entry => entry.item && entry.item.status === 'active')
+            .filter(entry => entry.score >= 4)
+            .filter(entry => context.force === true || outcome === 'critical_success' || entry.item.severity !== 'critical')
+            .sort((a, b) => {
+                const sev = (severityRank[b.item.severity] || 1) - (severityRank[a.item.severity] || 1);
+                return b.score - a.score || sev || Number(b.item.createdAt || 0) - Number(a.item.createdAt || 0);
+            });
+        if (scored.length === 0) return [];
+
+        const limit = Math.max(1, Math.min(3, Number(context.limit || (outcome === 'critical_success' ? 2 : 1))));
+        const now = Date.now();
+        const reason = String(context.reason || context.intent || '后续行动成功处理了相关后果').slice(0, 260);
+        const resolved = [];
+        scored.slice(0, limit).forEach(entry => {
+            const target = scene.consequenceLedger[entry.index];
+            if (!target || target.status !== 'active') return;
+            target.status = 'resolved';
+            target.resolvedAt = now;
+            target.resolvedBy = String(context.messageId || context.source || '').slice(0, 120);
+            target.resolution = reason;
+            resolved.push({
+                id: target.id,
+                title: target.title,
+                severity: target.severity,
+                score: entry.score
+            });
+        });
+
+        if (resolved.length > 0) {
+            this.recordEvent(scene, {
+                category: 'progress',
+                title: '后果解除',
+                text: `解除：${resolved.map(item => item.title).join('、')}`,
+                refId: resolved[0].id,
+                timestamp: now
+            });
+        }
+        return resolved;
     },
 
     getConsequenceRiskModifier(scene, context = {}) {
@@ -3026,6 +3082,41 @@ const WorldEngine = {
             if (!haystack.includes(effect.when.toLowerCase())) return false;
         }
         return true;
+    },
+
+    _consequenceMatchScore(item, context = {}) {
+        if (!item) return 0;
+        const tags = (item.tags || []).map(tag => String(tag || '').toLowerCase()).filter(Boolean);
+        const haystack = [
+            item.category,
+            item.title,
+            item.cause,
+            item.effect,
+            ...tags
+        ].join(' ').toLowerCase();
+        const actionType = String(context.actionType || '').toLowerCase();
+        const stat = String(context.stat || context.key || '').toLowerCase();
+        const challengeId = String(context.challengeId || context.challengeContext?.challengeId || '').toLowerCase();
+        const challengeTitle = String(context.challengeTitle || context.challengeContext?.challengeTitle || '').toLowerCase();
+        const intent = String(context.intent || '').toLowerCase();
+        let score = 0;
+
+        if (actionType) {
+            if (String(item.category || '').toLowerCase() === actionType) score += 4;
+            else if (haystack.includes(actionType)) score += 2;
+            if (tags.includes(actionType)) score += 3;
+        }
+        if (stat && tags.includes(stat)) score += 2;
+        if (challengeId && tags.includes(challengeId)) score += 6;
+        if (challengeTitle && (tags.includes(challengeTitle) || haystack.includes(challengeTitle))) score += 4;
+        if (intent) {
+            tags.forEach(tag => {
+                if (tag.length >= 2 && intent.includes(tag)) score += 1;
+            });
+            const title = String(item.title || '').toLowerCase();
+            if (title && intent.includes(title)) score += 2;
+        }
+        return score;
     },
 
     _trimSituation(scene) {

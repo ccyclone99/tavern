@@ -633,6 +633,26 @@ const GroupChat = {
             WorldEngine.consumeCheckItems(scene, totals.itemModifiers || []);
             WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+            if (WorldEngine.resolveRelevantConsequences) {
+                const resolvedConsequences = WorldEngine.resolveRelevantConsequences(scene, {
+                    outcome: outcomeInfo.outcome,
+                    actionType: check.actionType || '',
+                    stat: check.key || '',
+                    intent: check.intent || check.stakes || '',
+                    challengeId: check.challengeContext?.challengeId || '',
+                    challengeTitle: check.challengeContext?.challengeTitle || '',
+                    source: 'check',
+                    messageId: msg.id,
+                    reason: `${check.statName || '属性'}检定${outcomeInfo.label || ''}处理了相关后果`
+                });
+                if (resolvedConsequences.length > 0) {
+                    msg.checkData.resolvedConsequences = resolvedConsequences.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        severity: item.severity
+                    }));
+                }
+            }
         }
         ActionBar.renderPendingCheck();
         ChatUI._syncInputMode?.();
