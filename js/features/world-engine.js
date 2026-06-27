@@ -6589,6 +6589,7 @@ const WorldEngine = {
         return (scene?.inventory || [])
             .filter(item => item?.name && this.canUseInventoryItem(item))
             .filter(item => this._itemHasRemainingUse(item))
+            .filter(item => this._isInventoryItemNameUnique(scene, item))
             .find(item => this._itemHasEffect(item, 'heal') || this._itemLooksLikeHealing(item));
     },
 
@@ -6597,18 +6598,21 @@ const WorldEngine = {
         return (scene?.inventory || [])
             .filter(item => item?.name && item !== healing && this.canUseInventoryItem(item))
             .filter(item => this._itemHasRemainingUse(item))
+            .filter(item => this._isInventoryItemNameUnique(scene, item))
             .find(item => !this._itemHasEffect(item, 'check_bonus'));
     },
 
     _findPreparationEquipment(scene) {
         return (scene?.inventory || [])
             .filter(item => item?.name && item.equipped !== true && this.canEquipInventoryItem(item))
+            .filter(item => this._isInventoryItemNameUnique(scene, item))
             .sort((a, b) => this._equipmentPriority(a) - this._equipmentPriority(b))[0] || null;
     },
 
     _findInventoryCleanupCandidate(scene) {
         return (scene?.inventory || [])
             .filter(item => item?.name && item.equipped !== true && item.type !== 'quest')
+            .filter(item => this._isInventoryItemNameUnique(scene, item))
             .sort((a, b) => {
                 const score = item => {
                     if (item.type === 'consumable') return 0;
@@ -6624,6 +6628,13 @@ const WorldEngine = {
         if (!item) return 0;
         if (item.uses !== undefined) return Math.max(0, Math.floor(Number(item.uses || 0)));
         return Math.max(0, Math.floor(Number(item.quantity || 1)));
+    },
+
+    _isInventoryItemNameUnique(scene, item) {
+        const name = String(item?.name || '').trim();
+        if (!name) return false;
+        const inventory = Array.isArray(scene?.inventory) ? scene.inventory : [];
+        return inventory.filter(entry => entry && String(entry.name || '').trim() === name).length === 1;
     },
 
     _inventoryCleanupCommand(item) {
