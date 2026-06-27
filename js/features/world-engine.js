@@ -5664,7 +5664,15 @@ const WorldEngine = {
             applyHeal(fallback.heal);
         }
 
-        effects.forEach(effect => {
+        let endedDuringUse = false;
+        const noteEnded = () => {
+            if (this.isScenePlaying(scene)) return false;
+            endedDuringUse = true;
+            return true;
+        };
+
+        for (const effect of effects) {
+            if (endedDuringUse) break;
             const value = Number(effect.value || 0);
             if (effect.type === 'heal') {
                 applyHeal(value || 1);
@@ -5705,9 +5713,20 @@ const WorldEngine = {
                     noteInactive('世界紧张度无变化');
                 }
             }
-        });
+            noteEnded();
+        }
 
         const shouldConsume = item.type === 'consumable' || item.uses !== undefined || effects.some(e => e.consume === true) || !!fallback;
+        if (endedDuringUse) {
+            if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderInventory?.();
+                SidebarRight.renderDetail?.();
+                SidebarRight.renderSituation?.();
+                SidebarRight.markTabNew?.('situation');
+            }
+            return { ok: true, itemName: item.name, applied, consumed: false, ended: true, message: this.endedSceneMessage(scene) };
+        }
         if (!changed) {
             const reason = inactive.length > 0 ? inactive.join('，') : '没有可结算的直接效果';
             return { ok: false, itemName: item.name, applied: [], consumed: false, message: `${item.name} 未消耗：${reason}。` };
