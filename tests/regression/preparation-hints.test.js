@@ -108,8 +108,40 @@ function testPendingRewardCleanupFallsBackWhenCandidateNameAmbiguous(WorldEngine
     assert.strictEqual(hint.command, '整理背包');
 }
 
+function testCleanupAdviceDoesNotSuggestAmbiguousUnequipCommand(WorldEngine) {
+    const scene = makeScene({
+        playerHp: 10,
+        inventory: [
+            {
+                id: 'amulet_equipped',
+                name: '护符',
+                type: 'misc',
+                quantity: 1,
+                equipped: true
+            },
+            {
+                id: 'amulet_spare',
+                name: '护符',
+                type: 'misc',
+                quantity: 1
+            }
+        ],
+        pendingExplorationRewards: [{
+            id: 'reward_1',
+            item: { name: '线索工具', type: 'consumable', quantity: 1, uses: 1 },
+            source: '测试'
+        }]
+    });
+
+    const advice = WorldEngine.formatInventoryCleanupAdvice(scene);
+
+    assert.ok(!advice.includes('输入“卸下护符”'), 'cleanup advice should not suggest an ambiguous unequip command');
+    assert.ok(advice.includes('从背包按钮卸下具体物品'), 'cleanup advice should point to precise inventory buttons when names are ambiguous');
+}
+
 const WorldEngine = loadWorldEngine();
 testAmbiguousHealingItemIsNotSuggestedAsCommand(WorldEngine);
 testUniqueEquipmentStillSuggested(WorldEngine);
 testPendingRewardCleanupFallsBackWhenCandidateNameAmbiguous(WorldEngine);
+testCleanupAdviceDoesNotSuggestAmbiguousUnequipCommand(WorldEngine);
 console.log('preparation-hints regression tests passed');

@@ -6665,6 +6665,9 @@ const WorldEngine = {
         }
         const equipped = (scene.inventory || []).find(item => item?.name && item.equipped === true && item.type !== 'quest');
         if (equipped?.name) {
+            if (!this._isInventoryItemNameUnique(scene, equipped)) {
+                return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n没有找到可直接出售的非关键未装备物品。已装备物品「${equipped.name}」存在同名项，请从背包按钮卸下具体物品后再处理；任务物品不会被直接出售。`;
+            }
             return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n没有找到可直接出售的非关键未装备物品。可以先输入“卸下${equipped.name}”，确认不需要后再出售；任务物品不会被直接出售。`;
         }
         return `【整理背包】背包 ${inventoryCount}/${capacity}。${pendingText}\n没有找到安全的自动清理候选。请在背包中确认哪些非关键物品可以出售或消耗；任务物品不会被直接出售。`;
