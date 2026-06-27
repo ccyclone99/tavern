@@ -609,7 +609,7 @@ scene.equipmentRefs = {
 }
 ```
 
-`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源，或在主输入框输入“投入资源名 / 不用资源名 / 请某人帮忙”后，再点击“掷骰”或输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。消耗品资源 ID 必须基于物品 `id` 或名称保持稳定；旧存档中的 `item:xxx:序号` 形式可通过 `legacyIds` 或旧 ID 前缀兼容识别，但新选择应写入稳定 ID。
+`pendingCheck` 由 AI 回复末尾的 `[check:属性|DC]` 创建，后续也可以由本地行动裁决创建。`itemModifiers` 是会自动进入检定修正的装备或非消耗任务物品；`availableItemModifiers` 和 `availableCompanionModifiers` 是可点选资源。玩家点选资源，或在主输入框输入“投入资源名 / 不用资源名 / 请某人帮忙”后，再点击“掷骰”或输入“掷骰”，系统会把所选加成/DC 调整写入 `type: "check"` 的结果消息，扣除消耗并清空 `pendingCheck`，然后 DM 根据结果继续叙事。消耗品资源 ID 必须基于物品 `id` 保持稳定；旧存档中的 `item:xxx:序号` 形式可通过 `legacyIds` 或旧 ID 前缀兼容识别，但旧的 `item:物品名` 只有在当前可选资源中该名称唯一时才兼容，新选择应写入稳定 ID。
 
 DM 续写检定结果时仍会清洗白名单标记：`[quest:]`、`[item_add:]`、`[damage:]` 等后果标记会进入对应规则入口；`[check:]` 会被忽略并从正文移除，避免一次行动结算后再次要求玩家掷骰或显示第二个 DC。
 

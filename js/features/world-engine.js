@@ -5999,14 +5999,10 @@ const WorldEngine = {
     getSelectedCheckResourceModifiers(scene, check) {
         const selectedItemIds = new Set(Array.isArray(check?.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
         const selectedCompanionIds = new Set(Array.isArray(check?.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
-        const isSelectedItemModifier = (modifier) => {
-            if (!modifier) return false;
-            if (selectedItemIds.has(String(modifier.id))) return true;
-            if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedItemIds.has(String(id)))) return true;
-            const legacyRefs = [modifier.itemId, modifier.source].map(String).filter(Boolean);
-            return [...selectedItemIds].some(id => legacyRefs.some(ref => id === `item:${ref}` || id.startsWith(`item:${ref}:`)));
-        };
-        const itemModifiers = this.getAvailableCheckItems(scene, check).filter(isSelectedItemModifier);
+        const availableItems = this.getAvailableCheckItems(scene, check);
+        const itemModifiers = availableItems.filter(modifier =>
+            this.isCheckItemModifierSelected(modifier, selectedItemIds, availableItems)
+        );
         const companionModifiers = this.getAvailableCompanionResources(scene, check).filter(m => selectedCompanionIds.has(m.id));
         const modifiers = [...itemModifiers, ...companionModifiers];
         return {
@@ -6017,6 +6013,25 @@ const WorldEngine = {
             dcDelta: modifiers.reduce((sum, m) => sum + Number(m.dcDelta || 0), 0),
             riskDelta: modifiers.reduce((sum, m) => sum + Number(m.riskDelta || 0), 0)
         };
+    },
+
+    isCheckItemModifierSelected(modifier, selectedIds = new Set(), availableModifiers = []) {
+        if (!modifier) return false;
+        const selected = selectedIds instanceof Set
+            ? selectedIds
+            : new Set((Array.isArray(selectedIds) ? selectedIds : []).map(String));
+        if (selected.has(String(modifier.id))) return true;
+        if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selected.has(String(id)))) return true;
+
+        const itemId = String(modifier.itemId || '').trim();
+        if (itemId && [...selected].some(id => id === `item:${itemId}` || id.startsWith(`item:${itemId}:`))) return true;
+
+        const source = String(modifier.source || '').trim();
+        if (!source) return false;
+        const sameSource = (Array.isArray(availableModifiers) ? availableModifiers : [])
+            .filter(item => String(item?.source || '').trim() === source);
+        if (sameSource.length !== 1) return false;
+        return [...selected].some(id => id === `item:${source}` || id.startsWith(`item:${source}:`));
     },
 
     getCheckTotals(scene, check) {

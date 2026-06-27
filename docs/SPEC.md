@@ -347,7 +347,7 @@ scene.pendingAction = {
 
 - 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
 - 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选或输入“投入资源名”，掷骰时才扣除 `uses` 或数量。
-- 可点选消耗品必须使用基于物品 `id` 的稳定资源 ID；旧存档缺失或重复物品 id 时，`WorldEngine.normalizeScene()` 必须先补齐唯一 id。名称只能作为旧选择兼容，背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
+- 可点选消耗品必须使用基于物品 `id` 的稳定资源 ID；旧存档缺失或重复物品 id 时，`WorldEngine.normalizeScene()` 必须先补齐唯一 id。名称只能作为旧选择兼容，且该名称在当前可选资源中必须唯一；背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
 - `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选或输入“请某人帮忙/投入协助名”，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。同伴协助应绑定真实 `characterId`；生成、导入或旧档兼容回填时只允许按当前场景唯一角色名修复，重名、模糊或资源名同时提到多个角色时不能猜测绑定。同一次检定结算中，同一个 `resourceId` 即使因旧存档或 UI 异常重复出现在 modifiers，也只能扣除一次 uses 和代价。`unlock.revelationIds` 默认要求对应结论已 `confirmed`，不能因 `suspected` 过早公开同伴底牌；需要怀疑阶段解锁时必须显式声明。
 - 检定结算期间，如果消耗品腾出背包格子，已完成任务的待领物品奖励必须延后到当前检定的挑战、反制和后果结算结束后再重试；如果同伴协助、时钟或失败条件在中途把 `gameState` 变为 `defeated/victorious`，后续挑战奖励、反制解除、后果解除和回合推进必须停止。`consumeCheckItems()` 和 `consumeCompanionResources()` 在非 `playing` 场景必须 no-op，防止未来 UI 或外部调用在结局后继续扣资源；同一轮检定内，若某个同伴协助的代价或效果触发结局，后续同伴协助和该协助尚未写入的风险后果也必须停止。
 

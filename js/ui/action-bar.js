@@ -174,7 +174,10 @@ const ActionBar = {
         const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
             ? WorldEngine.getAvailableCompanionResources(scene, check)
             : (check.availableCompanionModifiers || []);
-        const isResourceSelected = (modifier, selectedIds) => {
+        const isResourceSelected = (modifier, selectedIds, available = []) => {
+            if (modifier?.kind === 'item' && typeof WorldEngine !== 'undefined' && WorldEngine.isCheckItemModifierSelected) {
+                return WorldEngine.isCheckItemModifierSelected(modifier, selectedIds, available);
+            }
             if (!modifier) return false;
             if (selectedIds.has(String(modifier.id))) return true;
             if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedIds.has(String(id)))) return true;
@@ -192,7 +195,7 @@ const ActionBar = {
             </button>
         `;
         const availableItemsHtml = availableItems.slice(0, 5).map(m =>
-            resourceOption(m, 'item', isResourceSelected(m, selectedItemIds))
+            resourceOption(m, 'item', isResourceSelected(m, selectedItemIds, availableItems))
         ).join('');
         const availableCompanionsHtml = availableCompanions.slice(0, 5).map(m =>
             resourceOption(m, 'companion', isResourceSelected(m, selectedCompanionIds))

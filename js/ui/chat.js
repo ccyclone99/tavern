@@ -293,7 +293,10 @@ const ChatUI = {
             const check = scene.pendingCheck;
             const selectedItemIds = new Set(Array.isArray(check.selectedItemModifierIds) ? check.selectedItemModifierIds.map(String) : []);
             const selectedCompanionIds = new Set(Array.isArray(check.selectedCompanionResourceIds) ? check.selectedCompanionResourceIds.map(String) : []);
-            const isSelected = (modifier, selectedIds) => {
+            const isSelected = (modifier, selectedIds, available = []) => {
+                if (modifier?.kind === 'item' && typeof WorldEngine !== 'undefined' && WorldEngine.isCheckItemModifierSelected) {
+                    return WorldEngine.isCheckItemModifierSelected(modifier, selectedIds, available);
+                }
                 if (!modifier) return false;
                 if (selectedIds.has(String(modifier.id))) return true;
                 if (Array.isArray(modifier.legacyIds) && modifier.legacyIds.some(id => selectedIds.has(String(id)))) return true;
@@ -307,7 +310,7 @@ const ChatUI = {
             const availableCompanions = typeof WorldEngine !== 'undefined' && WorldEngine.getAvailableCompanionResources
                 ? WorldEngine.getAvailableCompanionResources(scene, check)
                 : (check.availableCompanionModifiers || []);
-            const item = availableItems.find(resource => !isSelected(resource, selectedItemIds));
+            const item = availableItems.find(resource => !isSelected(resource, selectedItemIds, availableItems));
             const companion = availableCompanions.find(resource => !isSelected(resource, selectedCompanionIds));
             if (item?.source) chips.splice(1, 0, {
                 label: `投入${this._shortChipLabel(item.source)}`,
