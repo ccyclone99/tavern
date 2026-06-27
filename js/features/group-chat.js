@@ -1192,15 +1192,26 @@ const GroupChat = {
 
             content = result.content || content;
 
-            // 提取并应用 DM 回复中的状态补丁
-            const { content: cleanedContent, update: dmUpdate2 } = this._extractStateUpdate(content);
+            // 提取并应用 DM 回复中的状态补丁与标记。检定续写不能再生成新的检定卡。
+            const { content: contentForUpdate, update: dmUpdate2 } = this._extractStateUpdate(content);
             if (dmUpdate2) {
                 try { StrategyManager.applyStateUpdate(dmUpdate2); }
                 catch (err) { console.warn('DM 状态补丁应用失败（非致命）:', err.message || err); }
             }
-
+            const { cleanedContent, markers } = this._parseMarkers(contentForUpdate);
+            const safeMarkers = typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeMarkers
+                ? PromptGuard.sanitizeMarkers(markers, scene)
+                : markers;
+            const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
+            const ignoredCheckMarkers = safeMarkers.filter(m => m.type === 'check');
+            if (ignoredCheckMarkers.length > 0) {
+                console.warn('[GroupChat] DM 续写中忽略 check 标记，避免同一次检定后再次要求掷骰', ignoredCheckMarkers.map(m => m.raw));
+            }
             if (!cleanedContent.trim()) {
                 ChatUI.removeStreamingMessage();
+                if (this._isScenePlaying(scene)) {
+                    await this._processMarkers(nonCheckMarkers);
+                }
                 await State.saveCurrentSceneDebounced();
                 return;
             }
@@ -1218,7 +1229,10 @@ const GroupChat = {
             scene.messages.push(msg);
             ChatUI._renderedCount = scene.messages.length;
             ChatUI.finalizeStreamingMessage(cleanedContent, null);
-            this._reconcileQuestProgressFromNarrative(msg);
+            if (this._isScenePlaying(scene)) {
+                await this._processMarkers(nonCheckMarkers);
+            }
+            if (this._isScenePlaying(scene)) this._reconcileQuestProgressFromNarrative(msg);
             await State.saveCurrentSceneDebounced();
 
         } catch (err) {
