@@ -829,6 +829,26 @@ const WorldEngine = {
         return item;
     },
 
+    normalizeGeneratedInventoryItem(item = {}, options = {}) {
+        if (!item || typeof item !== 'object') return null;
+        const normalized = this.normalizeItem({ ...item });
+        const name = String(normalized?.name || '').trim().slice(0, 80);
+        if (!name) return null;
+        const validTypes = ['weapon', 'armor', 'consumable', 'quest', 'misc'];
+        const unitLimit = this._clamp(Number(options.unitLimit || 20), 1, 100);
+        normalized.name = name;
+        normalized.description = String(normalized.description || '').trim().slice(0, 180);
+        normalized.type = validTypes.includes(normalized.type) ? normalized.type : 'misc';
+        if (normalized.uses !== undefined) {
+            normalized.uses = this._clamp(Math.floor(Number(normalized.uses || 0)), 0, unitLimit);
+            if (normalized.uses <= 0) return null;
+            normalized.quantity = 1;
+        } else {
+            normalized.quantity = this._clamp(Math.floor(Number(normalized.quantity || 1)), 1, unitLimit);
+        }
+        return this.normalizeItem(normalized);
+    },
+
     ensureInventoryItemIds(scene) {
         if (!scene || !Array.isArray(scene.inventory)) return scene;
         const seen = new Set();

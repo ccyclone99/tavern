@@ -879,7 +879,7 @@ const WorldGenerator = {
         const starterInventory = Array.isArray(data.inventory) && data.inventory.length > 0
             ? clone(data.inventory)
             : this._buildDefaultStarterInventory(data);
-        scene.inventory = starterInventory.map(item => WorldEngine.normalizeItem(item)).filter(Boolean).slice(0, 40);
+        scene.inventory = starterInventory.map(item => WorldEngine.normalizeGeneratedInventoryItem(item)).filter(Boolean).slice(0, 40);
         if (data.equipment && typeof data.equipment === 'object') {
             scene.equipment = { ...scene.equipment, ...clone(data.equipment) };
         }
@@ -1390,7 +1390,7 @@ const WorldGenerator = {
                 ]
             };
         }
-        return [...base, themed].map(item => WorldEngine.normalizeItem(item)).filter(Boolean);
+        return [...base, themed].map(item => WorldEngine.normalizeGeneratedInventoryItem(item)).filter(Boolean);
     },
 
     _buildCompanionResources(data = {}, characterBindings = []) {
