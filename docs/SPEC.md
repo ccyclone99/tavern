@@ -580,6 +580,7 @@ UI 要求：
 - 检定结果后的 DM 续写同样必须清洗并处理 `[quest:]`、`[item_add:]`、`[damage:]` 等白名单标记；但其中的 `[check:]` 一律忽略并从正文移除，避免同一次行动结算后再次生成检定卡或暴露第二个 DC。
 - 通关/失败时的 `scene.runRecord.phaseSummaries` 必须把 `storyPhases`、挑战、证据、主线目标和检定与完整 transcript 关联，生成可展开的关键原文摘录；完整对话仍保留为独立折叠列表。
 - 存档快照必须保存并恢复运行态规则字段，包括 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让装备精确引用、探索奖励防重日志或待领取探索物品丢失，避免同名装备误操作、重复刷经验、物资丢失或输入状态错乱。
+- `Storage.importAll()` 导入场景前必须归一化旧存档字段；新建场景的 `State.createScene()` 也必须直接初始化 `equipmentRefs`，不能依赖下一次加载才补齐运行态装备引用。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
 

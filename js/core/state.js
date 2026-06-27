@@ -297,6 +297,7 @@ const State = {
             currentLocation: '',
             inventory: [],
             equipment: { weapon: null, armor: null, accessory: null },
+            equipmentRefs: { weapon: null, armor: null, accessory: null },
             // 桌游核心字段
             gold: 0,
             exp: 0,

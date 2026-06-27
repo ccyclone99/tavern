@@ -133,7 +133,10 @@ const Storage = {
             for (const c of data.characters) await this.put('characters', c);
         }
         if (data.scenes) {
-            for (const s of data.scenes) await this.put('scenes', s);
+            for (const s of data.scenes) {
+                const scene = this._normalizeImportedScene(s);
+                if (scene) await this.put('scenes', scene);
+            }
         }
         if (data.settings) {
             const current = await this.getSettings();
@@ -142,5 +145,29 @@ const Storage = {
             if (!merged.apiKey) merged.apiKey = current.apiKey || '';
             await this.put('settings', { key: 'main', value: merged });
         }
+    },
+
+    _normalizeImportedScene(scene) {
+        if (!scene || typeof scene !== 'object') return null;
+        const normalized = JSON.parse(JSON.stringify(scene));
+        if (typeof State !== 'undefined' && State.normalizeScene) {
+            return State.normalizeScene(normalized);
+        }
+        if (!Array.isArray(normalized.messages)) normalized.messages = [];
+        if (!Array.isArray(normalized.inventory)) normalized.inventory = [];
+        if (!normalized.equipment || typeof normalized.equipment !== 'object') {
+            normalized.equipment = { weapon: null, armor: null, accessory: null };
+        }
+        if (!normalized.equipmentRefs || typeof normalized.equipmentRefs !== 'object') {
+            normalized.equipmentRefs = { weapon: null, armor: null, accessory: null };
+        }
+        if (!Array.isArray(normalized.explorationRewardLog)) normalized.explorationRewardLog = [];
+        if (!Array.isArray(normalized.pendingExplorationRewards)) normalized.pendingExplorationRewards = [];
+        if (!normalized.inputContext || typeof normalized.inputContext !== 'object') {
+            normalized.inputContext = { state: 'idle', prompt: '', suggestions: [], lastIntentId: '' };
+        }
+        if (!Array.isArray(normalized.inputContext.suggestions)) normalized.inputContext.suggestions = [];
+        if (!normalized.gameState) normalized.gameState = 'playing';
+        return normalized;
     }
 };
