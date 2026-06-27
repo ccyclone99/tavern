@@ -139,6 +139,7 @@ const NewCharacterHandler = {
                 id: 'msg_' + Date.now(),
                 role: 'assistant',
                 characterId: char.id,
+                characterName: char.name || '',
                 content: char.first_mes,
                 type: 'talk',
                 visibility: typeof WorldEngine !== 'undefined'

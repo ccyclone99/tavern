@@ -118,6 +118,7 @@ const GroupChat = {
                 id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 role: 'assistant',
                 characterId: char.id,
+                characterName: char.name || '',
                 content: cleanedContent,
                 type: parsed.type,
                 emotion,
@@ -1289,7 +1290,7 @@ const GroupChat = {
         const oldestMessages = scene.messages.slice(0, 30);
         const msgText = oldestMessages.map(m => {
             const speaker = m.role === 'user' ? (scene.userName || '玩家') :
-                (m.characterId ? (State.characters.find(c => c.id === m.characterId)?.name || '角色') : '叙述者');
+                (m.characterId ? (m.characterName || State.characters.find(c => c.id === m.characterId)?.name || '角色') : '叙述者');
             return `${speaker}：${m.content}`;
         }).join('\n\n');
 

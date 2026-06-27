@@ -381,14 +381,16 @@ const RunRecorder = {
         const text = this._clean(message.content || '');
         if (!text) return null;
         const check = message.checkData || null;
+        const speakerSnapshot = String(message.characterName || message.speakerName || '').trim();
         const speaker = message.role === 'user'
             ? playerName
-            : (message.role === 'assistant' ? (characterName(message.characterId) || '主持人') : this._momentTitle(message));
+            : (message.role === 'assistant' ? (speakerSnapshot || characterName(message.characterId) || '主持人') : this._momentTitle(message));
         return {
             index,
             id: message.id || '',
             role: message.role || '',
             type: message.type || 'message',
+            characterId: message.characterId || '',
             speaker,
             text,
             timestamp: message.timestamp || 0,

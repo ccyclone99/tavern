@@ -996,6 +996,7 @@ const WorldGenerator = {
                     id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 4),
                     role: 'assistant',
                     characterId: firstChar.id,
+                    characterName: firstChar.name || '',
                     content: firstChar.first_mes,
                     type: 'talk',
                     visibility: { public: true, locationId: scene.currentLocation || '', participants: [firstChar.id], overheardBy: [] },
