@@ -226,6 +226,9 @@ const SceneManager = {
         SidebarLeft.render();
         SidebarRight.renderDetail();
         SidebarRight.renderSituation();
+        SidebarRight.renderKnowledge();
+        SidebarRight.renderLorebook();
+        SidebarRight.renderMap();
         SidebarRight.renderQuests();
         SidebarRight.renderInventory();
         SidebarRight.renderStrategies();
