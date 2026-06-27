@@ -262,7 +262,7 @@
 
 同一条 AI 回复中，如果状态补丁或标记已经触发胜利/失败，后续标记、自动检定、自动任务推断和自动关系分析都应停止，避免结局消息之后继续改变 NPC 关系或世界状态。
 
-剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。HP 归零由 `WorldEngine.triggerHpGameOver()` 处理，旧的 `GroupChat._triggerGameOver()` 只保留为包装器。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
+剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。`failureStateUpdate` 更新失败条件时优先使用 `failureId/id`，也可按当前场景唯一标题匹配；重名或模糊不唯一会跳过，不能猜测禁用或触发哪个失败条件。HP 归零由 `WorldEngine.triggerHpGameOver()` 处理，旧的 `GroupChat._triggerGameOver()` 只保留为包装器。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
 结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。长对话自动摘要前会先把被压缩的原始消息写入 `scene.transcriptLog`，因此结局回顾不会只剩最近 300 条或摘要文本。阶段回顾会按阶段挑战、证据、主线目标和检定匹配 transcript，保留可展开的关键原文摘录；右侧“局势”面板展示这份冒险回顾时，完整对话默认折叠，阶段原文也默认折叠，供玩家需要时展开复盘。
 
@@ -299,7 +299,7 @@ scene.evidenceLedger = [
 ];
 ```
 
-`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。复合行动命中同一挑战的次级方法时，主检定仍只采用一个属性和 DC；大成功会让一个或多个次级方法完整生效，成功会追加挑战进展，部分成功或失败会追加挑战压力和持续后果，并把 `secondaryResults` 写入检定结果供 DM 续写。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。`[quest:]` 必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addQuest()` 新增、去重、限制数量和写系统留痕。`[quest_update]`、`questsUpdate` 和任务面板手动点击完成都会调用 `WorldEngine.completeQuestObjective()` / `WorldEngine.applyQuestUpdates()` 同一闸门；`questsUpdate` 优先用 `questId + objectiveIdx/objectiveNumber`，也可用当前场景唯一任务名和唯一目标文本定位，但只负责定位，不放松闸门。任务面板手动回退调用 `WorldEngine.reopenQuestObjective()`，并由规则层写任务进展、发放任务奖励和防重复；主线只有普通叙事自动识别允许在 `maxAutoQuestAdvances` 内做有限 fallback，显式协议不能靠相似叙事直接完成目标。
+`ActionPlanner` 会优先匹配 active challenge 的 `approaches`。掷骰后 `WorldEngine.resolveChallengeCheck()` 推进 `progress/strain`，并可通过 `evidenceAdd`、`challengeUpdate`、`revelationUpdate` 状态补丁同步 AI 叙事结果。`challengeUpdate` 优先用 `challengeId/id`，也可按当前场景唯一挑战标题或目标文本定位；重名或模糊不唯一会跳过，不能把进度写到第一个同名挑战。复合行动命中同一挑战的次级方法时，主检定仍只采用一个属性和 DC；大成功会让一个或多个次级方法完整生效，成功会追加挑战进展，部分成功或失败会追加挑战压力和持续后果，并把 `secondaryResults` 写入检定结果供 DM 续写。结构化副本中，支线任务目标必须有证据、挑战或结论支持，避免仅凭叙事关键词自动完成。`[quest:]` 必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addQuest()` 新增、去重、限制数量和写系统留痕。`[quest_update]`、`questsUpdate` 和任务面板手动点击完成都会调用 `WorldEngine.completeQuestObjective()` / `WorldEngine.applyQuestUpdates()` 同一闸门；`questsUpdate` 优先用 `questId + objectiveIdx/objectiveNumber`，也可用当前场景唯一任务名和唯一目标文本定位，但只负责定位，不放松闸门。任务面板手动回退调用 `WorldEngine.reopenQuestObjective()`，并由规则层写任务进展、发放任务奖励和防重复；主线只有普通叙事自动识别允许在 `maxAutoQuestAdvances` 内做有限 fallback，显式协议不能靠相似叙事直接完成目标。
 
 `clueUpdate` / `revelationUpdate` 优先用内部 id，模型不知道 id 时可按当前场景唯一线索标题、subjectName 或唯一关键结论文本定位；不唯一时跳过。名称解析只负责定位，未确认的私密真相仍不得直接进入玩家已知。
 

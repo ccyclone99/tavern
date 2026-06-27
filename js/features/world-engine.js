@@ -2809,6 +2809,51 @@ const WorldEngine = {
         return { clue: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
     },
 
+    resolveFailureStateReference(scene, ref = {}, options = {}) {
+        const failures = Array.isArray(scene?.failureStates) ? scene.failureStates.filter(Boolean) : [];
+        const result = { failure: null, ambiguous: false };
+        if (failures.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.failureId || '').trim();
+        if (rawId) {
+            const byId = failures.find(failure => String(failure.id || '') === rawId);
+            if (byId) {
+                result.failure = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.title,
+            ref.name,
+            ref.failureTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findFailureStateByTitleRef(failures, value);
+            if (match.ambiguous || match.failure) {
+                result.failure = match.failure;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.failure;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findFailureStateByTitleRef(failures, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { failure: null, ambiguous: false };
+        const exact = failures.filter(failure => this._normalizeQuestText(failure.title || '') === normalized);
+        if (exact.length > 0) return { failure: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = failures.filter(failure => {
+            const title = this._normalizeQuestText(failure.title || '');
+            return title.length >= 2 && normalized.length >= 2 && (title.includes(normalized) || normalized.includes(title));
+        });
+        return { failure: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyFailureStateUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -2819,7 +2864,9 @@ const WorldEngine = {
             if (!update || typeof update !== 'object') return;
             const id = update.id ? String(update.id) : '';
             const title = update.title ? String(update.title) : '';
-            let failure = scene.failureStates.find(f => (id && f.id === id) || (title && f.title === title));
+            const resolved = this.resolveFailureStateReference(scene, update, { withStatus: true });
+            let failure = resolved.failure;
+            if (resolved.ambiguous) return;
             if (!failure && (id || title)) {
                 failure = this.normalizeFailureState({
                     id: id || undefined,
@@ -2847,6 +2894,54 @@ const WorldEngine = {
         return changed;
     },
 
+    resolveSceneChallengeReference(scene, ref = {}, options = {}) {
+        const challenges = Array.isArray(scene?.sceneChallenges) ? scene.sceneChallenges.filter(Boolean) : [];
+        const result = { challenge: null, ambiguous: false };
+        if (challenges.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.challengeId || '').trim();
+        if (rawId) {
+            const byId = challenges.find(challenge => String(challenge.id || '') === rawId);
+            if (byId) {
+                result.challenge = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.title,
+            ref.name,
+            ref.challengeTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findSceneChallengeByTitleRef(challenges, value);
+            if (match.ambiguous || match.challenge) {
+                result.challenge = match.challenge;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.challenge;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findSceneChallengeByTitleRef(challenges, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { challenge: null, ambiguous: false };
+        const exact = challenges.filter(challenge => this._normalizeQuestText(challenge.title || '') === normalized);
+        if (exact.length > 0) return { challenge: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = challenges.filter(challenge => {
+            const title = this._normalizeQuestText(challenge.title || '');
+            const goal = this._normalizeQuestText(challenge.goal || '');
+            return [title, goal].some(value =>
+                value.length >= 2 && normalized.length >= 2 && (value.includes(normalized) || normalized.includes(value))
+            );
+        });
+        return { challenge: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyChallengeUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -2856,7 +2951,9 @@ const WorldEngine = {
             if (!update || typeof update !== 'object') return;
             const id = update.id ? String(update.id) : '';
             const title = update.title ? String(update.title) : '';
-            let challenge = scene.sceneChallenges.find(c => (id && c.id === id) || (title && c.title === title));
+            const resolved = this.resolveSceneChallengeReference(scene, update, { withStatus: true });
+            let challenge = resolved.challenge;
+            if (resolved.ambiguous) return;
             if (!challenge && (id || title)) {
                 challenge = this.normalizeSceneChallenge({
                     id: id || undefined,
