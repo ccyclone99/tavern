@@ -187,7 +187,7 @@
 
 `flowGuide.lastProgressTurn` 记录最近一次任务、探索、挑战、检定、移动或剧情进展所在回合；`lastSoftMoveTurn` 记录最近一次系统防卡住提示所在回合。两者是运行态防重复字段，用于在连续无进展时提示下一步，不代表任务进度。
 
-`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值并刷新聊天、左右侧栏、行动条、pending action/check 预览和输入区状态；否则可能导致装备引用回退成名称匹配、探索奖励重复发放、待领取探索物品丢失、输入状态错乱、DM 叙事人格丢失，或 UI 仍显示读档前的线索/地图/世界书。
+`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值并刷新聊天、左右侧栏、行动条、pending action/check 预览和输入区状态；否则可能导致装备引用回退成名称匹配、探索奖励重复发放、待领取探索物品丢失、输入状态错乱、DM 叙事人格丢失，或 UI 仍显示读档前的线索/地图/世界书。若快照恢复后 `gameState` 已是 `victorious/defeated`，归一化必须清空残留 `pendingAction/pendingCheck`，输入区只保留回顾、帮助和 OOC 引导。
 
 ## 三、子结构
 

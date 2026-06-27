@@ -76,6 +76,15 @@ const WorldEngine = {
             .map((reward, idx) => this.normalizePendingExplorationReward(reward, idx))
             .filter(Boolean)
             .slice(-40);
+        if (!this.isScenePlaying(scene)) {
+            scene.pendingAction = null;
+            scene.pendingCheck = null;
+            if (!scene.inputContext || typeof scene.inputContext !== 'object') {
+                scene.inputContext = { state: 'ended', prompt: '', suggestions: [], lastIntentId: '' };
+            } else {
+                scene.inputContext.state = 'ended';
+            }
+        }
         (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
         return scene;
     },

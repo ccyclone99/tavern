@@ -569,7 +569,7 @@ UI 要求：
 当前规则：
 
 - `scene.eventLog` 记录检定、任务、探索、挑战、资源消耗、购买、物品、移动、升级、生存变化和结局事件。
-- `scene.gameState` 进入 `victorious` 或 `defeated` 后，输入框、地图、背包、交易、休息、属性点、任务手动操作、行动预览、检定卡、消息删除/重新生成和计策创建/更新/放弃不得再改变世界状态；结束后只允许 OOC、帮助和回顾。
+- `scene.gameState` 进入 `victorious` 或 `defeated` 后，输入框、地图、背包、交易、休息、属性点、任务手动操作、行动预览、检定卡、消息删除/重新生成和计策创建/更新/放弃不得再改变世界状态；结束后只允许 OOC、帮助和回顾。旧存档或读档中残留的 `pendingAction/pendingCheck` 必须在归一化时清空，输入区也不能再显示执行、取消、投入资源或掷骰引导。
 - 结局锁必须同时存在于 UI/输入入口和规则层：`StrategyManager.applyStateUpdate()` 先拦截，`WorldEngine.apply*Update()` 在非 `playing` 场景也必须 no-op，防止外部 agent 或未来 UI 误调用继续推进世界状态。
 - 同一批 `failureStateUpdate` 中，如果某条更新手动触发 `defeated`，后续失败条件更新必须停止，不能在失败结局后继续禁用、改写或新增失败条件。
 - 日志条目只保存摘要和引用，不复制完整聊天文本。

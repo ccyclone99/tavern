@@ -222,7 +222,14 @@ const ChatUI = {
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
         let current = modes[mode] || modes.talk;
-        if (!State.isOOC && scene?.pendingCheck) {
+        const ended = this._isSceneEnded(scene);
+        if (!State.isOOC && ended) {
+            current = {
+                placeholder: '冒险已结束。可输入“回顾”查看记录，或 OOC 说明偏好。',
+                hint: '当前冒险已经结束；只允许回顾、帮助或 OOC，不再推进剧情状态。',
+                send: '发送'
+            };
+        } else if (!State.isOOC && scene?.pendingCheck) {
             current = {
                 placeholder: '可输入“投入资源名”，再输入“掷骰”；或输入“取消”。',
                 hint: '当前等待检定结果；可先投入物品/同伴协助，检定完成前不会推进其他行动。',
@@ -249,7 +256,9 @@ const ChatUI = {
             this.sendBtn.setAttribute('aria-label', current.send);
         }
         if (scene?.inputContext) {
-            scene.inputContext.state = State.isStreaming ? 'blocked_streaming' : (scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle'));
+            scene.inputContext.state = State.isStreaming
+                ? 'blocked_streaming'
+                : (ended ? 'ended' : (scene.pendingCheck ? 'pending_check' : (scene.pendingAction ? 'pending_action' : 'idle')));
             scene.inputContext.prompt = current.placeholder;
         }
         this._renderSuggestionChips();
@@ -261,6 +270,8 @@ const ChatUI = {
         if (this.suggestionHelpEl) {
             if (chips.length === 0) {
                 this.suggestionHelpEl.textContent = '';
+            } else if (this._isSceneEnded(State.scene)) {
+                this.suggestionHelpEl.textContent = '输入建议：结束后只能回顾、查看记录、获取帮助或发送 OOC。';
             } else if (State.scene?.pendingCheck) {
                 this.suggestionHelpEl.textContent = '输入建议：这些按钮会处理当前检定；你也可以直接输入“投入资源名”“掷骰”或“取消”。';
             } else if (State.scene?.pendingAction) {
@@ -285,6 +296,13 @@ const ChatUI = {
 
     _buildSuggestionChips(scene) {
         if (State.isStreaming) return [];
+        if (this._isSceneEnded(scene)) {
+            return [
+                { label: '回顾', text: '回顾', behavior: 'send', primary: true },
+                { label: '查看记录', text: scene?.gameState === 'defeated' ? '失败记录' : '通关记录', behavior: 'send' },
+                { label: '帮助', text: '帮助', behavior: 'send' }
+            ];
+        }
         if (scene?.pendingCheck) {
             const chips = [
                 { label: '掷骰继续', text: '掷骰', behavior: 'send', primary: true },
@@ -837,7 +855,7 @@ const ChatUI = {
         }
 
         let scene = State.scene;
-        const blankCheckSubmit = !text && !State.isOOC && !!scene?.pendingCheck;
+        const blankCheckSubmit = !text && !State.isOOC && !!scene?.pendingCheck && !this._isSceneEnded(scene);
         if (!text && !blankCheckSubmit) return;
         if (blankCheckSubmit) text = '掷骰';
 

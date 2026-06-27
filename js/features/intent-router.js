@@ -9,8 +9,9 @@ const IntentRouter = {
         if (!raw) return { kind: 'empty' };
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'review_command' };
-        if (scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
-        if (scene?.pendingAction) return this._routePendingAction(raw, normalized);
+        const scenePlaying = this._isScenePlaying(scene);
+        if (scenePlaying && scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
+        if (scenePlaying && scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const statAllocation = this.matchStatAllocation(raw);
         if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
         const move = this.matchLocationMove(raw, scene);
@@ -34,6 +35,12 @@ const IntentRouter = {
             return { kind: 'action_preview', text: raw, meta: action, reason: action.reason };
         }
         return { kind: 'talk', text: raw, meta: action, reason: 'default_talk' };
+    },
+
+    _isScenePlaying(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) return WorldEngine.isScenePlaying(scene);
+        return !scene.gameState || scene.gameState === 'playing';
     },
 
     classifyAction(text, scene) {
@@ -299,9 +306,16 @@ const IntentRouter = {
     },
 
     buildHelpText(raw, scene) {
-        const state = scene?.pendingCheck
+        const scenePlaying = this._isScenePlaying(scene);
+        if (scene && !scenePlaying) {
+            const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+                ? WorldEngine.endedSceneMessage(scene)
+                : '当前冒险已经结束，不能继续改变游戏状态。';
+            return `${message}\n可以输入“回顾”“通关记录”或“失败记录”查看完整过程；也可以读取存档或回到大厅开始新的世界。`;
+        }
+        const state = scenePlaying && scene?.pendingCheck
             ? 'pending_check'
-            : (scene?.pendingAction ? 'pending_action' : 'idle');
+            : (scenePlaying && scene?.pendingAction ? 'pending_action' : 'idle');
         if (state === 'pending_check') {
             const check = scene.pendingCheck;
             return `当前：等待你完成${check.statName || '属性'}检定。输入“投入资源名”选择物品或同伴协助，输入“不用资源名”取消投入，输入“掷骰”继续，或输入“取消”放弃这次检定。`;

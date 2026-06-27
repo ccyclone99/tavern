@@ -153,6 +153,11 @@ const State = {
             scene.playerMaxHp = 10 + Math.floor((con - 10) / 2) * 4;
         }
         if (!scene.gameState) scene.gameState = 'playing';
+        if (scene.gameState !== 'playing') {
+            scene.pendingAction = null;
+            scene.pendingCheck = null;
+            scene.inputContext.state = 'ended';
+        }
         if (!Array.isArray(scene.storyArcs)) scene.storyArcs = [];
         if (!Array.isArray(scene.storyPhases)) scene.storyPhases = [];
         if (!Array.isArray(scene.clueGraph)) scene.clueGraph = [];
