@@ -140,6 +140,17 @@ img { max-width: 100%; display: block; }
 }
 .icon-btn:hover { background: var(--bg-card-hover); color: var(--text-main); }
 .icon-btn:active { transform: scale(0.92); }
+.icon-btn:disabled,
+.icon-btn.readonly {
+    cursor: default;
+    opacity: 0.45;
+    pointer-events: none;
+}
+.icon-btn:disabled:hover,
+.icon-btn.readonly:hover {
+    background: transparent;
+    color: var(--text-dim);
+}
 
 /* 可达性：键盘焦点轮廓（金色虚线） */
 :focus-visible {

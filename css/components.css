@@ -994,6 +994,21 @@
     background: rgba(251,191,36,0.08);
     box-shadow: 0 0 12px rgba(251,191,36,0.15);
 }
+.map-node.readonly {
+    cursor: default;
+    opacity: 0.78;
+}
+.map-node.readonly:hover {
+    border-color: var(--border);
+    background: var(--bg-card);
+    transform: none;
+    box-shadow: none;
+}
+.map-node.current.readonly:hover {
+    border-color: var(--gold-dim);
+    background: rgba(251,191,36,0.08);
+    box-shadow: 0 0 12px rgba(251,191,36,0.15);
+}
 
 .map-node-icon {
     font-size: 18px;
@@ -2475,6 +2490,15 @@
 .situation-action:hover {
     border-color: var(--gold-dim);
     color: var(--gold);
+}
+.situation-action.readonly {
+    cursor: default;
+    color: var(--text-muted);
+    opacity: 0.78;
+}
+.situation-action.readonly:hover {
+    border-color: var(--border);
+    color: var(--text-muted);
 }
 
 .situation-action-compact {

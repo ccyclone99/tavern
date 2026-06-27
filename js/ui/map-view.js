@@ -19,6 +19,7 @@ const MapView = {
 
         const curId = scene.currentLocation;
         const curLoc = locs.find(l => l.id === curId);
+        const canMoveMap = this._canMutateGameplay(scene);
 
         // 没有当前地点时显示空地图
         if (!curLoc) {
@@ -52,21 +53,27 @@ const MapView = {
         const nodesHtml = rows.map((row, depth) => {
             const rowHtml = row.map(loc => {
                 const isCurrent = loc.id === curId;
-                const cls = isCurrent ? 'map-node current' : 'map-node';
+                const cls = `map-node${isCurrent ? ' current' : ''}${canMoveMap ? '' : ' readonly'}`;
+                const moveAttr = canMoveMap
+                    ? `data-move-to="${Renderer.escapeAttr(loc.id)}"`
+                    : 'aria-disabled="true"';
                 return `<div class="${cls}" data-loc="${Renderer.escapeAttr(loc.id)}"
                     title="${Renderer.escapeAttr(loc.description || '')}"
-                    data-move-to="${Renderer.escapeAttr(loc.id)}">
+                    ${moveAttr}>
                     <div class="map-node-icon">${isCurrent ? '📍' : '⬤'}</div>
                     <div class="map-node-name">${Renderer.escapeHtml(loc.name)}</div>
                 </div>`;
             }).join('<div class="map-connector">─</div>');
             return `<div class="map-row">${rowHtml}</div>`;
         }).join('<div class="map-spacer"></div>');
+        const subtitle = [curLoc ? curLoc.description : '', canMoveMap ? '' : '冒险已结束，地图仅供回顾']
+            .filter(Boolean)
+            .join(' · ');
 
         this.el.innerHTML = `
             <div class="map-header">
                 <span class="map-title">${Renderer.escapeHtml(curLoc ? curLoc.name : '地图')}</span>
-                <span class="map-subtitle">${Renderer.escapeHtml(curLoc ? curLoc.description : '')}</span>
+                <span class="map-subtitle">${Renderer.escapeHtml(subtitle)}</span>
             </div>
             <div class="map-grid">${nodesHtml}</div>
         `;
@@ -82,9 +89,14 @@ const MapView = {
         if (this._moving || State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
+        if (!this._canMutateGameplay(scene)) {
+            const message = this._endedSceneMessage(scene);
+            if (typeof showToast !== 'undefined') showToast(message);
+            return;
+        }
         if (typeof WorldEngine === 'undefined' || !WorldEngine.moveToLocation) {
             console.warn('[MapView] WorldEngine.moveToLocation 不可用，跳过移动');
-            showToast('移动系统不可用。');
+            if (typeof showToast !== 'undefined') showToast('移动系统不可用。');
             return;
         }
 
@@ -117,5 +129,20 @@ const MapView = {
         } finally {
             this._moving = false;
         }
+    },
+
+    _canMutateGameplay(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return WorldEngine.isScenePlaying(scene);
+        }
+        return !scene.gameState || scene.gameState === 'playing';
+    },
+
+    _endedSceneMessage(scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage) {
+            return WorldEngine.endedSceneMessage(scene);
+        }
+        return '当前冒险已经结束，地图仅供回顾。';
     }
 };

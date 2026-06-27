@@ -31,8 +31,10 @@ const SidebarRight = {
         this.tabBtns.forEach(btn => {
             btn.onclick = () => this.switchTab(btn.dataset.tab);
         });
-        document.getElementById('addLoreEntryBtn').onclick = () => Lorebook.openEditor();
-        document.getElementById('aiBatchLoreBtn').onclick = () => Lorebook.generateBatch();
+        const addLoreBtn = document.getElementById('addLoreEntryBtn');
+        const aiBatchLoreBtn = document.getElementById('aiBatchLoreBtn');
+        if (addLoreBtn) addLoreBtn.onclick = () => Lorebook.openEditor();
+        if (aiBatchLoreBtn) aiBatchLoreBtn.onclick = () => Lorebook.generateBatch();
 
         State.on('characterSelected', () => this.renderDetail());
         State.on('sceneChanged', () => {
@@ -133,6 +135,34 @@ const SidebarRight = {
     renderMap() { MapView.render(); },
     renderQuests() { QuestTracker.render(); },
 
+    _canMutateGameplay(scene = State.scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return WorldEngine.isScenePlaying(scene);
+        }
+        return !scene.gameState || scene.gameState === 'playing';
+    },
+
+    _endedSceneMessage(scene = State.scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage) {
+            return WorldEngine.endedSceneMessage(scene);
+        }
+        return '当前冒险已经结束，内容仅供回顾。';
+    },
+
+    _buildSituationActionHtml(action, canMutate, options = {}) {
+        const label = options.label || action || '';
+        const command = options.command || action || label;
+        const compact = options.compact ? ' situation-action-compact' : '';
+        const ariaPrefix = options.ariaPrefix || '采用行动';
+        const meta = options.meta ? `<small>${Renderer.escapeHtml(options.meta)}</small>` : '';
+        const content = `${Renderer.escapeHtml(label)}${meta}`;
+        if (canMutate) {
+            return `<button class="situation-action${compact}" type="button" data-action="${Renderer.escapeAttr(command)}" aria-label="${Renderer.escapeAttr(`${ariaPrefix}：${label}`)}">${content}</button>`;
+        }
+        return `<span class="situation-action${compact} readonly" data-action="${Renderer.escapeAttr(command)}" aria-disabled="true" title="${Renderer.escapeAttr(this._endedSceneMessage(options.scene))}">${content}</span>`;
+    },
+
     renderSituation() {
         if (!this.situationEl) return;
         const scene = State.scene;
@@ -141,6 +171,7 @@ const SidebarRight = {
             this.renderStatusSummary(null);
             return;
         }
+        const canMutateSituation = this._canMutateGameplay(scene);
         const situation = typeof WorldEngine !== 'undefined'
             ? WorldEngine.getCurrentSituation(scene)
             : null;
@@ -202,7 +233,12 @@ const SidebarRight = {
             const progressPct = Math.min(100, Math.max(0, (Number(challenge.progress || 0) / Math.max(1, Number(challenge.targetProgress || 1))) * 100));
             const strainPct = Math.min(100, Math.max(0, (Number(challenge.strain || 0) / Math.max(1, Number(challenge.maxStrain || 1))) * 100));
             const approaches = (challenge.approaches || []).slice(0, 3).map(a =>
-                `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(a.label)}" aria-label="尝试：${Renderer.escapeAttr(a.label)}">${Renderer.escapeHtml(a.label)}<small>${Renderer.escapeHtml(a.statName || a.stat || '')} DC${a.dc || '?'}</small></button>`
+                this._buildSituationActionHtml(a.label, canMutateSituation, {
+                    compact: true,
+                    ariaPrefix: '尝试',
+                    meta: `${a.statName || a.stat || ''} DC${a.dc || '?'}`.trim(),
+                    scene
+                })
             ).join('');
             const evidence = (situation.challengeEvidence || []).slice(0, 3).map(e =>
                 `<span title="${Renderer.escapeAttr(e.text || e.title || '')}">${Renderer.escapeHtml(e.title || '证据')}</span>`
@@ -243,7 +279,12 @@ const SidebarRight = {
                 <div class="situation-prep-list">
                     ${prepHints.map(hint => {
                         const action = hint.command
-                            ? `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(hint.command)}" aria-label="采用准备：${Renderer.escapeAttr(hint.command)}">${Renderer.escapeHtml(hint.label || hint.command)}</button>`
+                            ? this._buildSituationActionHtml(hint.label || hint.command, canMutateSituation, {
+                                command: hint.command,
+                                compact: true,
+                                ariaPrefix: '采用准备',
+                                scene
+                            })
                             : '';
                         return `<div class="situation-prep-item situation-prep-${Renderer.escapeAttr(hint.kind || 'prep')}">
                             <div>
@@ -336,7 +377,11 @@ const SidebarRight = {
         const unknownsHtml = (situation.knownUnknowns || []).length > 0
             ? situation.knownUnknowns.slice(0, 3).map(item => {
                 const actions = (item.actions || []).slice(0, 2)
-                    .map(a => `<button class="situation-action situation-action-compact" type="button" data-action="${Renderer.escapeAttr(a)}" aria-label="追查线索：${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`)
+                    .map(a => this._buildSituationActionHtml(a, canMutateSituation, {
+                        compact: true,
+                        ariaPrefix: '追查线索',
+                        scene
+                    }))
                     .join('');
                 return `<div class="situation-unknown">
                     <div class="situation-row">
@@ -349,7 +394,9 @@ const SidebarRight = {
                 </div>`;
             }).join('')
             : '<p class="placeholder">暂无明确关键未知</p>';
-        const actionsHtml = situation.recommendedActions.map(a => `<button class="situation-action" type="button" data-action="${Renderer.escapeAttr(a)}" aria-label="采用行动：${Renderer.escapeAttr(a)}">${Renderer.escapeHtml(a)}</button>`).join('');
+        const actionsHtml = situation.recommendedActions
+            .map(a => this._buildSituationActionHtml(a, canMutateSituation, { scene }))
+            .join('');
 
         this.situationEl.innerHTML = `
             <div class="situation-card situation-location">
@@ -400,7 +447,7 @@ const SidebarRight = {
             </div>
         `;
 
-        this.situationEl.querySelectorAll('.situation-action').forEach(btn => {
+        this.situationEl.querySelectorAll('button.situation-action').forEach(btn => {
             btn.onclick = () => {
                 const input = document.getElementById('chatInput');
                 if (!input) return;
@@ -824,6 +871,7 @@ const SidebarRight = {
         const canMutateLorebook = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
             ? WorldEngine.isScenePlaying(scene)
             : !!scene && (!scene.gameState || scene.gameState === 'playing');
+        this._syncLorebookControls(canMutateLorebook);
         if (entries.length === 0) {
             this.loreListEl.innerHTML = canMutateLorebook
                 ? '<p class="placeholder">暂无世界书条目<br>点击 + 添加</p>'
@@ -846,6 +894,20 @@ const SidebarRight = {
             if (deleteBtn) deleteBtn.onclick = (e) => { e.stopPropagation(); Lorebook.deleteEntry(idx); };
             if (canMutateLorebook) div.onclick = () => Lorebook.openEditor(idx);
             this.loreListEl.appendChild(div);
+        });
+    },
+
+    _syncLorebookControls(canMutateLorebook) {
+        const controls = [
+            { el: document.getElementById('addLoreEntryBtn'), title: '添加世界书条目' },
+            { el: document.getElementById('aiBatchLoreBtn'), title: 'AI批量生成' }
+        ];
+        controls.forEach(({ el, title }) => {
+            if (!el) return;
+            el.disabled = !canMutateLorebook;
+            el.setAttribute?.('aria-disabled', canMutateLorebook ? 'false' : 'true');
+            el.classList?.toggle('readonly', !canMutateLorebook);
+            el.title = canMutateLorebook ? title : '冒险已结束，世界书仅供回顾';
         });
     },
 
