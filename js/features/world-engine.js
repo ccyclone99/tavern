@@ -245,26 +245,27 @@ const WorldEngine = {
         if (chars.length === 0) return resource;
 
         const rawId = String(resource.characterId || '').trim();
-        const findByName = value => {
-            const name = String(value || '').trim();
-            if (!name) return null;
-            return chars.find(char => String(char.name || '').trim() === name) || null;
+        const resolveUnique = value => {
+            if (!value) return null;
+            const resolved = this.resolveCharacterReference(scene, value, { withStatus: true, activeOnly: true });
+            return resolved && !resolved.ambiguous ? resolved.character : null;
         };
 
         let matched = null;
         if (rawId) {
-            matched = chars.find(char => char.id === rawId) || findByName(rawId);
+            matched = resolveUnique({ characterId: rawId });
         }
         const explicitName = String(resource.characterName || resource.character || resource.actorName || '').trim();
         if (!matched) {
-            matched = findByName(explicitName);
+            matched = resolveUnique({ characterName: explicitName });
         }
         const resourceName = String(resource.name || '').trim();
         if (!matched && resourceName) {
-            matched = chars.find(char => {
+            const nameMatches = chars.filter(char => {
                 const name = String(char.name || '').trim();
                 return name && resourceName.includes(name);
-            }) || null;
+            });
+            if (nameMatches.length === 1) matched = nameMatches[0];
         }
         const mentionsAnyKnownCharacter = resourceName && typeof State !== 'undefined' && Array.isArray(State.characters)
             ? State.characters.some(char => {
