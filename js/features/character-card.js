@@ -60,10 +60,11 @@ const CharacterCard = {
         }
         await Storage.deleteCharacter(id);
         State.characters = State.characters.filter(c => c.id !== id);
+        const deletedCurrent = State.currentCharacterId === id;
         if (State.currentCharacterId === id) {
             State.currentCharacterId = null;
         }
         State.emit('charactersChanged', State.characters);
-        State.emit('characterSelected', null);
+        if (deletedCurrent) State.emit('characterSelected', null);
     }
 };
