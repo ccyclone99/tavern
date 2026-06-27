@@ -191,25 +191,33 @@ const QuestTracker = {
     updateObjective(questName, objIdx) {
         const scene = State.scene;
         if (!scene) return;
-        const quest = scene.quests.find(q => q.name === questName && q.status === 'active');
-        if (!quest) return;
-        const idx = (parseInt(objIdx) || 1) - 1;
-        if (idx >= 0 && idx < quest.objectives.length) {
-            const objective = quest.objectives[idx];
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.completeQuestObjective) {
-                const result = WorldEngine.completeQuestObjective(scene, quest, idx, {
-                    gateOptions: { explicitMarker: true }
-                });
-                if (!result.ok) return;
-                if (result.questCompleted && typeof showToast !== 'undefined') showToast(`任务完成：${quest.name}`);
-            } else {
-                console.warn('[QuestTracker] WorldEngine.completeQuestObjective 不可用，跳过任务目标更新');
-                return;
-            }
-            State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
-            this.render();
-            // 检查胜利条件
-            if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) WorldEngine.checkVictory(scene);
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.applyQuestUpdates) {
+            console.warn('[QuestTracker] WorldEngine.applyQuestUpdates 不可用，跳过任务目标更新');
+            return;
         }
+        const objectiveNumber = parseInt(objIdx, 10) || 1;
+        const result = WorldEngine.applyQuestUpdates(scene, [{
+            questName,
+            objectiveNumber,
+            reason: '剧情标记'
+        }], {
+            explicitMarker: true,
+            stateUpdate: false
+        });
+        if (!result.changed) {
+            const blocked = result.blocked || (result.results || []).some(item => item.blocked);
+            if (blocked && typeof showToast !== 'undefined') {
+                showToast(result.message || '任务目标还缺少规则依据');
+            }
+            return;
+        }
+        const completedResult = (result.results || []).find(item => item.ok && item.questCompleted);
+        if (completedResult && typeof showToast !== 'undefined') {
+            const quest = scene.quests.find(q => q.id === completedResult.questId);
+            if (quest) showToast(`任务完成：${quest.name}`);
+        }
+        State.saveCurrentScene().catch(e => console.warn('任务目标保存失败:', e));
+        this.render();
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.checkVictory) WorldEngine.checkVictory(scene);
     }
 };

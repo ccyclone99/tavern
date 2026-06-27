@@ -365,8 +365,30 @@ const GroupChat = {
     _handleQuestUpdateMarker(raw) {
         const parts = raw.split('|');
         const questName = (parts[0] || '').trim();
-        const objIdx = (parts[1] || '1').trim();
-        QuestTracker.updateObjective(questName, objIdx);
+        const objectiveNumber = parseInt(parts[1], 10) || 1;
+        const scene = State.scene;
+        if (!scene) return;
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.applyQuestUpdates) {
+            this._warnMissingRuleLayer('[quest_update]');
+            return;
+        }
+        const result = WorldEngine.applyQuestUpdates(scene, [{
+            questName,
+            objectiveNumber,
+            reason: '剧情标记'
+        }], {
+            explicitMarker: true,
+            stateUpdate: false
+        });
+        if (!result.changed) {
+            const blocked = result.blocked || (result.results || []).some(item => item.blocked);
+            if (blocked && typeof showToast !== 'undefined') {
+                showToast(result.message || '任务目标还缺少规则依据');
+            }
+            return;
+        }
+        State.saveCurrentSceneDebounced();
+        if (typeof QuestTracker !== 'undefined' && QuestTracker.render) QuestTracker.render();
     },
 
     /**

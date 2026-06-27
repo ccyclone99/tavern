@@ -1976,7 +1976,11 @@ const WorldEngine = {
             if (idx !== null) {
                 const result = this.completeQuestObjective(scene, quest, idx, {
                     reason,
-                    gateOptions: { stateUpdate: options.stateUpdate !== false }
+                    gateOptions: {
+                        stateUpdate: options.stateUpdate !== false,
+                        explicitMarker: options.explicitMarker === true,
+                        manualToggle: options.manualToggle === true
+                    }
                 });
                 results.push({ questId: quest.id, objectiveIdx: idx, ...result });
                 changed = result.ok || changed;
