@@ -322,6 +322,7 @@ scene.pendingAction = {
 - 检定不是主动功能；只有玩家描述了有风险且结果不确定的行动后，系统才要求检定。
 - 当 `pendingAction.suggestedCheck` 或 `pendingAction.adjudication` 存在时，后续检定必须沿用同一个属性和 DC。
 - 复合行动可以记录同一挑战内的次级方法，但不能产生第二个 DC；掷骰后由 `WorldEngine.resolveChallengeCheck()` 结算 `secondaryResults`：大成功触发次级方法完整收益，成功追加进展，部分成功/失败追加压力和持续后果，并把结果注入 DM 续写上下文。
+- 同一批 `challengeUpdate` 必须逐条结算挑战奖励、任务联动、阶段联动和通关检查；如果某条挑战更新触发 `defeated/victorious`，后续挑战更新和自动激活下一挑战必须停止。
 - 细则见 `docs/INPUT_FLOW_SPEC.md`。
 
 ### 4.7 检定卡

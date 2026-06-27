@@ -3323,13 +3323,14 @@ const WorldEngine = {
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return false;
         let changed = false;
-        updates.slice(0, 12).forEach(update => {
-            if (!update || typeof update !== 'object') return;
+        for (const update of updates.slice(0, 12)) {
+            if (!this.isScenePlaying(scene)) break;
+            if (!update || typeof update !== 'object') continue;
             const id = update.id ? String(update.id) : '';
             const title = update.title ? String(update.title) : '';
             const resolved = this.resolveSceneChallengeReference(scene, update, { withStatus: true });
             let challenge = resolved.challenge;
-            if (resolved.ambiguous) return;
+            if (resolved.ambiguous) continue;
             if (!challenge && (id || title)) {
                 challenge = this.normalizeSceneChallenge({
                     id: id || undefined,
@@ -3337,10 +3338,10 @@ const WorldEngine = {
                     phaseId: update.phaseId || '',
                     status: update.status || 'active'
                 }, scene.sceneChallenges.length);
-                if (!challenge) return;
+                if (!challenge) continue;
                 scene.sceneChallenges.push(challenge);
             }
-            if (!challenge) return;
+            if (!challenge) continue;
 
             const previousStatus = challenge.status;
             if (update.status !== undefined && this.challengeStatuses.includes(update.status)) challenge.status = update.status;
@@ -3378,8 +3379,8 @@ const WorldEngine = {
             this._settleChallengeStatus(scene, challenge, update.reason || update.lastReason || '挑战状态更新', { previousStatus });
             challenge.updatedAt = Date.now();
             changed = true;
-        });
-        if (changed) {
+        }
+        if (changed && this.isScenePlaying(scene)) {
             if (scene.questProgressGuards) scene.questProgressGuards.autoAdvanceStreak = 0;
             this._activateNextChallenge(scene);
             if (scene.currentSituation) {
