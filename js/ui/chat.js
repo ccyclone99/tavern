@@ -744,6 +744,11 @@ const ChatUI = {
             const timeRel = this._formatTime(msg.timestamp);
             const timeFull = this._formatTimeFull(msg.timestamp);
             const timeHtml = timeRel ? `<div class="rp-time" title="${Renderer.escapeAttr(timeFull)}">${Renderer.escapeHtml(timeRel)}</div>` : '';
+            const mutationActions = this._isSceneEnded(State.scene)
+                ? ''
+                : `
+                        <button class="msg-regen-btn" data-idx="${idx}">重试</button>
+                        <button class="msg-delete-btn" data-idx="${idx}">删除</button>`;
             div.innerHTML = `
                 ${avatarHtml}
                 <div class="rp-bubble-wrap">
@@ -752,23 +757,26 @@ const ChatUI = {
                     ${timeHtml}
                     <div class="rp-msg-actions">
                         <button class="msg-copy-btn" data-idx="${idx}">复制</button>
-                        <button class="msg-regen-btn" data-idx="${idx}">重试</button>
-                        <button class="msg-delete-btn" data-idx="${idx}">删除</button>
+                        ${mutationActions}
                     </div>
                 </div>`;
             div.querySelector('.msg-copy-btn').onclick = () => ChatUI.copyMessage(idx);
             const regenBtn = div.querySelector('.msg-regen-btn');
             const deleteBtn = div.querySelector('.msg-delete-btn');
-            regenBtn.onclick = async () => {
-                regenBtn.disabled = true;
-                try { await ChatUI.regenerate(idx); }
-                finally { regenBtn.disabled = false; }
-            };
-            deleteBtn.onclick = async () => {
-                deleteBtn.disabled = true;
-                try { await ChatUI.deleteMessage(idx); }
-                finally { deleteBtn.disabled = false; }
-            };
+            if (regenBtn) {
+                regenBtn.onclick = async () => {
+                    regenBtn.disabled = true;
+                    try { await ChatUI.regenerate(idx); }
+                    finally { regenBtn.disabled = false; }
+                };
+            }
+            if (deleteBtn) {
+                deleteBtn.onclick = async () => {
+                    deleteBtn.disabled = true;
+                    try { await ChatUI.deleteMessage(idx); }
+                    finally { deleteBtn.disabled = false; }
+                };
+            }
         }
 
         this.messagesEl.appendChild(div);

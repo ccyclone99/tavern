@@ -106,7 +106,68 @@ function testChatInputUsesEndedStateInsteadOfPendingState() {
     assert.ok(!ChatUI.suggestionChipsEl.innerHTML.includes('掷骰继续'));
 }
 
+function fakeElement(tag) {
+    return {
+        tag,
+        className: '',
+        dataset: {},
+        innerHTML: '',
+        textContent: '',
+        children: [],
+        appendChild(child) {
+            this.children.push(child);
+        },
+        querySelector(selector) {
+            const className = selector.startsWith('.') ? selector.slice(1) : selector;
+            return this.innerHTML.includes(className)
+                ? { onclick: null, disabled: false }
+                : null;
+        }
+    };
+}
+
+function testEndedMessagesHideMutationActions() {
+    const appended = [];
+    const scene = {
+        gameState: 'victorious',
+        userName: 'Tester',
+        messages: [{ role: 'assistant', content: '结局后的普通消息', type: 'talk' }]
+    };
+    const context = {
+        console,
+        document: { createElement: fakeElement },
+        State: {
+            scene,
+            characters: [],
+            isStreaming: false
+        },
+        WorldEngine: {
+            isScenePlaying: target => !!target && (!target.gameState || target.gameState === 'playing')
+        },
+        Renderer: {
+            safeUrl: () => '',
+            escapeAttr: value => String(value || ''),
+            escapeHtml: value => String(value || ''),
+            renderRP: value => String(value || ''),
+            parseMessageType: content => ({ type: 'talk', content })
+        }
+    };
+    const ChatUI = loadBrowserScript('js/ui/chat.js', context, 'ChatUI');
+    ChatUI.messagesEl = {
+        appendChild(child) {
+            appended.push(child);
+        }
+    };
+
+    ChatUI.renderMessage(scene.messages[0], 0);
+
+    assert.ok(appended[0].innerHTML.includes('msg-copy-btn'));
+    assert.ok(!appended[0].innerHTML.includes('msg-regen-btn'));
+    assert.ok(!appended[0].innerHTML.includes('msg-delete-btn'));
+}
+
 testWorldEngineClearsEndedPendingState();
 testIntentRouterIgnoresEndedPendingState();
 testChatInputUsesEndedStateInsteadOfPendingState();
+testEndedMessagesHideMutationActions();
 console.log('ended-pending-cleanup regression tests passed');
