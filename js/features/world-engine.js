@@ -5386,9 +5386,13 @@ const WorldEngine = {
         const normalizedSelection = this._normalizeFlowText(selectionText);
         if (!Array.isArray(strategy.consumedItemResourceIds)) strategy.consumedItemResourceIds = [];
         const consumedKeys = new Set(strategy.consumedItemResourceIds.map(String).filter(Boolean));
+        const selectionRefs = this._extractStrategyItemSelectionRefs(scene, selectionText, normalizedSelection);
+        if (selectionRefs.ambiguousNames.length > 0) {
+            this.addSystemMessage(scene, `【计策资源待确认：${strategy.title || '计策'}】物品名「${selectionRefs.ambiguousNames.join('、')}」不唯一，请在计策资源中写入物品 id 或更明确的资源。`, 'system');
+        }
         const resources = this.getStrategyItemResources(scene, strategy, { limit: 12 })
             .filter(resource => resource.consume === true)
-            .filter(resource => this._strategyResourceMentioned(resource, selectionText, normalizedSelection));
+            .filter(resource => this._strategyResourceSelected(resource, selectionRefs));
         const consumed = [];
 
         resources.forEach(resource => {
@@ -5446,6 +5450,45 @@ const WorldEngine = {
         if (resource.itemId) add(`strategy_item:${resource.itemId}`);
         if (resource.name) add(`strategy_item:${resource.name}`);
         return keys;
+    },
+
+    _extractStrategyItemSelectionRefs(scene, selectionText = '', normalizedSelection = '') {
+        const ids = new Set();
+        const names = new Set();
+        const ambiguousNames = [];
+        const inventory = Array.isArray(scene?.inventory) ? scene.inventory.filter(Boolean) : [];
+        const rawSelection = String(selectionText || '');
+        const normalized = normalizedSelection || this._normalizeFlowText(rawSelection);
+        inventory.forEach(item => {
+            const itemId = String(item.id || '').trim();
+            const itemName = String(item.name || '').trim();
+            const idTokens = [
+                itemId,
+                itemId ? `item:${itemId}` : '',
+                itemId ? `strategy_item:${itemId}` : ''
+            ].filter(Boolean);
+            const idMentioned = idTokens.some(token => {
+                const normalizedToken = this._normalizeFlowText(token);
+                return rawSelection.includes(token) || (normalizedToken.length >= 2 && normalized.includes(normalizedToken));
+            });
+            if (idMentioned && itemId) ids.add(itemId);
+
+            if (!itemName || idMentioned) return;
+            const normalizedName = this._normalizeFlowText(itemName);
+            const nameMentioned = rawSelection.includes(itemName) || (normalizedName.length >= 2 && normalized.includes(normalizedName));
+            if (!nameMentioned) return;
+            const sameName = inventory.filter(next => String(next?.name || '').trim() === itemName);
+            if (sameName.length === 1) names.add(itemName);
+            else if (!ambiguousNames.includes(itemName)) ambiguousNames.push(itemName);
+        });
+        return { ids, names, ambiguousNames };
+    },
+
+    _strategyResourceSelected(resource = {}, refs = {}) {
+        const id = String(resource.itemId || '').trim();
+        if (id && refs.ids?.has(id)) return true;
+        const name = String(resource.name || '').trim();
+        return !!name && refs.names?.has(name);
     },
 
     _strategyItemSelectionText(patch = {}) {
