@@ -39,18 +39,29 @@ function testIntentRouterIgnoresEndedPendingState() {
         console,
         WorldEngine: {
             isScenePlaying: scene => !!scene && (!scene.gameState || scene.gameState === 'playing'),
-            endedSceneMessage: () => '冒险已结束'
+            endedSceneMessage: () => '冒险已结束',
+            canEquipInventoryItem: item => item && item.type !== 'consumable',
+            canUseInventoryItem: item => item && item.type === 'consumable'
         }
     };
     const IntentRouter = loadBrowserScript('js/features/intent-router.js', context, 'IntentRouter');
     const scene = {
         gameState: 'victorious',
         pendingCheck: { statName: '感知', dc: 14 },
-        pendingAction: { intent: '旧行动' }
+        pendingAction: { intent: '旧行动' },
+        inventory: [
+            { id: 'sword_1', name: '短剑', type: 'weapon', quantity: 1 },
+            { id: 'kit_1', name: '应急医疗包', type: 'consumable', quantity: 1, uses: 1 }
+        ]
     };
 
     assert.strictEqual(IntentRouter.route('帮助', scene).kind, 'help');
+    assert.strictEqual(IntentRouter.route('回顾', scene).kind, 'review');
     assert.notStrictEqual(IntentRouter.route('掷骰', scene).kind, 'roll_check');
+    assert.strictEqual(IntentRouter.route('加一点敏捷', scene).kind, 'ended_scene');
+    assert.strictEqual(IntentRouter.route('装备短剑', scene).kind, 'ended_scene');
+    assert.strictEqual(IntentRouter.route('使用应急医疗包', scene).kind, 'ended_scene');
+    assert.strictEqual(IntentRouter.route('出售短剑', scene).kind, 'ended_scene');
     const help = IntentRouter.buildHelpText('帮助', scene);
     assert.ok(help.includes('冒险已结束'));
     assert.ok(!help.includes('等待你完成'), 'ended help should not describe a stale pending check');

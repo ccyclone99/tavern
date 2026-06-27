@@ -10,6 +10,10 @@ const IntentRouter = {
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'review_command' };
         const scenePlaying = this._isScenePlaying(scene);
+        if (scene && !scenePlaying) {
+            if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'ended_scene_help' };
+            return { kind: 'ended_scene', text: raw, reason: 'scene_ended' };
+        }
         const statAllocation = this.matchStatAllocation(raw);
         if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
         if (scenePlaying && scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
