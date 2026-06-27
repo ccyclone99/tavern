@@ -25,7 +25,9 @@ async function testLoadSnapshotRendersRestoredSidebarTabs() {
                 currentLocation: 'loc_a',
                 inventory: [],
                 equipmentRefs: { weapon: null, armor: null, accessory: null },
-                inputContext: { state: 'idle', prompt: '', suggestions: [], lastIntentId: '' }
+                pendingAction: { intent: '恢复后的行动预览', risk: 35 },
+                pendingCheck: { statName: '感知', key: 'wisdom', dc: 14 },
+                inputContext: { state: 'pending_check', prompt: '恢复后的输入提示', suggestions: [], lastIntentId: '' }
             }
         }]
     };
@@ -47,7 +49,10 @@ async function testLoadSnapshotRendersRestoredSidebarTabs() {
                 calls.push('saveCurrentScene');
             }
         },
-        ChatUI: { render: () => calls.push('chat') },
+        ChatUI: {
+            render: () => calls.push('chat'),
+            _syncInputMode: () => calls.push('syncInput')
+        },
         SidebarLeft: { render: () => calls.push('left') },
         SidebarRight: {
             renderDetail: () => calls.push('detail'),
@@ -59,7 +64,11 @@ async function testLoadSnapshotRendersRestoredSidebarTabs() {
             renderInventory: () => calls.push('inventory'),
             renderStrategies: () => calls.push('strategies')
         },
-        ActionBar: { renderStatsDisplay: () => calls.push('stats') },
+        ActionBar: {
+            renderStatsDisplay: () => calls.push('stats'),
+            renderPendingAction: () => calls.push('pendingAction'),
+            renderPendingCheck: () => calls.push('pendingCheck')
+        },
         applyBackground: () => calls.push('background'),
         showToast: message => calls.push(`toast:${message}`)
     };
@@ -68,11 +77,13 @@ async function testLoadSnapshotRendersRestoredSidebarTabs() {
     await SceneManager.loadSnapshot(0);
 
     assert.strictEqual(scene.normalized, true);
-    ['chat', 'left', 'detail', 'situation', 'knowledge', 'lorebook', 'map', 'quests', 'inventory', 'strategies', 'stats'].forEach(name => {
+    ['chat', 'left', 'detail', 'situation', 'knowledge', 'lorebook', 'map', 'quests', 'inventory', 'strategies', 'stats', 'pendingAction', 'pendingCheck', 'syncInput'].forEach(name => {
         assert.ok(calls.includes(name), `${name} should render after snapshot restore`);
     });
     assert.strictEqual(scene.currentLocation, 'loc_a');
     assert.strictEqual(scene.knowledge.discoveries[0].title, '恢复后的线索');
+    assert.strictEqual(scene.pendingAction.intent, '恢复后的行动预览');
+    assert.strictEqual(scene.pendingCheck.statName, '感知');
 }
 
 testLoadSnapshotRendersRestoredSidebarTabs()

@@ -233,6 +233,9 @@ const SceneManager = {
         SidebarRight.renderInventory();
         SidebarRight.renderStrategies();
         ActionBar.renderStatsDisplay();
+        if (ActionBar.renderPendingAction) ActionBar.renderPendingAction();
+        if (ActionBar.renderPendingCheck) ActionBar.renderPendingCheck();
+        if (ChatUI._syncInputMode) ChatUI._syncInputMode();
         showToast('已读档: ' + snap.name);
 
         document.querySelectorAll('.modal-overlay').forEach(m => {
