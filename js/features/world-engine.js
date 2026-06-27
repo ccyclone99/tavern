@@ -2276,6 +2276,12 @@ const WorldEngine = {
         const oldMaxHp = Number(scene.playerMaxHp || this.calculatePlayerMaxHp(scene));
         scene.playerStats[key] = before + 1;
         scene.attrPoints = Math.max(0, Number(scene.attrPoints || 0) - 1);
+        if (scene.pendingCheck && (scene.pendingCheck.key === key || scene.pendingCheck.stat === key)) {
+            const statMod = Math.floor((Number(scene.playerStats[key] || 10) - 10) / 2);
+            scene.pendingCheck.statValue = scene.playerStats[key];
+            scene.pendingCheck.statMod = statMod;
+            scene.pendingCheck.mod = this.getCheckTotals(scene, scene.pendingCheck).mod;
+        }
         if (key === 'constitution') {
             const newMaxHp = this.calculatePlayerMaxHp(scene);
             const diff = newMaxHp - oldMaxHp;
@@ -6095,7 +6101,16 @@ const WorldEngine = {
 
     getCheckTotals(scene, check) {
         const selected = this.getSelectedCheckResourceModifiers(scene, check);
-        const statMod = Number.isFinite(Number(check?.statMod)) ? Number(check.statMod) : 0;
+        const checkKey = String(check?.key || check?.stat || '').trim();
+        const liveStatValue = checkKey && scene?.playerStats
+            ? Number(scene.playerStats[checkKey])
+            : NaN;
+        const liveStatMod = Number.isFinite(liveStatValue)
+            ? Math.floor((liveStatValue - 10) / 2)
+            : NaN;
+        const statMod = Number.isFinite(liveStatMod)
+            ? liveStatMod
+            : (Number.isFinite(Number(check?.statMod)) ? Number(check.statMod) : 0);
         const storedItemModifiers = Array.isArray(check?.itemModifiers) ? check.itemModifiers : [];
         const explicitItemBonus = Number.isFinite(Number(check?.itemBonus)) ? Number(check.itemBonus) : 0;
         const usesStoredItemBonus = storedItemModifiers.length > 0 || explicitItemBonus !== 0;
@@ -6119,6 +6134,7 @@ const WorldEngine = {
             ...selected,
             itemModifiers,
             modifiers,
+            statValue: Number.isFinite(liveStatValue) ? liveStatValue : Number(check?.statValue || 0),
             statMod,
             itemBonus,
             explicitDcDelta: Number(selected.dcDelta || 0),

@@ -10,10 +10,10 @@ const IntentRouter = {
         if (this.isOoc(raw, normalized)) return { kind: 'ooc', text: this._stripOoc(raw), reason: 'ooc_command' };
         if (this.isReview(raw, normalized)) return { kind: 'review', text: raw, reason: 'review_command' };
         const scenePlaying = this._isScenePlaying(scene);
-        if (scenePlaying && scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
-        if (scenePlaying && scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const statAllocation = this.matchStatAllocation(raw);
         if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
+        if (scenePlaying && scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
+        if (scenePlaying && scene?.pendingAction) return this._routePendingAction(raw, normalized);
         const move = this.matchLocationMove(raw, scene);
         if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
         const equipment = this.matchInventoryEquipment(raw, scene);
@@ -295,11 +295,17 @@ const IntentRouter = {
         const hasExplicitPointIntent = normalized.includes('属性点') || normalized.includes('加点') || normalized.includes('分配');
         const hasPlusOne = statAliases.some(alias => normalized.includes(`${alias}+1`) || normalized.includes(`+1${alias}`));
         const hasChineseVerb = statAliases.some(alias =>
-            [`加一点${alias}`, `加1点${alias}`, `提升${alias}`, `提高${alias}`, `增加${alias}`, `升级${alias}`]
+            [
+                `加一点${alias}`, `加1点${alias}`, `给${alias}加点`, `给${alias}加一点`, `给${alias}加1点`,
+                `${alias}加一点`, `${alias}加1点`, `${alias}加点`, `提升${alias}`, `提高${alias}`, `增加${alias}`, `升级${alias}`
+            ]
                 .some(pattern => normalized.includes(pattern))
         );
         const hasPointTarget = statAliases.some(alias =>
-            normalized.includes(`点到${alias}`) || normalized.includes(`到${alias}`) && hasExplicitPointIntent
+            normalized.includes(`点到${alias}`) ||
+            normalized.includes(`分配一点到${alias}`) ||
+            normalized.includes(`分配1点到${alias}`) ||
+            (normalized.includes(`到${alias}`) && hasExplicitPointIntent)
         );
         if (!hasExplicitPointIntent && !hasPlusOne && !hasChineseVerb && !hasPointTarget) return null;
         return { stat: matched.key, label: matched.label };

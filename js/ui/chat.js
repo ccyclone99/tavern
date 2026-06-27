@@ -1114,10 +1114,22 @@ const ChatUI = {
             case 'allocate_stat_point':
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.allocateStatPoint) {
+                    const pendingActionIntent = scene.pendingAction?.intent || '';
+                    const pendingActionId = scene.pendingAction?.id || '';
+                    const pendingActionIntentMeta = scene.pendingAction?.intentMeta
+                        ? JSON.parse(JSON.stringify(scene.pendingAction.intentMeta))
+                        : null;
                     const result = WorldEngine.allocateStatPoint(scene, route.meta.stat);
                     if (!result.ok) {
                         showToast(result.message || '无法分配属性点');
                     } else {
+                        if (pendingActionIntent && scene.pendingAction && typeof ActionPlanner !== 'undefined' && ActionPlanner.create) {
+                            const nextAction = ActionPlanner.create(scene, pendingActionIntent);
+                            if (pendingActionId) nextAction.id = pendingActionId;
+                            if (pendingActionIntentMeta) nextAction.intentMeta = pendingActionIntentMeta;
+                            scene.pendingAction = nextAction;
+                            if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
+                        }
                         await State.saveCurrentSceneDebounced();
                         showToast(`${result.label || route.meta.label} +1`);
                     }

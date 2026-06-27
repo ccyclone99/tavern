@@ -201,6 +201,11 @@ const PromptGuard = {
         const hasOverride = overrideTerms.some(t => normalized.includes(this._normalize(t)));
         const hasRule = ruleTerms.some(t => normalized.includes(this._normalize(t)));
         const hasReward = rewardTerms.some(t => normalized.includes(this._normalize(t))) && hasRule && /\d+/.test(normalized);
+        const localStatAllocation = !hasOverride &&
+            typeof IntentRouter !== 'undefined' &&
+            IntentRouter.matchStatAllocation &&
+            !!IntentRouter.matchStatAllocation(raw);
+        if (localStatAllocation) return false;
         if (hasReward && !hasOverride && this._looksLikeInWorldAction(raw, normalized)) {
             return false;
         }
