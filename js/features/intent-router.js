@@ -13,7 +13,20 @@ const IntentRouter = {
         const statAllocation = this.matchStatAllocation(raw);
         if (statAllocation) return { kind: 'allocate_stat_point', text: raw, meta: statAllocation, reason: 'direct_stat_allocation' };
         if (scenePlaying && scene?.pendingCheck) return this._routePendingCheck(raw, normalized, scene);
+        const localCommand = this._routeLocalCommand(raw, normalized, scene);
+        if (localCommand) return localCommand;
         if (scenePlaying && scene?.pendingAction) return this._routePendingAction(raw, normalized);
+        if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'help_question' };
+        if (this.isStrategy(raw, normalized)) return { kind: 'strategy', text: raw, reason: 'strategy_intent' };
+
+        const action = this.classifyAction(raw, scene);
+        if (action.isRisky) {
+            return { kind: 'action_preview', text: raw, meta: action, reason: action.reason };
+        }
+        return { kind: 'talk', text: raw, meta: action, reason: 'default_talk' };
+    },
+
+    _routeLocalCommand(raw, normalized, scene) {
         const move = this.matchLocationMove(raw, scene);
         if (move) return { kind: 'move_location', text: raw, meta: move, reason: 'natural_location_move' };
         const equipment = this.matchInventoryEquipment(raw, scene);
@@ -27,14 +40,7 @@ const IntentRouter = {
         if (purchase) return { kind: 'buy_supply', text: raw, meta: purchase, reason: 'direct_purchase' };
         if (this.matchRest(raw, normalized)) return { kind: 'local_rest', text: raw, reason: 'direct_rest' };
         if (this.isInventoryCleanup(raw, normalized)) return { kind: 'inventory_cleanup', text: raw, reason: 'inventory_cleanup' };
-        if (this.isHelp(raw, normalized)) return { kind: 'help', text: raw, reason: 'help_question' };
-        if (this.isStrategy(raw, normalized)) return { kind: 'strategy', text: raw, reason: 'strategy_intent' };
-
-        const action = this.classifyAction(raw, scene);
-        if (action.isRisky) {
-            return { kind: 'action_preview', text: raw, meta: action, reason: action.reason };
-        }
-        return { kind: 'talk', text: raw, meta: action, reason: 'default_talk' };
+        return null;
     },
 
     _isScenePlaying(scene) {

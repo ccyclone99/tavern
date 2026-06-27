@@ -1041,7 +1041,10 @@ const ChatUI = {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.useInventoryItem) {
                     const result = WorldEngine.useInventoryItem(scene, route.meta.itemId || route.meta.itemName);
                     if (!result.ok) showToast(result.message || '无法使用这个物品');
-                    else await State.saveCurrentSceneDebounced();
+                    else {
+                        this._refreshPendingActionPreviewAfterLocalChange(scene);
+                        await State.saveCurrentSceneDebounced();
+                    }
                 }
                 this._syncInputMode();
                 return true;
@@ -1050,7 +1053,10 @@ const ChatUI = {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.equipInventoryItem) {
                     const result = WorldEngine.equipInventoryItem(scene, route.meta.itemId || route.meta.itemName);
                     if (!result.ok) showToast(result.message || '无法装备这个物品');
-                    else await State.saveCurrentSceneDebounced();
+                    else {
+                        this._refreshPendingActionPreviewAfterLocalChange(scene);
+                        await State.saveCurrentSceneDebounced();
+                    }
                 }
                 this._syncInputMode();
                 return true;
@@ -1059,7 +1065,10 @@ const ChatUI = {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.unequipInventoryItem) {
                     const result = WorldEngine.unequipInventoryItem(scene, route.meta.itemId || route.meta.itemName);
                     if (!result.ok) showToast(result.message || '无法卸下这个物品');
-                    else await State.saveCurrentSceneDebounced();
+                    else {
+                        this._refreshPendingActionPreviewAfterLocalChange(scene);
+                        await State.saveCurrentSceneDebounced();
+                    }
                 }
                 this._syncInputMode();
                 return true;
@@ -1067,6 +1076,7 @@ const ChatUI = {
                 this._clearInput();
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.restPlayer) {
                     await WorldEngine.restPlayer(scene);
+                    this._refreshPendingActionPreviewAfterLocalChange(scene);
                     await State.saveCurrentSceneDebounced();
                 }
                 this._syncInputMode();
@@ -1076,6 +1086,7 @@ const ChatUI = {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.buyBasicSupply) {
                     const result = WorldEngine.buyBasicSupply(scene, route.meta.supplyType);
                     if (!result.ok) showToast(result.message || '交易未完成');
+                    else this._refreshPendingActionPreviewAfterLocalChange(scene);
                     await State.saveCurrentSceneDebounced();
                 }
                 this._syncInputMode();
@@ -1105,6 +1116,7 @@ const ChatUI = {
                     if (!result.ok) {
                         showToast(result.message || '交易未完成');
                     } else {
+                        this._refreshPendingActionPreviewAfterLocalChange(scene);
                         await State.saveCurrentSceneDebounced();
                         showToast(`出售 ${result.itemName}，金币 +${result.gold}`);
                     }
@@ -1123,13 +1135,11 @@ const ChatUI = {
                     if (!result.ok) {
                         showToast(result.message || '无法分配属性点');
                     } else {
-                        if (pendingActionIntent && scene.pendingAction && typeof ActionPlanner !== 'undefined' && ActionPlanner.create) {
-                            const nextAction = ActionPlanner.create(scene, pendingActionIntent);
-                            if (pendingActionId) nextAction.id = pendingActionId;
-                            if (pendingActionIntentMeta) nextAction.intentMeta = pendingActionIntentMeta;
-                            scene.pendingAction = nextAction;
-                            if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction();
-                        }
+                        this._refreshPendingActionPreviewAfterLocalChange(scene, {
+                            intent: pendingActionIntent,
+                            id: pendingActionId,
+                            intentMeta: pendingActionIntentMeta
+                        });
                         await State.saveCurrentSceneDebounced();
                         showToast(`${result.label || route.meta.label} +1`);
                     }
@@ -1142,6 +1152,23 @@ const ChatUI = {
             default:
                 return false;
         }
+    },
+
+    _refreshPendingActionPreviewAfterLocalChange(scene, previous = {}) {
+        if (!scene || this._isSceneEnded(scene) || !scene.pendingAction) return false;
+        if (typeof ActionPlanner === 'undefined' || !ActionPlanner.create) return false;
+        const intent = previous.intent || scene.pendingAction.intent || '';
+        if (!intent) return false;
+        const pendingActionId = previous.id || scene.pendingAction.id || '';
+        const pendingActionIntentMeta = previous.intentMeta || (scene.pendingAction.intentMeta
+            ? JSON.parse(JSON.stringify(scene.pendingAction.intentMeta))
+            : null);
+        const nextAction = ActionPlanner.create(scene, intent);
+        if (pendingActionId) nextAction.id = pendingActionId;
+        if (pendingActionIntentMeta) nextAction.intentMeta = pendingActionIntentMeta;
+        scene.pendingAction = nextAction;
+        if (typeof ActionBar !== 'undefined') ActionBar.renderPendingAction?.();
+        return true;
     },
 
     _clearInput() {
