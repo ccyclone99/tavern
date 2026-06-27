@@ -77,14 +77,30 @@ const PromptGuard = {
                 clone.raw = String(this._clamp(this._firstNumber(raw, 1), 1, 200));
                 return clone;
             case 'damage':
-                clone.raw = this._replaceFirstNumber(raw, this._clamp(this._firstNumber(raw, 1), 1, Math.max(1, Number(scene?.playerMaxHp || 30))));
+                clone.raw = this._sanitizeAmountReason(raw, 1, Math.max(1, Number(scene?.playerMaxHp || 30)));
                 return clone;
             case 'heal':
-                clone.raw = this._replaceFirstNumber(raw, this._clamp(this._firstNumber(raw, 1), 1, Math.max(1, Number(scene?.playerMaxHp || 30))));
+                clone.raw = this._sanitizeAmountReason(raw, 1, Math.max(1, Number(scene?.playerMaxHp || 30)));
                 return clone;
+            case 'quest_update':
+                clone.raw = this._sanitizeQuestUpdate(raw);
+                return clone.raw ? clone : null;
+            case 'event':
+                clone.raw = this._sanitizeEvent(raw);
+                return clone.raw ? clone : null;
+            case 'move':
+                clone.raw = this._sanitizeNamedReference(raw, 80);
+                return clone.raw ? clone : null;
             case 'item_add':
                 clone.raw = this._sanitizeItemAdd(raw);
                 return clone;
+            case 'item_remove':
+                clone.raw = this._sanitizeItemRemove(raw);
+                return clone.raw ? clone : null;
+            case 'item_equip':
+            case 'item_unequip':
+                clone.raw = this._sanitizeNamedReference(raw, 60);
+                return clone.raw ? clone : null;
             case 'quest':
                 clone.raw = this._sanitizeQuest(raw);
                 return clone;
@@ -184,7 +200,7 @@ const PromptGuard = {
 
     _containsProtocolMarker(raw) {
         return /<\s*state_update\b/i.test(raw) ||
-            /\[(gold|exp|damage|heal|quest|quest_update|item_add|item_remove|item_equip|item_unequip|move|check|new_char|char_exit)\s*:/i.test(raw);
+            /\[(gold|exp|damage|heal|quest|quest_update|event|item_add|item_remove|item_equip|item_unequip|move|check|new_char|char_exit)\s*:/i.test(raw);
     },
 
     _asksForSecrets(normalized) {
@@ -251,6 +267,38 @@ const PromptGuard = {
         return [name, type, desc, objectives, reward].join('|');
     },
 
+    _sanitizeQuestUpdate(raw) {
+        const parts = raw.split('|');
+        const name = this._clip(parts[0] || '', 80);
+        if (!name) return '';
+        const objectiveNumber = this._clamp(this._firstNumber(parts[1], 1), 1, 50);
+        return [name, String(objectiveNumber)].join('|');
+    },
+
+    _sanitizeEvent(raw) {
+        return this._clip(raw, 240);
+    },
+
+    _sanitizeNamedReference(raw, max = 80) {
+        const name = this._clip(String(raw || '').split('|')[0] || '', max);
+        return name;
+    },
+
+    _sanitizeItemRemove(raw) {
+        const parts = raw.split('|');
+        const name = this._clip(parts[0] || '', 60);
+        if (!name) return '';
+        const quantity = this._clamp(this._firstNumber(parts[1], 1), 1, 20);
+        return [name, String(quantity)].join('|');
+    },
+
+    _sanitizeAmountReason(raw, min, max) {
+        const parts = raw.split('|');
+        const amount = this._clamp(this._firstNumber(parts[0], min), min, max);
+        const reason = this._clip(parts[1] || '', 120);
+        return reason ? `${amount}|${reason}` : String(amount);
+    },
+
     _sanitizeNewCharacter(raw) {
         const parts = raw.split('|');
         const name = this._clip(parts[0] || '新角色', 60);
@@ -281,10 +329,6 @@ const PromptGuard = {
         const stat = this._clip(parts[0] || '属性', 12);
         const dc = this._clamp(this._firstNumber(parts[1], 15), 5, 30);
         return `${stat}|${dc}`;
-    },
-
-    _replaceFirstNumber(raw, value) {
-        return /\d+/.test(raw) ? raw.replace(/\d+/, String(value)) : String(value);
     },
 
     _firstNumber(raw, fallback) {
