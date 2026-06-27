@@ -2172,6 +2172,64 @@ const WorldEngine = {
         return { ok: true, stat: key, label: statLabels[key], value: scene.playerStats[key], attrPoints: scene.attrPoints };
     },
 
+    resolveClockReference(scene, ref = {}, options = {}) {
+        const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
+        const result = { clock: null, ambiguous: false };
+        if (clocks.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.clockId || '').trim();
+        if (rawId) {
+            const byId = clocks.find(clock => String(clock.id || '') === rawId);
+            if (byId) {
+                result.clock = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const tag = String(ref.tag || ref.clockTag || '').trim();
+        if (tag) {
+            const matches = clocks.filter(clock => String(clock.tag || '') === tag);
+            if (matches.length === 1) {
+                result.clock = matches[0];
+                return options.withStatus ? result : result.clock;
+            }
+            if (matches.length > 1) {
+                result.ambiguous = true;
+                return options.withStatus ? result : null;
+            }
+        }
+
+        const refs = [
+            ref.name,
+            ref.clockName,
+            ref.title,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findClockByNameRef(clocks, value);
+            if (match.ambiguous || match.clock) {
+                result.clock = match.clock;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.clock;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findClockByNameRef(clocks, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { clock: null, ambiguous: false };
+        const exact = clocks.filter(clock => this._normalizeQuestText(clock.name || '') === normalized);
+        if (exact.length > 0) return { clock: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = clocks.filter(clock => {
+            const name = this._normalizeQuestText(clock.name || '');
+            return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
+        });
+        return { clock: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyClockUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return { changed: false, triggered: [] };
         this.normalizeScene(scene);
@@ -2184,10 +2242,14 @@ const WorldEngine = {
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
             const id = update.id ? String(update.id) : '';
-            const name = update.name ? String(update.name) : '';
-            let clock = scene.clocks.find(c => (id && c.id === id) || (name && c.name === name));
+            const name = update.name || update.clockName || update.title ? String(update.name || update.clockName || update.title) : '';
+            const tag = update.tag || update.clockTag ? String(update.tag || update.clockTag) : '';
+            const resolved = this.resolveClockReference(scene, update, { withStatus: true });
+            let clock = resolved.clock;
+            if (resolved.ambiguous) return;
             if (!clock) {
-                clock = this.normalizeClock(update);
+                if (!id && !name && !tag) return;
+                clock = this.normalizeClock({ ...update, name, tag });
                 if (!clock) return;
                 scene.clocks.push(clock);
                 changed = true;
@@ -2216,6 +2278,51 @@ const WorldEngine = {
         return { changed, triggered };
     },
 
+    resolveStoryArcReference(scene, ref = {}, options = {}) {
+        const arcs = Array.isArray(scene?.storyArcs) ? scene.storyArcs.filter(Boolean) : [];
+        const result = { arc: null, ambiguous: false };
+        if (arcs.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.arcId || ref.storyArcId || '').trim();
+        if (rawId) {
+            const byId = arcs.find(arc => String(arc.id || '') === rawId);
+            if (byId) {
+                result.arc = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.title,
+            ref.name,
+            ref.arcTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findStoryArcByTitleRef(arcs, value);
+            if (match.ambiguous || match.arc) {
+                result.arc = match.arc;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.arc;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findStoryArcByTitleRef(arcs, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { arc: null, ambiguous: false };
+        const exact = arcs.filter(arc => this._normalizeQuestText(arc.title || '') === normalized);
+        if (exact.length > 0) return { arc: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = arcs.filter(arc => {
+            const title = this._normalizeQuestText(arc.title || '');
+            return title.length >= 2 && normalized.length >= 2 && (title.includes(normalized) || normalized.includes(title));
+        });
+        return { arc: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyStoryArcUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -2228,8 +2335,10 @@ const WorldEngine = {
         let changed = false;
         updates.slice(0, 8).forEach(update => {
             if (!update || typeof update !== 'object') return;
-            const title = update.title ? String(update.title) : '';
-            let arc = scene.storyArcs.find(a => (update.id && a.id === update.id) || (title && a.title === title));
+            const title = update.title || update.name || update.arcTitle ? String(update.title || update.name || update.arcTitle) : '';
+            const resolved = this.resolveStoryArcReference(scene, update, { withStatus: true });
+            let arc = resolved.arc;
+            if (resolved.ambiguous) return;
             if (!arc && title) {
                 arc = { id: update.id || 'arc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), title, phase: 'intro', synopsis: '', beats: [], currentBeat: 0 };
                 scene.storyArcs.push(arc);
@@ -2286,6 +2395,54 @@ const WorldEngine = {
         return changed;
     },
 
+    resolveStoryPhaseReference(scene, ref = {}, options = {}) {
+        const phases = Array.isArray(scene?.storyPhases) ? scene.storyPhases.filter(Boolean) : [];
+        const result = { phase: null, ambiguous: false };
+        if (phases.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.phaseId || ref.storyPhaseId || '').trim();
+        if (rawId) {
+            const byId = phases.find(phase => String(phase.id || '') === rawId);
+            if (byId) {
+                result.phase = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const refs = [
+            ref.title,
+            ref.name,
+            ref.phaseTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findStoryPhaseByTitleRef(phases, value);
+            if (match.ambiguous || match.phase) {
+                result.phase = match.phase;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.phase;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findStoryPhaseByTitleRef(phases, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { phase: null, ambiguous: false };
+        const exact = phases.filter(phase => this._normalizeQuestText(phase.title || '') === normalized);
+        if (exact.length > 0) return { phase: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = phases.filter(phase => {
+            const title = this._normalizeQuestText(phase.title || '');
+            const goal = this._normalizeQuestText(phase.goal || '');
+            return [title, goal].some(value =>
+                value.length >= 2 && normalized.length >= 2 && (value.includes(normalized) || normalized.includes(value))
+            );
+        });
+        return { phase: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyStoryPhaseUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -2295,8 +2452,10 @@ const WorldEngine = {
         updates.slice(0, 8).forEach(update => {
             if (!update || typeof update !== 'object') return;
             const id = update.id ? String(update.id) : '';
-            const title = update.title ? String(update.title) : '';
-            let phase = scene.storyPhases.find(p => (id && p.id === id) || (title && p.title === title));
+            const title = update.title || update.name || update.phaseTitle ? String(update.title || update.name || update.phaseTitle) : '';
+            const resolved = this.resolveStoryPhaseReference(scene, update, { withStatus: true });
+            let phase = resolved.phase;
+            if (resolved.ambiguous) return;
             if (!phase && (id || title)) {
                 phase = this.normalizeStoryPhase({
                     id: id || undefined,
@@ -2671,6 +2830,78 @@ const WorldEngine = {
         scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
     },
 
+    resolveCounterStrategyReference(scene, ref = {}, options = {}) {
+        const counters = Array.isArray(scene?.counterStrategies) ? scene.counterStrategies.filter(Boolean) : [];
+        const result = { counter: null, ambiguous: false };
+        if (counters.length === 0) return options.withStatus ? result : null;
+
+        const rawId = String(ref.id || ref.counterId || ref.counterStrategyId || '').trim();
+        if (rawId) {
+            const byId = counters.find(counter => String(counter.id || '') === rawId);
+            if (byId) {
+                result.counter = byId;
+                return options.withStatus ? result : byId;
+            }
+        }
+
+        const actorId = String(ref.actorId || '').trim();
+        const actorName = String(ref.actorName || '').trim();
+        const target = String(ref.target || '').trim();
+        const normalizedActor = this._normalizeQuestText(actorName);
+        const normalizedTarget = this._normalizeQuestText(target);
+        const constrain = matches => matches.filter(counter => {
+            if (actorId && String(counter.actorId || '') !== actorId) return false;
+            if (normalizedActor && this._normalizeQuestText(counter.actorName || '') !== normalizedActor) return false;
+            if (normalizedTarget && this._normalizeQuestText(counter.target || '') !== normalizedTarget) return false;
+            return true;
+        });
+
+        const refs = [
+            ref.title,
+            ref.name,
+            ref.counterTitle,
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findCounterStrategyByTitleRef(counters, value, constrain);
+            if (match.ambiguous || match.counter) {
+                result.counter = match.counter;
+                result.ambiguous = match.ambiguous;
+                return options.withStatus ? result : match.counter;
+            }
+        }
+
+        if (actorId || normalizedActor || normalizedTarget) {
+            const matches = constrain(counters);
+            if (matches.length === 1) {
+                result.counter = matches[0];
+                return options.withStatus ? result : result.counter;
+            }
+            if (matches.length > 1) {
+                result.ambiguous = true;
+                return options.withStatus ? result : null;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findCounterStrategyByTitleRef(counters, ref, constrain = matches => matches) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { counter: null, ambiguous: false };
+        const exact = constrain(counters.filter(counter => this._normalizeQuestText(counter.title || '') === normalized));
+        if (exact.length > 0) return { counter: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = constrain(counters.filter(counter => {
+            const title = this._normalizeQuestText(counter.title || '');
+            const target = this._normalizeQuestText(counter.target || '');
+            return [title, target].some(value =>
+                value.length >= 2 && normalized.length >= 2 && (value.includes(normalized) || normalized.includes(value))
+            );
+        }));
+        return { counter: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     applyCounterStrategyUpdate(scene, updates) {
         if (!scene || !Array.isArray(updates)) return false;
         this.normalizeScene(scene);
@@ -2678,10 +2909,14 @@ const WorldEngine = {
         let changed = false;
         updates.slice(0, 12).forEach(update => {
             if (!update || typeof update !== 'object') return;
-            const id = update.id ? String(update.id) : '';
-            let counter = scene.counterStrategies.find(c => id && c.id === id);
+            const title = update.title || update.name || update.counterTitle ? String(update.title || update.name || update.counterTitle) : '';
+            const explicitRef = update.id || update.counterId || update.counterStrategyId || title || update.actorId || update.actorName || update.target;
+            const resolved = this.resolveCounterStrategyReference(scene, update, { withStatus: true });
+            let counter = resolved.counter;
+            if (resolved.ambiguous) return;
             if (!counter) {
-                counter = this.normalizeCounterStrategy(update);
+                if (!explicitRef) return;
+                counter = this.normalizeCounterStrategy({ ...update, title: title || update.title });
                 if (!counter) return;
                 scene.counterStrategies.push(counter);
                 changed = true;

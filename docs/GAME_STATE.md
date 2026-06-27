@@ -303,7 +303,7 @@ scene.evidenceLedger = [
 
 `clueUpdate` / `revelationUpdate` 优先用内部 id，模型不知道 id 时可按当前场景唯一线索标题、subjectName 或唯一关键结论文本定位；不唯一时跳过。名称解析只负责定位，未确认的私密真相仍不得直接进入玩家已知。
 
-`storyPhaseUpdate` 不能直接跳阶段。`WorldEngine.applyStoryPhaseUpdate()` 会在激活下一阶段或完成当前 active 阶段时检查闸门：
+`storyPhaseUpdate` 不能直接跳阶段。更新阶段时优先使用 `storyPhaseId/phaseId/id`，也可按当前场景唯一标题或目标文本匹配；重名或模糊不唯一会跳过，不能把状态写到第一个同名阶段。`WorldEngine.applyStoryPhaseUpdate()` 会在激活下一阶段或完成当前 active 阶段时检查闸门：
 
 - 当前阶段至少有一个 `sceneChallenge.status === "completed"`。
 - 或存在失败推进/替代路线：阶段挑战 `failed`，或补丁写明 `failForward` / `alternative` / `outcome: "failed"`，且带 `reason`。
@@ -630,7 +630,7 @@ DM 续写检定结果时仍会清洗白名单标记：`[quest:]`、`[item_add:]`
 }
 ```
 
-`WorldEngine.applyClockUpdate()` 支持 `value`、`delta`、`visibility`、`trigger`。跨过 `trigger.at` 时会插入公开或模糊系统事件。
+`WorldEngine.applyClockUpdate()` 支持 `value`、`delta`、`visibility`、`trigger`。更新时钟时优先使用 `clockId/id`，也可按唯一 `clockTag/tag` 或唯一名称匹配；重名或同 tag 不唯一会跳过，不能把压力写到第一个同名时钟。新增时钟至少需要提供 id、name 或 tag 之一，纯 `delta` 不会凭空创建默认时钟。跨过 `trigger.at` 时会插入公开或模糊系统事件。
 
 ### CounterStrategy
 
@@ -653,7 +653,7 @@ DM 续写检定结果时仍会清洗白名单标记：`[quest:]`、`[item_add:]`
 }
 ```
 
-`active` 和 `revealed` 都表示反制仍会带来压力；`revealed` 代表玩家已经识别来源，可以更明确地采取反制行动。相关观察、调查、试探、谈判或潜入检定达到部分成功以上时，系统会按 `counterplay/title/target/hint` 匹配并揭示、削弱或解决反制。`resolved` 反制不会再进入行动风险、右侧局势压力或失败触发。
+`active` 和 `revealed` 都表示反制仍会带来压力；`revealed` 代表玩家已经识别来源，可以更明确地采取反制行动。`counterStrategyUpdate` 更新反制时优先使用 `counterStrategyId/counterId/id`，也可按唯一标题，或唯一 `actorId/actorName/target` 组合匹配；不唯一则跳过。相关观察、调查、试探、谈判或潜入检定达到部分成功以上时，系统会按 `counterplay/title/target/hint` 匹配并揭示、削弱或解决反制。`resolved` 反制不会再进入行动风险、右侧局势压力或失败触发。
 
 ### MessageVisibility
 
@@ -709,7 +709,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 }
 ```
 
-`currentBeat` 由 `WorldEngine.applyStoryArcUpdate()` 通过 `<state_update>.storyArcUpdate` 半自动推进。推进规则：
+`currentBeat` 由 `WorldEngine.applyStoryArcUpdate()` 通过 `<state_update>.storyArcUpdate` 半自动推进。更新剧情弧时优先使用 `storyArcId/id`，也可按当前场景唯一标题匹配；重名或模糊不唯一会跳过，不能把 beat 推到第一个同名剧情弧。推进规则：
 
 - `advance`、`advanceBy` 或提高 `currentBeat` 时必须提供 `reason`。
 - 非结局阶段一次最多推进 1 个 beat；`advanceBy` 大于 1 或直接跳 `currentBeat` 会被本地规则夹到下一步。
