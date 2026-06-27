@@ -17,7 +17,11 @@ function loadRouter() {
         WorldEngine: {
             isScenePlaying: scene => !!scene && (!scene.gameState || scene.gameState === 'playing'),
             canEquipInventoryItem: item => item && item.type !== 'consumable',
-            canUseInventoryItem: item => item && item.type === 'consumable'
+            canUseInventoryItem: item => item && item.type === 'consumable',
+            resolveLocationReference(scene, ref) {
+                const loc = (scene.locations || []).find(item => item.name === ref || item.id === ref);
+                return { location: loc || null, reachable: !!loc };
+            }
         }
     };
     return loadBrowserScript('js/features/intent-router.js', context, 'IntentRouter');
@@ -27,6 +31,11 @@ function makePendingActionScene() {
     return {
         gameState: 'playing',
         pendingAction: { id: 'action_1', intent: '潜入守卫室' },
+        currentLocation: 'hall',
+        locations: [
+            { id: 'hall', name: '大厅', connections: ['alley'] },
+            { id: 'alley', name: '后巷', connections: [] }
+        ],
         inventory: [
             { id: 'sword_1', name: '短剑', type: 'weapon', quantity: 1 },
             { id: 'kit_1', name: '应急医疗包', type: 'consumable', quantity: 1, uses: 1 }
@@ -49,6 +58,7 @@ function testPendingActionAllowsLocalUseAndShopCommands() {
     assert.strictEqual(IntentRouter.route('使用应急医疗包', scene).kind, 'use_inventory_item');
     assert.strictEqual(IntentRouter.route('商店', scene).kind, 'shop_catalog');
     assert.strictEqual(IntentRouter.route('整理背包', scene).kind, 'inventory_cleanup');
+    assert.strictEqual(IntentRouter.route('去后巷', scene).kind, 'move_location');
 }
 
 function testPendingActionStillHandlesConfirmCancelAndExplain() {
@@ -72,8 +82,74 @@ function testPendingCheckStillBlocksInventoryPrepButAllowsStatAllocation() {
     assert.strictEqual(IntentRouter.route('加一点敏捷', scene).kind, 'allocate_stat_point');
 }
 
-testPendingActionAllowsLocalEquipmentCommand();
-testPendingActionAllowsLocalUseAndShopCommands();
-testPendingActionStillHandlesConfirmCancelAndExplain();
-testPendingCheckStillBlocksInventoryPrepButAllowsStatAllocation();
-console.log('pending-action-local-commands regression tests passed');
+async function testMoveRefreshesPendingActionPreview() {
+    const scene = {
+        gameState: 'playing',
+        currentLocation: 'hall',
+        pendingAction: {
+            id: 'action_1',
+            intent: '潜入守卫室',
+            intentMeta: { origin: 'test' },
+            risk: 30
+        }
+    };
+    const context = {
+        console,
+        State: {
+            scene,
+            async saveCurrentSceneDebounced() {}
+        },
+        WorldEngine: {
+            isScenePlaying: target => !!target && (!target.gameState || target.gameState === 'playing')
+        },
+        MapView: {
+            async moveTo(locId) {
+                scene.currentLocation = locId;
+                return { ok: true, loc: { id: locId, name: '后巷' } };
+            }
+        },
+        ActionPlanner: {
+            create(targetScene, intent) {
+                return {
+                    id: 'new_action',
+                    intent,
+                    risk: targetScene.currentLocation === 'alley' ? 66 : 30
+                };
+            }
+        },
+        ActionBar: {
+            rendered: 0,
+            renderPendingAction() {
+                this.rendered += 1;
+            }
+        }
+    };
+    const ChatUI = loadBrowserScript('js/ui/chat.js', context, 'ChatUI');
+    ChatUI.inputEl = { value: '去后巷', style: { height: '1px' } };
+    ChatUI._syncInputMode = () => {};
+
+    const handled = await ChatUI._handleRoutedInput({
+        kind: 'move_location',
+        meta: { locationId: 'alley' }
+    }, '去后巷', scene);
+
+    assert.strictEqual(handled, true);
+    assert.strictEqual(scene.currentLocation, 'alley');
+    assert.strictEqual(scene.pendingAction.id, 'action_1');
+    assert.strictEqual(scene.pendingAction.intent, '潜入守卫室');
+    assert.strictEqual(scene.pendingAction.intentMeta.origin, 'test');
+    assert.strictEqual(scene.pendingAction.risk, 66);
+    assert.strictEqual(context.ActionBar.rendered, 1);
+}
+
+(async () => {
+    testPendingActionAllowsLocalEquipmentCommand();
+    testPendingActionAllowsLocalUseAndShopCommands();
+    testPendingActionStillHandlesConfirmCancelAndExplain();
+    testPendingCheckStillBlocksInventoryPrepButAllowsStatAllocation();
+    await testMoveRefreshesPendingActionPreview();
+    console.log('pending-action-local-commands regression tests passed');
+})().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

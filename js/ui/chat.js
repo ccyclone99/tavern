@@ -1032,7 +1032,8 @@ const ChatUI = {
                     return true;
                 }
                 if (typeof MapView !== 'undefined' && MapView.moveTo) {
-                    await MapView.moveTo(route.meta.locationId);
+                    const result = await MapView.moveTo(route.meta.locationId);
+                    if (result?.ok) this._refreshPendingActionPreviewAfterLocalChange(scene);
                 }
                 this._syncInputMode();
                 return true;

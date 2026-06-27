@@ -86,18 +86,18 @@ const MapView = {
     _moving: false,
 
     async moveTo(locId) {
-        if (this._moving || State.isStreaming) return;
+        if (this._moving || State.isStreaming) return { ok: false, blocked: true, message: '当前不能移动。' };
         const scene = State.scene;
-        if (!scene) return;
+        if (!scene) return { ok: false, message: '没有可用场景。' };
         if (!this._canMutateGameplay(scene)) {
             const message = this._endedSceneMessage(scene);
             if (typeof showToast !== 'undefined') showToast(message);
-            return;
+            return { ok: false, blocked: true, message };
         }
         if (typeof WorldEngine === 'undefined' || !WorldEngine.moveToLocation) {
             console.warn('[MapView] WorldEngine.moveToLocation 不可用，跳过移动');
             if (typeof showToast !== 'undefined') showToast('移动系统不可用。');
-            return;
+            return { ok: false, message: '移动系统不可用。' };
         }
 
         this._moving = true;
@@ -105,7 +105,7 @@ const MapView = {
             const result = WorldEngine.moveToLocation(scene, locId);
             if (!result.ok) {
                 if (!result.duplicate) showToast(result.message || '无法移动到该地点。');
-                return;
+                return result;
             }
             const loc = result.loc;
             await State.saveCurrentScene();
@@ -126,6 +126,7 @@ const MapView = {
             if (TutorialWorld.isCurrentScene()) {
                 Tutorial.afterLocationMove().catch(e => console.warn('[Tutorial] afterLocationMove 失败:', e));
             }
+            return result;
         } finally {
             this._moving = false;
         }
