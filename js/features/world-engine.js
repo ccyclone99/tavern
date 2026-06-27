@@ -495,8 +495,9 @@ const WorldEngine = {
         }
         const name = this._normalizeQuestText(quest.name || '');
         if (name) {
-            const byName = scene.quests.find(item => item && this._normalizeQuestText(item.name || '') === name);
-            if (byName) return byName;
+            const byName = scene.quests.filter(item => item && this._normalizeQuestText(item.name || '') === name);
+            if (byName.length === 1) return byName[0];
+            if (byName.length > 1) return null;
         }
         return quest;
     },
