@@ -347,7 +347,7 @@ scene.pendingAction = {
 
 - 已装备物品和非消耗任务物品的 `check_bonus` 会自动进入 `itemModifiers` 和 `mod`。
 - 带 `consume: true` 的消耗品会进入 `availableItemModifiers`，玩家可在检定卡点选或输入“投入资源名”，掷骰时才扣除 `uses` 或数量。
-- 可点选消耗品必须使用基于物品 `id` 或名称的稳定资源 ID；背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
+- 可点选消耗品必须使用基于物品 `id` 的稳定资源 ID；旧存档缺失或重复物品 id 时，`WorldEngine.normalizeScene()` 必须先补齐唯一 id。名称只能作为旧选择兼容，背包顺序变化、重新渲染或刷新不能让玩家已选资源错位到其它物品。
 - `companionResources` 只有满足 `unlock` 后才会进入 prompt、右侧局势和 `availableCompanionModifiers`；玩家可在检定卡点选或输入“请某人帮忙/投入协助名”，掷骰后扣除协助次数，并结算检定修正、证据可信度、后果解除、时钟变化、`cost.trust`、`cost.time` 与可能代价。同伴协助应绑定真实 `characterId`；生成、导入或旧档兼容回填时只允许按当前场景唯一角色名修复，重名、模糊或资源名同时提到多个角色时不能猜测绑定。同一次检定结算中，同一个 `resourceId` 即使因旧存档或 UI 异常重复出现在 modifiers，也只能扣除一次 uses 和代价。`unlock.revelationIds` 默认要求对应结论已 `confirmed`，不能因 `suspected` 过早公开同伴底牌；需要怀疑阶段解锁时必须显式声明。
 - 检定结算期间，如果消耗品腾出背包格子，已完成任务的待领物品奖励必须延后到当前检定的挑战、反制和后果结算结束后再重试；如果同伴协助、时钟或失败条件在中途把 `gameState` 变为 `defeated/victorious`，后续挑战奖励、反制解除、后果解除和回合推进必须停止。`consumeCheckItems()` 和 `consumeCompanionResources()` 在非 `playing` 场景必须 no-op，防止未来 UI 或外部调用在结局后继续扣资源；同一轮检定内，若某个同伴协助的代价或效果触发结局，后续同伴协助和该协助尚未写入的风险后果也必须停止。
 
@@ -449,7 +449,7 @@ UI 要求：
 - 检定卡展示自动生效物品、可点选/可输入投入的消耗品和同伴协助。
 - 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，也支持主输入框“投入资源名/不用资源名”，选中后随掷骰消耗。
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
-- 装备槽展示名保存在 `scene.equipment`，真实物品 id 保存在 `scene.equipmentRefs`；规则层必须 id 优先、名称兼容，旧存档缺失引用时由当前背包和 `equipped` 标记修复，避免同名物品误卸、误消耗或错误显示。
+- 运行态背包物品必须有唯一 `id`；规则层会为旧存档缺失或重复的物品 id 补齐稳定运行态 id。装备槽展示名保存在 `scene.equipment`，真实物品 id 保存在 `scene.equipmentRefs`；规则层必须 id 优先、名称兼容，旧存档缺失引用时由当前背包和 `equipped` 标记修复，避免同名物品误卸、误消耗或错误显示。
 - 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、唯一 `clockTag`、唯一 `clockName` 或物品标签匹配唯一公开时钟，匹配不到或不唯一时不消耗物品。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。
 - 直接使用型效果必须来自 `type:"consumable"`、带 `uses` 的物品，或显式 `effect.consume:true`；非消耗装备/杂物不能反复点击刷金币、经验、治疗或时钟效果。

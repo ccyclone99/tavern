@@ -31,6 +31,7 @@ const WorldEngine = {
             .map(item => this.normalizeItem(item))
             .filter(item => item && typeof item === 'object')
             .slice(0, 200);
+        this.ensureInventoryItemIds(scene);
         this.normalizeEquipmentState(scene);
         scene.gameplayProfile = this.normalizeGameplayProfile(scene.gameplayProfile);
         scene.storyTexture = this.normalizeStoryTexture(scene.storyTexture);
@@ -808,6 +809,7 @@ const WorldEngine = {
 
     normalizeItem(item = {}) {
         if (!item || typeof item !== 'object') return item;
+        if (item.id !== undefined) item.id = String(item.id || '').trim().slice(0, 100);
         item.tags = Array.isArray(item.tags) ? item.tags.map(String).slice(0, 12) : [];
         item.effects = Array.isArray(item.effects) ? item.effects.map(effect => this.normalizeItemEffect(effect)).filter(Boolean).slice(0, 10) : [];
         if (item.uses !== undefined) {
@@ -815,6 +817,41 @@ const WorldEngine = {
             item.uses = Number.isFinite(uses) ? Math.max(0, Math.floor(uses)) : undefined;
         }
         return item;
+    },
+
+    ensureInventoryItemIds(scene) {
+        if (!scene || !Array.isArray(scene.inventory)) return scene;
+        const seen = new Set();
+        scene.inventory.forEach((item, index) => {
+            if (!item || typeof item !== 'object') return;
+            let id = String(item.id || '').trim().slice(0, 100);
+            if (!id || seen.has(id)) id = this._createInventoryItemId(item, index, seen);
+            item.id = id;
+            seen.add(id);
+        });
+        return scene;
+    },
+
+    _createInventoryItemId(item = {}, index = 0, seen = new Set()) {
+        const seed = [
+            item.name,
+            item.type,
+            item.description,
+            index,
+            item.createdAt || ''
+        ].map(value => String(value || '')).join('|');
+        let hash = 0;
+        for (let i = 0; i < seed.length; i += 1) {
+            hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+        }
+        const base = `item_${Math.abs(hash).toString(36)}_${Math.max(0, Number(index) || 0)}`;
+        let id = base;
+        let suffix = 2;
+        while (seen.has(id)) {
+            id = `${base}_${suffix}`;
+            suffix += 1;
+        }
+        return id.slice(0, 100);
     },
 
     normalizeEquipmentState(scene) {
@@ -3634,6 +3671,10 @@ const WorldEngine = {
             return true;
         }
         if (scene.inventory.length >= 200) return false;
+        if (!normalized.id) {
+            const seenIds = new Set(scene.inventory.map(existingItem => String(existingItem?.id || '')).filter(Boolean));
+            normalized.id = this._createInventoryItemId(normalized, scene.inventory.length, seenIds);
+        }
         scene.inventory.push(normalized);
         return true;
     },

@@ -350,6 +350,8 @@ scene.evidenceLedger = [
 
 ### Item
 
+运行态背包物品必须有唯一 `id`。`WorldEngine.normalizeScene()` 会为旧存档中缺失或重复的物品 id 生成稳定运行态 id；`grantInventoryItem()` 新增无 id 物品时也会补 id。装备槽、检定投入、计策资源、出售、使用和移除都应优先使用该 id，名称只作为兼容引用。
+
 ```js
 {
   id: "item_...",
