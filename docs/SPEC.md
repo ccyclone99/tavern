@@ -616,6 +616,7 @@ UI 要求：
 - `[quest:]` 标记必须先经过 `PromptGuard._sanitizeQuest()`，再由 `WorldEngine.addQuest()` 新增；单次最多保留 8 个目标，任务名、描述和奖励会截断，重复活跃任务不会新增。
 - `[new_char:]` 和 `[char_exit:]` 标记必须先经过 `PromptGuard` 清洗，再由 `WorldEngine.addExistingCharacterToScene()` / `removeCharacterFromScene()` 修改在场角色；不能直接 push/filter `scene.characters`，结局后不能改变在场角色。`[char_exit:]` 按角色名退场时必须由 `WorldEngine.resolveCharacterReference()` 在当前场景内唯一解析，重名或模糊不唯一时跳过，不能默认移除第一个同名角色。`[new_char:]` 的完整格式为 `角色名|emoji|公开外貌|公开性格|开场白|信条|价值排序|底线|动机|恐惧|秘密|筹码`，后 7 项可选；私密项只能进入角色扮演和 `profile.hiddenFacts`，不能直接作为玩家已知信息展示。
 - 角色编辑器、PNG 导入和角色删除如果会修改当前场景的在场角色列表，也必须通过 `State.addCharacterToScene()` / `removeCharacterFromScene()` 进入同一规则层；不能在结局后通过管理入口改变回顾场景。新增或导入角色若被规则层拒绝加入当前场景，必须回滚刚创建的全局角色并恢复原选中角色，不能留下“已创建但不在场”的悬空状态。
+- 当前场景已结束时，若角色仍被 `scene.characters`、历史消息、`transcriptLog` 或 `runRecord.transcript` 引用，删除全局角色卡必须被拦截，不能破坏通关/失败回顾中的角色署名和头像。
 
 ## 5. Prompt 规格
 

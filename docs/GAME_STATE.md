@@ -799,6 +799,7 @@ scene.discoveries.characters["char_xxx"]["secret_0_abcd"] = {
 - 普通玩家详情页不显示完整角色卡或编辑入口；只有 `State.canShowDebugSpoilers()` 为 true 时才显示作者/调试剧透入口。该开关支持 `?debug=1`、`?spoilers=1`、`localStorage.tavern_show_character_spoilers=1`、`localStorage.tavern_debug=1` 或运行时 settings 标记。
 - 动态新角色由 `[new_char:...]` 创建，标记先经 `PromptGuard` 裁剪字段，再由 `WorldEngine.addExistingCharacterToScene()` 加入当前场景；结局后、重复姓名或场景角色过多时不会加入。`[char_exit:]` 由 `WorldEngine.removeCharacterFromScene()` 结算并写入事件日志；按角色名退场时必须先经 `WorldEngine.resolveCharacterReference()` 在当前场景内唯一解析，重名或模糊不唯一会跳过并提示，不能默认移除第一个同名角色。动态角色支持扩展字段 `信条/价值排序/底线/动机/恐惧/秘密/筹码`，缺失时由 `NewCharacterHandler` 补入保守默认值，并同步生成 `profile.hiddenFacts` 解锁槽；这些私密设定不会绕过玩家知识解锁直接公开。
 - 手动创建、导入或删除角色卡如果会影响当前场景的 `scene.characters`，必须通过 `State.addCharacterToScene()` / `State.removeCharacterFromScene()`，再由 `WorldEngine` 执行结局锁、去重、数量限制和事件留痕；已结束冒险中的在场角色不能被增删。
+- 已结束冒险中，如果当前场景的在场角色、历史消息、摘要前 transcript 或 `runRecord.transcript` 仍引用某个角色 id，全局角色删除必须被拦截，避免通关/失败回顾退化成无名“AI”发言。
 - PNG 角色卡内嵌世界书只有在角色成功加入当前场景后才会合并到 `scene.lorebookEntries`；如果结局锁或去重规则阻止入场，导入仍可保存为全局角色卡，但不会修改当前回顾场景。
 
 ## 五、消息类型

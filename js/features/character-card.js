@@ -51,6 +51,12 @@ const CharacterCard = {
 
     async delete(id) {
         const scene = State.scene;
+        if (this._isEndedSceneReference(scene, id)) {
+            if (typeof showToast !== 'undefined') {
+                showToast('当前冒险已经结束，此角色仍出现在回顾记录中，不能删除。');
+            }
+            return;
+        }
         if (scene && Array.isArray(scene.characters) && scene.characters.includes(id)) {
             const result = State.removeCharacterFromScene(id);
             if (result && !result.ok) {
@@ -66,5 +72,19 @@ const CharacterCard = {
         }
         State.emit('charactersChanged', State.characters);
         if (deletedCurrent) State.emit('characterSelected', null);
+    },
+
+    _isEndedSceneReference(scene, id) {
+        if (!scene || !id) return false;
+        const ended = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? !WorldEngine.isScenePlaying(scene)
+            : !!scene.gameState && scene.gameState !== 'playing';
+        if (!ended) return false;
+        const target = String(id);
+        const active = Array.isArray(scene.characters) && scene.characters.map(String).includes(target);
+        const inMessages = Array.isArray(scene.messages) && scene.messages.some(msg => String(msg?.characterId || '') === target);
+        const inTranscript = Array.isArray(scene.transcriptLog) && scene.transcriptLog.some(entry => String(entry?.characterId || '') === target);
+        const inRunRecord = Array.isArray(scene.runRecord?.transcript) && scene.runRecord.transcript.some(entry => String(entry?.characterId || '') === target);
+        return active || inMessages || inTranscript || inRunRecord;
     }
 };

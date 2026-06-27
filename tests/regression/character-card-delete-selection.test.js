@@ -76,9 +76,57 @@ async function testDeletingSelectedCharacterClearsSelection() {
     assert.ok(events.some(event => event.name === 'characterSelected' && event.payload === null));
 }
 
+async function testEndedSceneBlocksDeletingReferencedCharacter() {
+    const events = [];
+    const deleted = [];
+    let notice = '';
+    const context = {
+        console,
+        WorldEngine: {
+            isScenePlaying: scene => !!scene && (!scene.gameState || scene.gameState === 'playing')
+        },
+        State: {
+            currentCharacterId: 'char_keep',
+            scene: {
+                gameState: 'victorious',
+                characters: [],
+                messages: [{ role: 'assistant', characterId: 'char_delete', content: '旧发言' }]
+            },
+            characters: [
+                { id: 'char_keep', name: '保留角色' },
+                { id: 'char_delete', name: '旧角色' }
+            ],
+            removeCharacterFromScene() {
+                throw new Error('ended referenced delete should not mutate scene characters');
+            },
+            emit(name, payload) {
+                events.push({ name, payload });
+            }
+        },
+        Storage: {
+            async deleteCharacter(id) {
+                deleted.push(id);
+            }
+        },
+        showToast(message) {
+            notice = message;
+        }
+    };
+    const CharacterCard = loadCharacterCard(context);
+
+    await CharacterCard.delete('char_delete');
+
+    assert.strictEqual(JSON.stringify(deleted), JSON.stringify([]));
+    assert.strictEqual(context.State.characters.length, 2);
+    assert.strictEqual(context.State.currentCharacterId, 'char_keep');
+    assert.ok(notice.includes('回顾记录'));
+    assert.strictEqual(events.length, 0);
+}
+
 (async () => {
     await testDeletingNonSelectedCharacterKeepsCurrentSelection();
     await testDeletingSelectedCharacterClearsSelection();
+    await testEndedSceneBlocksDeletingReferencedCharacter();
     console.log('character-card-delete-selection regression tests passed');
 })().catch(err => {
     console.error(err);
