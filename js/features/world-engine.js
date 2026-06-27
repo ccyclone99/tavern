@@ -2619,7 +2619,9 @@ const WorldEngine = {
             itemTotals.set(ref, (itemTotals.get(ref) || 0) + Number(itemCost.quantity || 1));
         });
         for (const [itemRef, quantity] of itemTotals.entries()) {
-            const item = this._findInventoryItem(scene, itemRef);
+            const resolved = this.resolveInventoryItemReference(scene, itemRef, { withStatus: true });
+            if (resolved.ambiguous) return { ok: false, message: `绕过阶段需要物品「${itemRef}」，但背包中有多个同名物品，请使用物品 id 或更明确的代价。` };
+            const item = resolved.item;
             if (!item) return { ok: false, message: `绕过阶段需要物品「${itemRef}」，但背包中没有。` };
             const available = item.uses !== undefined
                 ? Math.max(0, Number(item.uses || 0))
@@ -3571,14 +3573,38 @@ const WorldEngine = {
         return item.effects.filter(effect => directTypes.has(effect.type));
     },
 
-    _findInventoryItem(scene, itemRef) {
-        if (!scene || !Array.isArray(scene.inventory)) return null;
+    resolveInventoryItemReference(scene, itemRef, options = {}) {
+        const result = { item: null, index: -1, ambiguous: false };
+        const inventory = Array.isArray(scene?.inventory) ? scene.inventory : [];
         const ref = String(itemRef || '').trim();
-        if (!ref) return null;
-        const item = scene.inventory.find(i => i && i.id === ref) ||
-            scene.inventory.find(i => i && i.name === ref);
-        if (item) this.normalizeItem(item);
-        return item || null;
+        if (!ref || inventory.length === 0) return options.withStatus ? result : null;
+
+        const idIndex = inventory.findIndex(item => item && String(item.id || '') === ref);
+        if (idIndex >= 0) {
+            this.normalizeItem(inventory[idIndex]);
+            result.item = inventory[idIndex];
+            result.index = idIndex;
+            return options.withStatus ? result : result.item;
+        }
+
+        const nameMatches = inventory
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => item && String(item.name || '') === ref);
+        if (nameMatches.length === 1) {
+            this.normalizeItem(nameMatches[0].item);
+            result.item = nameMatches[0].item;
+            result.index = nameMatches[0].index;
+            return options.withStatus ? result : result.item;
+        }
+        if (nameMatches.length > 1) {
+            result.ambiguous = true;
+            return options.withStatus ? result : null;
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findInventoryItem(scene, itemRef) {
+        return this.resolveInventoryItemReference(scene, itemRef);
     },
 
     removeInventoryItem(scene, itemRef, quantity = 1, options = {}) {
@@ -3587,11 +3613,12 @@ const WorldEngine = {
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const ref = String(itemRef || '').trim();
         if (!ref) return { ok: false, message: '没有指定物品。' };
-        let idx = scene.inventory.findIndex(item => item && item.id === ref);
-        if (idx < 0) idx = scene.inventory.findIndex(item => item && item.name === ref);
-        if (idx < 0) return { ok: false, message: '没有找到这个物品。' };
+        const resolved = this.resolveInventoryItemReference(scene, ref, { withStatus: true });
+        if (resolved.ambiguous) return { ok: false, ambiguous: true, message: `有多个名为「${ref}」的物品，请从背包按钮操作或提供更明确的物品。` };
+        if (!resolved.item) return { ok: false, message: '没有找到这个物品。' };
 
-        const item = scene.inventory[idx];
+        const item = resolved.item;
+        const idx = resolved.index;
         this.normalizeItem(item);
         const itemName = item.name || ref;
         const requested = this._clamp(Number(quantity || 1), 1, 20);
@@ -3639,7 +3666,9 @@ const WorldEngine = {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
-        const item = this._findInventoryItem(scene, itemRef);
+        const resolved = this.resolveInventoryItemReference(scene, itemRef, { withStatus: true });
+        if (resolved.ambiguous) return { ok: false, ambiguous: true, message: `有多个名为「${String(itemRef || '').trim()}」的物品，请从背包按钮出售或提供更明确的物品。` };
+        const item = resolved.item;
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (item.type === 'quest') return { ok: false, message: `${item.name} 是关键物品，不能直接出售。` };
         if (item.equipped) return { ok: false, message: `${item.name} 已装备，请先卸下再出售。` };
@@ -5377,7 +5406,9 @@ const WorldEngine = {
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
         if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
-        const item = this._findInventoryItem(scene, itemRef);
+        const resolved = this.resolveInventoryItemReference(scene, itemRef, { withStatus: true });
+        if (resolved.ambiguous) return { ok: false, ambiguous: true, message: `有多个名为「${String(itemRef || '').trim()}」的物品，请从背包按钮装备或提供更明确的物品。` };
+        const item = resolved.item;
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (!this.canEquipInventoryItem(item)) return { ok: false, message: `${item.name} 不能作为装备使用。` };
 
@@ -5404,7 +5435,9 @@ const WorldEngine = {
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
         if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
-        const item = this._findInventoryItem(scene, itemRef);
+        const resolved = this.resolveInventoryItemReference(scene, itemRef, { withStatus: true });
+        if (resolved.ambiguous) return { ok: false, ambiguous: true, message: `有多个名为「${String(itemRef || '').trim()}」的物品，请从背包按钮卸下或提供更明确的物品。` };
+        const item = resolved.item;
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (!item.equipped) return { ok: false, message: `${item.name} 当前没有装备。` };
 
@@ -5428,7 +5461,9 @@ const WorldEngine = {
         if (!scene || !Array.isArray(scene.inventory)) return { ok: false, message: '没有可用背包。' };
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
-        const item = this._findInventoryItem(scene, itemRef);
+        const resolved = this.resolveInventoryItemReference(scene, itemRef, { withStatus: true });
+        if (resolved.ambiguous) return { ok: false, ambiguous: true, message: `有多个名为「${String(itemRef || '').trim()}」的物品，请从背包按钮使用或提供更明确的物品。` };
+        const item = resolved.item;
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (item.uses !== undefined && Number(item.uses || 0) <= 0) return { ok: false, message: `${item.name} 已经没有可用次数。` };
         if (Number(item.quantity || 1) <= 0) return { ok: false, message: `${item.name} 已经用完。` };

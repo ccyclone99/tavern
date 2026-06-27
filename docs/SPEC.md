@@ -464,7 +464,7 @@ UI 要求：
 - 计策处于计划阶段时列出可用物品不会扣除；当 `<state_update>.strategies.update` 明确把可消耗物品名或物品 ID 写入 `resources` 或 `usedIntel`，且计策推进到 `action/complication/resolution` 或 `executing/resolved/failed` 时，系统会消耗该物品一次并用 `consumedItemResourceIds` 防重复。若物品已在筹备阶段登记到计策的 `resources/usedIntel`，后续补丁首次把计策推进到执行/结算阶段时，即使没有重复写物品名，也必须扣除已登记的可消耗物品。去重键必须兼容物品 `id`、物品名和 `strategy_item:xxx` UI 资源 ID；标签、效果标签和风险说明只用于展示/匹配可用性，不能单独触发扣除，避免一个泛化标签误扣多个物品。
 - 医疗、治疗、补给类消耗品即使没有显式 `heal`，也会有保守的本地恢复兜底。
 - 任务奖励和 `[item_add:]` 只给出物品名时，系统会对治疗药水、补给、零件包、武器、防具、地图、钥匙、证据等常见名称做轻量规则推断，生成可使用或可加成的物品。
-- `[item_add:]` 和 `[item_remove:]` 必须分别走 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()`，统一堆叠、事件日志、装备槽/`equipmentRefs` 清理和侧栏刷新。
+- `[item_add:]` 和 `[item_remove:]` 必须分别走 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()`，统一堆叠、事件日志、装备槽/`equipmentRefs` 清理和侧栏刷新。移除、出售、装备、卸下、使用和阶段代价消耗物品时应优先使用物品 id；只按名称操作时名称必须唯一，不唯一则跳过并提示，不能默认命中第一个同名物品。
 - 直接使用导致物品耗尽并从背包移除时，也必须按物品 id 清理对应装备槽，避免装备面板引用已不存在的物品。
 - 计策面板展示可用于当前计策的物品。
 
