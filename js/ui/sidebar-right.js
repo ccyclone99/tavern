@@ -821,8 +821,13 @@ const SidebarRight = {
     renderLorebook() {
         const scene = State.scene;
         const entries = scene ? scene.lorebookEntries : [];
+        const canMutateLorebook = typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying
+            ? WorldEngine.isScenePlaying(scene)
+            : !!scene && (!scene.gameState || scene.gameState === 'playing');
         if (entries.length === 0) {
-            this.loreListEl.innerHTML = '<p class="placeholder">暂无世界书条目<br>点击 + 添加</p>';
+            this.loreListEl.innerHTML = canMutateLorebook
+                ? '<p class="placeholder">暂无世界书条目<br>点击 + 添加</p>'
+                : '<p class="placeholder">暂无世界书条目</p>';
             return;
         }
         this.loreListEl.innerHTML = '';
@@ -833,12 +838,13 @@ const SidebarRight = {
             div.innerHTML = `
                 <div class="lore-entry-header">
                     <div class="lore-entry-keys">${keysHtml}</div>
-                    <button class="icon-btn lore-delete-btn" data-lore-idx="${idx}" style="font-size:12px;">🗑</button>
+                    ${canMutateLorebook ? `<button class="icon-btn lore-delete-btn" data-lore-idx="${idx}" style="font-size:12px;">🗑</button>` : ''}
                 </div>
                 <div class="lore-entry-content">${Renderer.escapeHtml(entry.content)}</div>
             `;
-            div.querySelector('.lore-delete-btn').onclick = (e) => { e.stopPropagation(); Lorebook.deleteEntry(idx); };
-            div.onclick = () => Lorebook.openEditor(idx);
+            const deleteBtn = div.querySelector('.lore-delete-btn');
+            if (deleteBtn) deleteBtn.onclick = (e) => { e.stopPropagation(); Lorebook.deleteEntry(idx); };
+            if (canMutateLorebook) div.onclick = () => Lorebook.openEditor(idx);
             this.loreListEl.appendChild(div);
         });
     },

@@ -10,6 +10,10 @@ const Lorebook = {
     openEditor(entryIndex = null) {
         const scene = State.scene;
         if (!scene) { showToast('请先创建一个场景'); return; }
+        if (!this._canMutateScene(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
 
         const entry = entryIndex !== null ? scene.lorebookEntries[entryIndex] : null;
         const isEdit = entryIndex !== null;
@@ -112,6 +116,10 @@ const Lorebook = {
     async generateBatch() {
         const scene = State.scene;
         if (!scene) { showToast('请先创建一个场景'); return; }
+        if (!this._canMutateScene(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
 
         const settings = State.settings;
         if (!settings.apiKey) { showToast('请先设置 API Key'); return; }
@@ -155,6 +163,11 @@ const Lorebook = {
             confirmBtn.onclick = async () => {
                 const prompt = input.value.trim();
                 if (!prompt) { showToast('请输入世界设定描述'); return; }
+                if (!this._canMutateScene(scene)) {
+                    this._showEndedSceneToast(scene);
+                    cleanup();
+                    return;
+                }
                 modal.remove();
 
                 showToast('正在批量生成世界书条目...');
@@ -225,6 +238,10 @@ const Lorebook = {
     async saveEntry(index) {
         const scene = State.scene;
         if (!scene) return;
+        if (!this._canMutateScene(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
 
         const keys = document.getElementById('loreKeys').value.split(',').map(s => s.trim()).filter(Boolean);
         if (keys.length === 0) { showToast('请填写关键词'); return; }
@@ -257,8 +274,27 @@ const Lorebook = {
     async deleteEntry(index) {
         const scene = State.scene;
         if (!scene) return;
+        if (!this._canMutateScene(scene)) {
+            this._showEndedSceneToast(scene);
+            return;
+        }
         scene.lorebookEntries.splice(index, 1);
         await State.saveCurrentScene();
         SidebarRight.renderLorebook();
+    },
+
+    _canMutateScene(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return WorldEngine.isScenePlaying(scene);
+        }
+        return !scene.gameState || scene.gameState === 'playing';
+    },
+
+    _showEndedSceneToast(scene) {
+        const message = typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage
+            ? WorldEngine.endedSceneMessage(scene)
+            : '当前冒险已经结束，不能再修改世界书。';
+        if (typeof showToast !== 'undefined') showToast(message);
     }
 };
