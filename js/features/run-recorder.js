@@ -3,7 +3,7 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 10,
+    version: 11,
 
     ensure(scene) {
         if (!scene) return scene;
@@ -347,7 +347,9 @@ const RunRecorder = {
     },
 
     _buildTranscript(scene) {
-        const archived = Array.isArray(scene?.transcriptLog) ? scene.transcriptLog : [];
+        const archived = (Array.isArray(scene?.transcriptLog) ? scene.transcriptLog : [])
+            .map(entry => this._cleanTranscriptEntry(entry))
+            .filter(Boolean);
         const archivedKeys = new Set(archived.map(entry => this._transcriptKey(entry)));
         const liveOffset = archived.length;
         const live = (scene.messages || [])
@@ -369,6 +371,13 @@ const RunRecorder = {
             }]
             : [];
         return [...summaryFallback, ...archived, ...live];
+    },
+
+    _cleanTranscriptEntry(entry) {
+        if (!entry) return null;
+        const text = this._clean(entry.text || '');
+        if (!text) return null;
+        return { ...entry, text };
     },
 
     _messageToTranscriptEntry(scene, message, index = 0) {
@@ -470,7 +479,7 @@ const RunRecorder = {
     _clean(text) {
         return String(text || '')
             .replace(/<state_update>[\s\S]*?<\/state_update>/g, '')
-            .replace(/\[(check|damage|heal|gold|exp|quest|quest_update|event|move|item_add):[^\]]+\]/g, '')
+            .replace(/\[(?:new_char|char_exit|quest|quest_update|event|move|check|item_add|item_remove|item_equip|item_unequip|damage|heal|gold|exp):[^\]]+\]/gi, '')
             .replace(/\*/g, '')
             .replace(/\s+/g, ' ')
             .trim();
