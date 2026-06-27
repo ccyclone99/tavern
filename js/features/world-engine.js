@@ -201,24 +201,24 @@ const WorldEngine = {
     _buildFallbackFlowGuide(scene) {
         const phase = this.getActiveStoryPhase(scene) || scene.storyPhases?.[0] || null;
         const challenge = this.getActiveChallenge(scene) || scene.sceneChallenges?.[0] || null;
-        const objective = phase?.goal || this._getMainQuest(scene)?.objectives?.[0]?.text || scene.conflictSeeds?.[0] || '推进当前目标';
+        const objective = phase?.goal || this._getMainQuest(scene)?.objectives?.[0]?.text || scene.conflictSeeds?.[0] || '当前局势';
         const openingMoves = [
             ...(phase?.recommendedActions || []),
-            ...(challenge?.approaches || []).map(approach => approach.label ? `${approach.label}：${objective}` : '')
+            ...(challenge?.approaches || []).map(approach => approach.label || '')
         ].map(String).filter(Boolean);
         const firstChar = this._sceneCharacters(scene)[0];
         const loc = (scene.locations || []).find(l => l.id === scene.currentLocation);
         return this.normalizeFlowGuide({
             openingMoves: [
                 ...openingMoves,
-                loc?.name ? `观察${loc.name}里和目标有关的异常` : '观察当前地点有没有异常',
-                firstChar?.name ? `询问${firstChar.name}当前最紧急的问题` : '询问在场的人当前最紧急的问题'
+                loc?.name ? `观察${loc.name}里还有哪些可利用的细节` : '观察当前地点还有哪些可利用的细节',
+                firstChar?.name ? `询问${firstChar.name}对当前局势的看法` : '询问在场的人对当前局势的看法'
             ],
             sessionGoals: [objective, ...(scene.storyPhases || []).map(p => p.goal).filter(Boolean)].slice(0, 4),
             stalledPrompts: [
-                '观察当前地点有没有异常',
-                firstChar?.name ? `询问${firstChar.name}下一步该做什么` : '询问在场的人下一步该做什么',
-                '制定一个计划，先收集情报再行动'
+                '观察当前地点有没有被忽略的细节',
+                firstChar?.name ? `和${firstChar.name}聊聊他真正想要什么` : '和在场的人聊聊他们真正想要什么',
+                '提出一个自己的计划，哪怕暂时不推进主线'
             ],
             failForward: [
                 '失败时推进局势压力，但给出一个更清晰的新线索。',
@@ -229,13 +229,13 @@ const WorldEngine = {
     },
 
     _fallbackActionsForObjective(scene, objective) {
-        const text = String(objective || '当前目标').slice(0, 80);
+        const text = String(objective || '当前局势').slice(0, 80);
         const firstChar = this._sceneCharacters(scene)[0];
         const loc = (scene.locations || []).find(l => l.id === scene.currentLocation);
         return [
-            `围绕「${text}」采取下一步`,
-            loc?.name ? `观察${loc.name}里和「${text}」有关的异常` : `观察当前地点和「${text}」有关的线索`,
-            firstChar?.name ? `询问${firstChar.name}关于「${text}」的看法` : `询问在场的人关于「${text}」的线索`
+            loc?.name ? `观察${loc.name}里被忽略的细节` : '观察当前地点有没有被忽略的细节',
+            firstChar?.name ? `询问${firstChar.name}自己的目标和顾虑` : '询问在场的人各自想要什么',
+            `选择自己的切入点处理「${text}」`
         ];
     },
 
@@ -4737,8 +4737,8 @@ const WorldEngine = {
 
         const progressTurn = Math.max(Number(guide.lastProgressTurn || 0), this._latestProgressTurn(scene));
         guide.lastProgressTurn = progressTurn;
-        if (turn - progressTurn < 2) return null;
-        if (turn - Number(guide.lastSoftMoveTurn || 0) < 2) return null;
+        if (turn - progressTurn < 4) return null;
+        if (turn - Number(guide.lastSoftMoveTurn || 0) < 4) return null;
 
         const text = this.formatSoftMove(scene, { reason: 'stalled' });
         if (!text) return null;
@@ -6882,6 +6882,7 @@ const WorldEngine = {
             .filter(clock => Number(clock.value || 0) >= Math.max(1, Number(clock.max || 1) - 2))
             .sort((a, b) => (b.value / Math.max(1, b.max)) - (a.value / Math.max(1, a.max)))[0];
         const recentRisk = (situation.recentRisks || []).slice(-1)[0] || '';
+        const relationshipEvent = this._latestRelationshipEvent(scene);
 
         const actions = [];
         const addAction = action => {
@@ -6889,34 +6890,38 @@ const WorldEngine = {
             if (!text || actions.includes(text)) return;
             actions.push(text);
         };
+        this._buildFreedomActions(scene, situation).slice(0, 4).forEach(addAction);
+        if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         if (challenge) {
             this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
         }
-        if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         (situation.recommendedActions || []).slice(0, 4).forEach(addAction);
         (scene.flowGuide?.stalledPrompts || []).slice(0, 3).forEach(addAction);
-        if (objective?.text) addAction(`围绕「${objective.text}」采取下一步`);
-        addAction('观察当前地点有什么异常');
-        addAction('询问在场的人下一步该注意什么');
+        if (objective?.text) addAction(`如果想推进主线：${objective.text}`);
 
-        let title = '把局势重新落到一个具体问题上';
+        let title = '选择你自己的切入点';
         let text = '';
-        if (challenge) {
-            title = challenge.title || '当前挑战';
-            text = challenge.goal || challenge.stakes || '当前有一个可推进的挑战；选择一种做法，系统会按风险和属性处理。';
+        if (relationshipEvent) {
+            title = '先处理刚刚发生的后果';
+            text = `${relationshipEvent.name}对你的态度已经变化。你不必立刻推进主线，可以解释、道歉、转移话题、探索现场，或干脆承受后果。`;
+        } else if (recentRisk) {
+            title = '先决定如何面对后果';
+            text = `最近的公开风险是「${recentRisk}」。你可以处理后果、找 NPC 求证、暂时探索别处，或继续推进危险目标。`;
+        } else if (challenge) {
+            title = options.reason === 'stalled' ? '换个切入点' : '选择你自己的切入点';
+            const challengeText = challenge.title || challenge.goal || challenge.stakes || '当前挑战';
+            text = `现在可处理的是「${challengeText}」，但它不是唯一选择。你可以先探索、闲聊、准备资源、修复关系、绕开冲突，或提出自己的计划。`;
         } else if (unknown) {
             title = unknown.title || '关键未知';
-            text = unknown.text || '还有未确认的线索，可以先追查来源或验证证据。';
+            text = `${unknown.text || '还有未确认的线索，可以先追查来源或验证证据。'} 也可以暂时不追线索，先和 NPC 互动或探索当前地点。`;
         } else if (objective?.text) {
-            title = quest?.name || '当前目标';
-            text = `主线还停在「${objective.text}」。先选择一个具体观察、询问、调查或准备动作。`;
+            title = quest?.name ? `${quest.name}（可选目标）` : '当前目标（可选）';
+            text = `主线目标是「${objective.text}」，但你可以按自己的节奏行动：探索、交易、休息、闲聊、追支线或制定计划都可以。`;
         } else if (urgentClock) {
             title = `处理时钟：${urgentClock.name}`;
-            text = `${urgentClock.name} 已到 ${urgentClock.value}/${urgentClock.max}；可以先降低风险、争取资源或确认触发条件。`;
+            text = `${urgentClock.name} 已到 ${urgentClock.value}/${urgentClock.max}；可以降低风险，也可以先找资源、谈条件或选择冒险推进。`;
         } else {
-            text = recentRisk
-                ? `最近的公开风险是「${recentRisk}」。可以调查原因、找 NPC 求证，或先做低风险准备。`
-                : '当前没有强制路线。先观察、询问或提出一个具体计划，系统会在有风险时给出预览。';
+            text = '当前没有强制路线。你可以观察、闲聊、探索、准备资源、追支线，或提出一个完全自己的计划；有风险时系统会先给预览。';
         }
 
         return {
@@ -6930,43 +6935,92 @@ const WorldEngine = {
     formatSoftMove(scene, options = {}) {
         const move = this.buildSoftMove(scene, options);
         if (!move) return '';
-        const header = options.reason === 'stalled' ? '【下一步提示】' : '【当前可以做什么】';
+        const header = options.reason === 'stalled' ? '【可选方向】' : '【当前可以做什么】';
         const actions = (move.actions || []).slice(0, 4);
+        const actionLabel = options.reason === 'stalled' ? '可选方向' : '可以尝试';
         const actionText = actions.length > 0
-            ? `\n可以尝试：\n${actions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')}`
+            ? `\n${actionLabel}：\n${actions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')}`
             : '';
         return `${header}${move.title}\n${move.text}${actionText}`;
     },
 
     _buildRecommendedActions(scene, data) {
         const actions = [];
+        const add = action => {
+            const text = String(action || '').trim();
+            if (text && !actions.includes(text)) actions.push(text);
+        };
+        this._buildFreedomActions(scene, data).slice(0, 4).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
-        if (failureWarning) actions.push(`处理失败风险：${failureWarning.title}`);
+        if (failureWarning) add(`处理失败风险：${failureWarning.title}`);
+        const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
+        if (unknown) add(unknown.actions[0]);
+        const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
+        if (urgentClock) add(`处理时钟：${urgentClock.name}`);
         if (data.activeChallenge) {
             this.getChallengeVisibleApproaches(data.activeChallenge)
-                .slice(0, 3)
-                .forEach(a => actions.push(a.label));
+                .slice(0, 2)
+                .forEach(a => add(a.label));
         }
-        this._buildFlowActions(scene).forEach(a => actions.push(a));
+        this._buildFlowActions(scene).slice(0, 2).forEach(add);
         if (data.storyPhase?.recommendedActions?.length) {
-            data.storyPhase.recommendedActions.slice(0, 2).forEach(a => actions.push(a));
+            data.storyPhase.recommendedActions.slice(0, 2).forEach(add);
         }
         if (data.activeQuest) {
             const objective = (data.activeQuest.objectives || []).find(o => !o.completed);
-            if (objective) actions.push(`围绕「${objective.text}」采取下一步`);
+            if (objective) add(`如果想推进主线：${objective.text}`);
         }
-        const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
-        if (unknown) actions.push(unknown.actions[0]);
         const arcAction = this._buildStoryArcAction(scene);
-        if (arcAction) actions.push(arcAction);
-        const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
-        if (urgentClock) actions.push(`处理时钟：${urgentClock.name}`);
+        if (arcAction) add(arcAction);
         const counter = data.counterStrategies[0];
-        if (counter) actions.push(counter.counterplay[0] || `调查反制：${counter.title}`);
+        if (counter) add(counter.counterplay[0] || `调查反制：${counter.title}`);
         const clue = (scene.knowledge?.discoveries || []).slice(-1)[0];
-        if (clue) actions.push(`利用线索：${clue.title || clue.text}`);
-        if (actions.length === 0) actions.push('观察当前地点', '询问在场 NPC', '提出一个具体行动');
-        return [...new Set(actions)].slice(0, 4);
+        if (clue) add(`利用线索：${clue.title || clue.text}`);
+        if (actions.length === 0) ['观察当前地点', '询问在场 NPC', '提出一个具体行动'].forEach(add);
+        return actions.slice(0, 6);
+    },
+
+    _buildFreedomActions(scene, situation = {}) {
+        const actions = [];
+        const add = action => {
+            const text = String(action || '').trim();
+            if (text && !actions.includes(text)) actions.push(text);
+        };
+        const relation = this._latestRelationshipEvent(scene);
+        if (relation) add(`处理关系后果：向${relation.name}解释或道歉`);
+        const recentRisk = (situation.recentRisks || scene?.currentSituation?.recentRisks || []).slice(-1)[0] || '';
+        if (recentRisk) add(`处理最近风险：${this._shortChoiceText(recentRisk, 34)}`);
+        const loc = (scene?.locations || []).find(l => l.id === scene.currentLocation);
+        add(loc?.name ? `观察${loc.name}里被忽略的细节` : '观察当前地点有没有被忽略的细节');
+        add('提出一个自己的计划：我想...');
+        const chars = this._sceneCharacters(scene);
+        const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
+        const focus = chars.find(char => char.id === currentId) || chars[0];
+        if (focus?.name) {
+            add(`和${focus.name}聊聊他自己的目标`);
+            add(`询问${focus.name}对刚才事件的看法`);
+        } else {
+            add('和在场的人聊聊他们真正想要什么');
+        }
+        return actions;
+    },
+
+    _latestRelationshipEvent(scene) {
+        const msg = [...(scene?.messages || [])]
+            .reverse()
+            .find(item => item && item.type === 'system' && /好感\s*[↑↓]/.test(String(item.content || '')));
+        if (!msg) return null;
+        const content = String(msg.content || '').trim();
+        const match = content.match(/^(.+?)\s+好感\s*[↑↓]/);
+        return {
+            name: (match?.[1] || '相关角色').trim().slice(0, 40) || '相关角色',
+            text: content.slice(0, 160)
+        };
+    },
+
+    _shortChoiceText(text, max = 40) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        return clean.length <= max ? clean : `${clean.slice(0, Math.max(0, max - 3))}...`;
     },
 
     getActiveStoryPhase(scene) {
@@ -7130,7 +7184,7 @@ const WorldEngine = {
             actions.push(availableOpenings[0]);
         }
         if (actions.length < 2 && guide.sessionGoals.length > 0) {
-            actions.push(`推进目标：${guide.sessionGoals[0]}`);
+            actions.push(`选择自己的切入点：${guide.sessionGoals[0]}`);
         }
         if (actions.length === 0 && guide.stalledPrompts.length > 0) {
             actions.push(guide.stalledPrompts[turn % guide.stalledPrompts.length]);
