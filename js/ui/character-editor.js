@@ -24,6 +24,11 @@ const CharacterEditor = {
     open(characterId = null) {
         State.editingCharacterId = characterId;
         const isEdit = !!characterId;
+        if (!isEdit && State.scene && this._isSceneEnded(State.scene)) {
+            if (typeof showToast !== 'undefined') showToast(this._endedSceneMessage(State.scene));
+            State.editingCharacterId = null;
+            return;
+        }
         const char = isEdit ? State.characters.find(c => c.id === characterId) : null;
 
         this.titleEl.textContent = isEdit ? '编辑角色' : '新建角色';
@@ -254,5 +259,20 @@ const CharacterEditor = {
         } catch (e) {
             showToast('导出失败: ' + e.message);
         }
+    },
+
+    _isSceneEnded(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return !WorldEngine.isScenePlaying(scene);
+        }
+        return !!scene.gameState && scene.gameState !== 'playing';
+    },
+
+    _endedSceneMessage(scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage) {
+            return WorldEngine.endedSceneMessage(scene);
+        }
+        return '当前冒险已经结束，不能再向回顾场景新增角色。';
     }
 };
