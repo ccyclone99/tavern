@@ -16,6 +16,10 @@ const PlayerCreator = {
     open() {
         const scene = State.scene;
         if (!scene) return;
+        if (this._isSceneEnded(scene)) {
+            if (typeof showToast !== 'undefined') showToast(this._endedSceneMessage(scene));
+            return;
+        }
 
         const existing = scene.playerPersona;
 
@@ -137,6 +141,10 @@ const PlayerCreator = {
     async save() {
         const scene = State.scene;
         if (!scene) return;
+        if (this._isSceneEnded(scene)) {
+            if (typeof showToast !== 'undefined') showToast(this._endedSceneMessage(scene));
+            return;
+        }
 
         const name = document.getElementById('personaName').value.trim();
         if (!name) { showToast('请填写名字'); return; }
@@ -175,5 +183,20 @@ const PlayerCreator = {
             Tutorial.onSceneActive();
         }
         showToast(`欢迎，${scene.playerPersona.name}。你的冒险开始了。`);
+    },
+
+    _isSceneEnded(scene) {
+        if (!scene) return false;
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return !WorldEngine.isScenePlaying(scene);
+        }
+        return !!scene.gameState && scene.gameState !== 'playing';
+    },
+
+    _endedSceneMessage(scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.endedSceneMessage) {
+            return WorldEngine.endedSceneMessage(scene);
+        }
+        return '当前冒险已经结束，不能再修改玩家人物卡。';
     }
 };
