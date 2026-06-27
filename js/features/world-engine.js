@@ -4437,74 +4437,92 @@ const WorldEngine = {
             .toLowerCase();
     },
 
-    resolveCharacterReference(scene, ref = {}) {
-        if (typeof State === 'undefined' || !Array.isArray(State.characters)) return null;
+    resolveCharacterReference(scene, ref = {}, options = {}) {
+        const result = { character: null, ambiguous: false, active: false };
+        const refObj = ref && typeof ref === 'object' ? ref : {};
+        if (typeof State === 'undefined' || !Array.isArray(State.characters)) {
+            return options.withStatus ? result : null;
+        }
         const characters = State.characters.filter(Boolean);
-        if (characters.length === 0) return null;
+        if (characters.length === 0) return options.withStatus ? result : null;
 
         const activeIds = new Set(Array.isArray(scene?.characters) ? scene.characters.map(String) : []);
         const candidates = activeIds.size > 0
             ? characters.filter(char => activeIds.has(String(char.id || '')))
             : characters;
 
-        const rawId = String(ref.characterId || ref.id || ref.actorId || '').trim();
+        const finish = char => {
+            result.character = char || null;
+            result.active = !!char && (activeIds.size === 0 || activeIds.has(String(char.id || '')));
+            return options.withStatus ? result : char || null;
+        };
+
+        const rawId = String(refObj.characterId || refObj.id || refObj.actorId || '').trim();
         if (rawId) {
-            const byId = characters.find(char => String(char.id || '') === rawId);
-            if (byId) return byId;
+            const searchPool = options.activeOnly === true ? candidates : characters;
+            const byId = searchPool.find(char => String(char.id || '') === rawId);
+            if (byId) return finish(byId);
         }
 
         const refs = [
-            ref.characterName,
-            ref.name,
-            ref.actorName,
-            ref.targetName,
-            ref.character,
-            ref.actor,
-            ref.target,
+            refObj.characterName,
+            refObj.name,
+            refObj.actorName,
+            refObj.targetName,
+            refObj.character,
+            refObj.actor,
+            refObj.target,
+            typeof ref === 'string' ? ref : '',
             rawId
         ].map(value => String(value || '').trim()).filter(Boolean);
 
         for (const value of refs) {
             const match = this._findCharacterByNameRef(candidates, value);
-            if (match) return match;
+            if (match.ambiguous || match.character) {
+                result.character = match.character;
+                result.ambiguous = match.ambiguous;
+                result.active = !!match.character && (activeIds.size === 0 || activeIds.has(String(match.character.id || '')));
+                return options.withStatus ? result : match.character;
+            }
         }
-        return null;
+        return options.withStatus ? result : null;
     },
 
     _findCharacterByNameRef(characters, ref) {
         const normalized = this._normalizeQuestText(ref);
-        if (!normalized) return null;
+        if (!normalized) return { character: null, ambiguous: false };
         const exact = characters.filter(char => this._normalizeQuestText(char.name || '') === normalized);
-        if (exact.length > 0) return exact.length === 1 ? exact[0] : null;
+        if (exact.length > 0) return { character: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
 
         const partial = characters.filter(char => {
             const name = this._normalizeQuestText(char.name || '');
             return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
         });
-        return partial.length === 1 ? partial[0] : null;
+        return { character: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
     },
 
     resolveCharacterHiddenFact(scene, ref = {}) {
-        const character = this.resolveCharacterReference(scene, ref);
+        const refObj = ref && typeof ref === 'object' ? ref : {};
+        const character = this.resolveCharacterReference(scene, refObj);
         if (!character) return null;
         const facts = Array.isArray(character.profile?.hiddenFacts)
             ? character.profile.hiddenFacts.filter(Boolean)
             : [];
         if (facts.length === 0) return null;
 
-        const rawId = String(ref.factId || ref.hiddenFactId || ref.fact || '').trim();
+        const rawId = String(refObj.factId || refObj.hiddenFactId || refObj.fact || '').trim();
         if (rawId) {
             const byId = facts.find(fact => String(fact.id || '') === rawId);
             if (byId) return { character, fact: byId };
         }
 
         const refs = [
-            ref.factTitle,
-            ref.title,
-            ref.factName,
-            ref.hiddenFact,
-            ref.hint,
-            ref.truth,
+            refObj.factTitle,
+            refObj.title,
+            refObj.factName,
+            refObj.hiddenFact,
+            refObj.hint,
+            refObj.truth,
             rawId
         ].map(value => String(value || '').trim()).filter(Boolean);
 

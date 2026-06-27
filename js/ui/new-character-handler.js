@@ -246,20 +246,27 @@ const NewCharacterHandler = {
 
     async handleExit(markup) {
         // markup格式: 角色名|原因
-        const parts = markup.split('|');
+        const parts = String(markup || '').split('|');
         const name = parts[0];
         const reason = parts[1] || '离开了';
 
         const scene = State.scene;
         if (!scene) return;
-
-        const char = State.characters.find(c => c.name === name && scene.characters.includes(c.id));
-        if (!char) return;
         if (typeof WorldEngine === 'undefined' || !WorldEngine.removeCharacterFromScene) {
             console.warn('[NewCharacterHandler] WorldEngine.removeCharacterFromScene 不可用，跳过角色退场');
             if (typeof showToast !== 'undefined') showToast('角色退场系统不可用。');
             return;
         }
+
+        const resolved = WorldEngine.resolveCharacterReference
+            ? WorldEngine.resolveCharacterReference(scene, { characterName: name }, { withStatus: true, activeOnly: true })
+            : null;
+        if (resolved?.ambiguous) {
+            if (typeof showToast !== 'undefined') showToast(`角色「${name}」不唯一，已跳过退场。`);
+            return;
+        }
+        const char = resolved?.character || State.characters.find(c => c.name === name && scene.characters.includes(c.id));
+        if (!char) return;
 
         const result = WorldEngine.removeCharacterFromScene(scene, char.id, { reason });
         if (!result.ok) {

@@ -717,8 +717,9 @@ const StrategyManager = {
 
     _resolveCharacterForUpdate(update = {}, scene = State.scene) {
         if (typeof WorldEngine !== 'undefined' && WorldEngine.resolveCharacterReference) {
-            const matched = WorldEngine.resolveCharacterReference(scene, update);
-            if (matched) return matched;
+            const resolved = WorldEngine.resolveCharacterReference(scene, update, { withStatus: true });
+            if (resolved?.ambiguous) return null;
+            if (resolved?.character) return resolved.character;
         }
 
         const characters = Array.isArray(State.characters) ? State.characters.filter(Boolean) : [];
