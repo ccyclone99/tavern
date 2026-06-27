@@ -306,6 +306,7 @@ const StrategyManager = {
                     }
                 }
             }
+            stopIfEnded('strategies');
         }
 
         // 2. knowledgeAdd / intelAdd
@@ -407,6 +408,7 @@ const StrategyManager = {
 
         if (!stoppedByEnding && Array.isArray(update.storyArcUpdate) && typeof WorldEngine !== 'undefined') {
             storyChanged = WorldEngine.applyStoryArcUpdate(scene, update.storyArcUpdate);
+            stopIfEnded('storyArcUpdate');
         }
 
         if (!stoppedByEnding && Array.isArray(update.storyPhaseUpdate) && typeof WorldEngine !== 'undefined') {
@@ -416,6 +418,7 @@ const StrategyManager = {
 
         if (!stoppedByEnding && Array.isArray(update.clueUpdate) && typeof WorldEngine !== 'undefined') {
             clueChanged = WorldEngine.applyClueUpdate(scene, update.clueUpdate);
+            stopIfEnded('clueUpdate');
         }
 
         if (!stoppedByEnding && Array.isArray(update.failureStateUpdate) && typeof WorldEngine !== 'undefined') {
@@ -431,6 +434,7 @@ const StrategyManager = {
 
         if (!stoppedByEnding && Array.isArray(update.npcAgendaUpdate) && typeof WorldEngine !== 'undefined') {
             agendaChanged = WorldEngine.applyNpcAgendaUpdate(update.npcAgendaUpdate);
+            stopIfEnded('npcAgendaUpdate');
         }
 
         if (!stoppedByEnding && Array.isArray(update.challengeUpdate) && typeof WorldEngine !== 'undefined') {
@@ -446,10 +450,12 @@ const StrategyManager = {
 
         if (!stoppedByEnding && Array.isArray(update.revelationUpdate) && typeof WorldEngine !== 'undefined') {
             revelationChanged = WorldEngine.applyRevelationUpdate(scene, update.revelationUpdate);
+            stopIfEnded('revelationUpdate');
         }
 
         if (!stoppedByEnding && update.flowGraphUpdate && typeof update.flowGraphUpdate === 'object' && typeof WorldEngine !== 'undefined') {
             flowGraphChanged = WorldEngine.applyFlowGraphUpdate(scene, update.flowGraphUpdate);
+            stopIfEnded('flowGraphUpdate');
         }
 
         // 3. factionsUpdate

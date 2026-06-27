@@ -2,6 +2,13 @@
  * 关系进度 / 好感度 / 情绪系统
  */
 const Relationship = {
+    _isScenePlaying(scene = State.scene) {
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.isScenePlaying) {
+            return WorldEngine.isScenePlaying(scene);
+        }
+        return !!scene && (!scene.gameState || scene.gameState === 'playing');
+    },
+
     /**
      * 初始化角色对玩家的关系记录
      */
@@ -27,7 +34,9 @@ const Relationship = {
     async analyzeAndUpdate(characterId, messages) {
         const char = State.characters.find(c => c.id === characterId);
         if (!char) return;
-        const userName = State.scene?.userName || '旅人';
+        const scene = State.scene;
+        if (!this._isScenePlaying(scene)) return;
+        const userName = scene?.userName || '旅人';
         this.initRelation(characterId, userName);
         const relation = char._relations[userName];
 
@@ -68,6 +77,7 @@ ${recent}
             });
             const result = await response.json();
             const text = result.choices?.[0]?.message?.content || '';
+            if (State.scene !== scene || !this._isScenePlaying(scene)) return;
 
             // 提取JSON（支持嵌套对象）
             const jsonStr = typeof AIGenerator !== 'undefined' && AIGenerator._extractBalanced
@@ -94,11 +104,10 @@ ${recent}
                     const arrow = delta > 0 ? '↑' : '↓';
                     const moodTxt = data.mood ? ` · ${data.mood}` : '';
                     const reasonTxt = data.reason ? `（${data.reason}）` : '';
-                    const scene = State.scene;
                     const latestUser = [...(scene?.messages || [])].reverse().find(m => m.role === 'user');
                     const isKeyTurn = latestUser && ['action_intent', 'check', 'strategy'].includes(latestUser.type);
                     const shouldShow = Math.abs(delta) >= 3 || isKeyTurn;
-                    if (scene && shouldShow) {
+                    if (scene && shouldShow && State.scene === scene && this._isScenePlaying(scene)) {
                         const msg = {
                             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                             role: 'assistant',
@@ -124,7 +133,9 @@ ${recent}
     ruleBasedUpdate(characterId, messageContent) {
         const char = State.characters.find(c => c.id === characterId);
         if (!char) return;
-        const userName = State.scene?.userName || '旅人';
+        const scene = State.scene;
+        if (!this._isScenePlaying(scene)) return;
+        const userName = scene?.userName || '旅人';
         this.initRelation(characterId, userName);
         const relation = char._relations[userName];
 

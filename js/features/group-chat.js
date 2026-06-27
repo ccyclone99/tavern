@@ -1110,6 +1110,10 @@ const GroupChat = {
         if (State.isStreaming) return;
         const scene = State.scene;
         if (!scene) return;
+        if (!this._isScenePlaying(scene)) {
+            this._showEndedSceneNotice(scene);
+            return;
+        }
 
         ChatUI.setStreaming();
         const dm = scene.dmPersona;
@@ -1148,12 +1152,12 @@ const GroupChat = {
 
             // 提取并应用 DM 回复中的状态补丁
             const { content: cleanedDescription, update: dmUpdate } = this._extractStateUpdate(description);
+            if (tempMsg) this._removeMessageById(scene, tempMsg.id);
             if (dmUpdate) {
                 try { StrategyManager.applyStateUpdate(dmUpdate); }
                 catch (err) { console.warn('DM 状态补丁应用失败（非致命）:', err.message || err); }
             }
 
-            scene.messages.pop();
             if (!cleanedDescription.trim()) {
                 ChatUI.removeStreamingMessage();
                 await State.saveCurrentSceneDebounced();
@@ -1178,9 +1182,7 @@ const GroupChat = {
 
         } catch (err) {
             ChatUI.removeStreamingMessage();
-            if (tempMsg && scene.messages.length > 0 && scene.messages[scene.messages.length - 1].id === tempMsg.id) {
-                scene.messages.pop();
-            }
+            if (tempMsg) this._removeMessageById(scene, tempMsg.id);
             if (err.name !== 'AbortError') {
                 console.error('地点描述生成失败:', err);
             }
@@ -1342,6 +1344,14 @@ const GroupChat = {
             console.warn('任务进展推断失败（非致命）:', err.message || err);
             return null;
         }
+    },
+
+    _removeMessageById(scene, messageId) {
+        if (!scene || !Array.isArray(scene.messages) || !messageId) return false;
+        const idx = scene.messages.findIndex(msg => msg?.id === messageId);
+        if (idx === -1) return false;
+        scene.messages.splice(idx, 1);
+        return true;
     },
 
     _updateRelationshipAfterReply(char, cleanedContent, scene = State.scene) {
