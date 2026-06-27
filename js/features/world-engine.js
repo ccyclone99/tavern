@@ -3034,17 +3034,18 @@ const WorldEngine = {
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return false;
         let changed = false;
-        updates.slice(0, 12).forEach(update => {
-            if (!update || typeof update !== 'object') return;
+        for (const update of updates.slice(0, 12)) {
+            if (!this.isScenePlaying(scene)) break;
+            if (!update || typeof update !== 'object') continue;
             const title = update.title || update.name || update.counterTitle ? String(update.title || update.name || update.counterTitle) : '';
             const explicitRef = update.id || update.counterId || update.counterStrategyId || title || update.actorId || update.actorName || update.target;
             const resolved = this.resolveCounterStrategyReference(scene, update, { withStatus: true });
             let counter = resolved.counter;
-            if (resolved.ambiguous) return;
+            if (resolved.ambiguous) continue;
             if (!counter) {
-                if (!explicitRef) return;
+                if (!explicitRef) continue;
                 counter = this.normalizeCounterStrategy({ ...update, title: title || update.title });
-                if (!counter) return;
+                if (!counter) continue;
                 scene.counterStrategies.push(counter);
                 changed = true;
             }
@@ -3063,7 +3064,8 @@ const WorldEngine = {
             if (Array.isArray(update.counterplay)) counter.counterplay = update.counterplay.map(String).slice(0, 6);
             counter.updatedAt = Date.now();
             changed = true;
-        });
+            this.checkFailureStates(scene, { type: 'counter' });
+        }
         return changed;
     },
 

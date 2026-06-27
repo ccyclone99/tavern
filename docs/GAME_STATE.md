@@ -658,7 +658,7 @@ DM 续写检定结果时仍会清洗白名单标记：`[quest:]`、`[item_add:]`
 }
 ```
 
-`active` 和 `revealed` 都表示反制仍会带来压力；`revealed` 代表玩家已经识别来源，可以更明确地采取反制行动。`counterStrategyUpdate` 更新反制时优先使用 `counterStrategyId/counterId/id`，也可按唯一标题，或唯一 `actorId/actorName/target` 组合匹配；不唯一则跳过。相关观察、调查、试探、谈判或潜入检定达到部分成功以上时，系统会按 `counterplay/title/target/hint` 匹配并揭示、削弱或解决反制。`resolved` 反制不会再进入行动风险、右侧局势压力或失败触发。
+`active` 和 `revealed` 都表示反制仍会带来压力；`revealed` 代表玩家已经识别来源，可以更明确地采取反制行动。`counterStrategyUpdate` 更新反制时优先使用 `counterStrategyId/counterId/id`，也可按唯一标题，或唯一 `actorId/actorName/target` 组合匹配；不唯一则跳过。相关观察、调查、试探、谈判或潜入检定达到部分成功以上时，系统会按 `counterplay/title/target/hint` 匹配并揭示、削弱或解决反制。`resolved` 反制不会再进入行动风险、右侧局势压力或失败触发。同一批反制更新逐条检查失败条件；某条更新触发 `defeated/victorious` 后，后续反制更新停止。
 
 ### MessageVisibility
 
