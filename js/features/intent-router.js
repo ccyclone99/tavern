@@ -134,26 +134,25 @@ const IntentRouter = {
         ];
         if (!movePrefixes.some(p => normalized.startsWith(this._normalize(p)))) return null;
 
-        const current = scene.locations.find(l => l.id === scene.currentLocation);
-        const locs = scene.locations
-            .filter(loc => loc && loc.id !== scene.currentLocation)
-            .map(loc => ({
-                id: loc.id,
-                name: String(loc.name || ''),
-                reachable: !current || (current.connections || []).includes(loc.id)
-            }))
-            .filter(loc => loc.name);
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.resolveLocationReference) {
+            const cleaned = this._stripLocationMovePrefix(text);
+            const resolved = WorldEngine.resolveLocationReference(scene, cleaned, { withStatus: true, excludeCurrent: true });
+            if (resolved.ambiguous) {
+                return { ambiguous: true, message: `地点「${cleaned || text}」不唯一，请说得更具体。` };
+            }
+            if (!resolved.location) return null;
+            return {
+                locationId: resolved.location.id,
+                locationName: resolved.location.name,
+                reachable: resolved.reachable
+            };
+        }
+        return null;
+    },
 
-        const exact = locs.find(loc =>
-            normalized === this._normalize(loc.name) ||
-            normalized === this._normalize('去' + loc.name) ||
-            normalized === this._normalize('我去' + loc.name) ||
-            normalized === this._normalize('前往' + loc.name) ||
-            normalized === this._normalize('回到' + loc.name)
-        );
-        const matched = exact || locs.find(loc => normalized.includes(this._normalize(loc.name)));
-        if (!matched) return null;
-        return { locationId: matched.id, locationName: matched.name, reachable: matched.reachable };
+    _stripLocationMovePrefix(text) {
+        const raw = String(text || '').trim();
+        return raw.replace(/^(我想|我要|我)?(去|前往|移动到|走到|来到|进入|回到|返回)\s*/u, '').trim() || raw;
     },
 
     matchInventoryUse(raw, scene) {

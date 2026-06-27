@@ -922,7 +922,16 @@ const GroupChat = {
         const scene = State.scene;
         if (!scene) return;
         const locName = raw.trim();
-        const loc = scene.locations.find(l => l.name === locName || l.name.includes(locName));
+        if (typeof WorldEngine === 'undefined' || !WorldEngine.resolveLocationReference) {
+            this._warnMissingRuleLayer('[move]');
+            return;
+        }
+        const resolved = WorldEngine.resolveLocationReference(scene, locName, { withStatus: true, excludeCurrent: true });
+        if (resolved.ambiguous) {
+            if (typeof showToast !== 'undefined') showToast(`地点「${locName}」不唯一，已跳过移动`);
+            return;
+        }
+        const loc = resolved.location;
         if (loc && loc.id !== scene.currentLocation) {
             await MapView.moveTo(loc.id);
             SidebarRight.markTabNew('map');

@@ -346,7 +346,7 @@ scene.evidenceLedger = [
 }
 ```
 
-移动状态统一由 `WorldEngine.moveToLocation()` 结算：只允许移动到当前地点 `connections` 中的相邻节点，结局后禁止移动，并由规则层写入当前地点、移动消息和 `eventLog.movement`。`MapView.moveTo()`、输入“我去某地”和 `[move:]` 标记只能委托该规则入口，不能直接改写 `scene.currentLocation`。`locationUpdate` 补丁必须委托 `WorldEngine.applyLocationUpdates()` 新增地点或更新 `name`、`description`、`connections`、`alertLevel`；单条补丁最多 20 条，场景最多 80 个地点，id/名称/描述/出口都会截断和去重；变化会写入事件日志并提示地图/局势。
+移动状态统一由 `WorldEngine.moveToLocation()` 结算：只允许移动到当前地点 `connections` 中的相邻节点，结局后禁止移动，并由规则层写入当前地点、移动消息和 `eventLog.movement`。`MapView.moveTo()`、输入“我去某地”和 `[move:]` 标记只能委托该规则入口，不能直接改写 `scene.currentLocation`；按地点名移动时必须经 `WorldEngine.resolveLocationReference()` 唯一解析，重名或模糊不唯一则提示/跳过，不能默认移动到第一个同名地点。`locationUpdate` 补丁必须委托 `WorldEngine.applyLocationUpdates()` 新增地点或更新 `name`、`description`、`connections`、`alertLevel`；单条补丁最多 20 条，场景最多 80 个地点，id/名称/描述/出口都会截断和去重；变化会写入事件日志并提示地图/局势。
 
 ### Item
 

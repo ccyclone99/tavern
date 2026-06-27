@@ -997,6 +997,11 @@ const ChatUI = {
                 return true;
             case 'move_location':
                 this._clearInput();
+                if (route.meta?.ambiguous) {
+                    this._appendLocalSystemMessage(`【移动未完成】${route.meta.message || '地点不唯一，请说得更具体。'}`);
+                    this._syncInputMode();
+                    return true;
+                }
                 if (typeof MapView !== 'undefined' && MapView.moveTo) {
                     await MapView.moveTo(route.meta.locationId);
                 }

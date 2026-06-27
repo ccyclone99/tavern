@@ -567,7 +567,7 @@ UI 要求：
 - `scene.gameState` 进入 `victorious` 或 `defeated` 后，输入框、地图、背包、交易、休息、属性点、任务手动操作、行动预览、检定卡、消息删除/重新生成和计策创建/更新/放弃不得再改变世界状态；结束后只允许 OOC、帮助和回顾。
 - 结局锁必须同时存在于 UI/输入入口和规则层：`StrategyManager.applyStateUpdate()` 先拦截，`WorldEngine.apply*Update()` 在非 `playing` 场景也必须 no-op，防止外部 agent 或未来 UI 误调用继续推进世界状态。
 - 日志条目只保存摘要和引用，不复制完整聊天文本。
-- 地图移动统一走 `WorldEngine.moveToLocation()`；UI、输入路由和 `[move:]` 标记不能直接改写 `scene.currentLocation`，必须复用相邻地点校验、结局锁、移动消息和 `eventLog.movement`。
+- 地图移动统一走 `WorldEngine.moveToLocation()`；UI、输入路由和 `[move:]` 标记不能直接改写 `scene.currentLocation`，必须复用相邻地点校验、结局锁、移动消息和 `eventLog.movement`。按地点名移动必须先由 `WorldEngine.resolveLocationReference()` 唯一解析，重名或模糊不唯一时提示/跳过，不能默认移动到第一个同名地点。
 - `factionsUpdate` 和 `locationUpdate` 必须委托 `WorldEngine.applyFactionUpdates()` / `applyLocationUpdates()`，同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。HP 归零、剧本失败和主线通关的结局消息统一由规则层写入，不能由 UI 或聊天层直接改写 `scene.gameState`。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。

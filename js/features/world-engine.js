@@ -1372,6 +1372,70 @@ const WorldEngine = {
         return { ok: true, outcome: 'victorious', message: msg };
     },
 
+    resolveLocationReference(scene, ref = {}, options = {}) {
+        const refObj = ref && typeof ref === 'object' ? ref : {};
+        const locations = Array.isArray(scene?.locations) ? scene.locations.filter(Boolean) : [];
+        const result = { location: null, ambiguous: false, reachable: false };
+        if (locations.length === 0) return options.withStatus ? result : null;
+
+        const currentId = String(scene?.currentLocation || '').trim();
+        const current = locations.find(loc => String(loc.id || '') === currentId);
+        const connections = Array.isArray(current?.connections) ? current.connections.map(String) : [];
+        const excludeCurrent = options.excludeCurrent === true;
+        const reachableOnly = options.reachableOnly === true;
+        const candidates = locations.filter(loc => {
+            const id = String(loc.id || '').trim();
+            if (excludeCurrent && id && id === currentId) return false;
+            if (reachableOnly && current && !connections.includes(id)) return false;
+            return true;
+        });
+
+        const finish = loc => {
+            result.location = loc || null;
+            result.reachable = !!loc && (!current || connections.includes(String(loc.id || '')) || loc.id === currentId);
+            return options.withStatus ? result : loc || null;
+        };
+
+        const rawId = String(refObj.locationId || refObj.locId || refObj.id || '').trim();
+        if (rawId) {
+            const byId = candidates.find(loc => String(loc.id || '') === rawId);
+            if (byId) return finish(byId);
+        }
+
+        const refs = [
+            refObj.locationName,
+            refObj.locName,
+            refObj.name,
+            refObj.title,
+            typeof ref === 'string' ? ref : '',
+            rawId
+        ].map(value => String(value || '').trim()).filter(Boolean);
+
+        for (const value of refs) {
+            const match = this._findLocationByNameRef(candidates, value);
+            if (match.ambiguous || match.location) {
+                result.location = match.location;
+                result.ambiguous = match.ambiguous;
+                result.reachable = !!match.location && (!current || connections.includes(String(match.location.id || '')) || match.location.id === currentId);
+                return options.withStatus ? result : match.location;
+            }
+        }
+        return options.withStatus ? result : null;
+    },
+
+    _findLocationByNameRef(locations, ref) {
+        const normalized = this._normalizeQuestText(ref);
+        if (!normalized) return { location: null, ambiguous: false };
+        const exact = locations.filter(loc => this._normalizeQuestText(loc.name || '') === normalized);
+        if (exact.length > 0) return { location: exact.length === 1 ? exact[0] : null, ambiguous: exact.length > 1 };
+
+        const partial = locations.filter(loc => {
+            const name = this._normalizeQuestText(loc.name || '');
+            return name.length >= 2 && normalized.length >= 2 && (name.includes(normalized) || normalized.includes(name));
+        });
+        return { location: partial.length === 1 ? partial[0] : null, ambiguous: partial.length > 1 };
+    },
+
     moveToLocation(scene, locId, options = {}) {
         if (!scene) return { ok: false, message: '没有可用场景。' };
         this.normalizeScene(scene);
