@@ -309,7 +309,7 @@ scene.evidenceLedger = [
 - 或存在失败推进/替代路线：阶段挑战 `failed`，或补丁写明 `failForward` / `alternative` / `outcome: "failed"`，且带 `reason`。
 - 或玩家绕过阶段但付出明确代价：补丁写明 `cost`、`bypassCost`、`resourceCost`、`relationCost`、`clockCost`、`consequence`、`costs`、`worldTensionDelta`、`clockDelta` 或 `goldCost`，且带 `reason`。
 
-绕过代价不只是文字依据。`goldCost` 会先校验金币是否足够并扣除；`worldTensionDelta` 会调用 `WorldEngine.addWorldTension()`；`clockDelta` 搭配 `clockId` / `clockTag` / `clockName` 会调用 `applyClockUpdate()`；`costs` 可写 `{ type: "item", itemName, quantity }`、`{ type: "gold", amount }`、`{ type: "worldTension", delta }`、`{ type: "clock", id, delta }` 或 `{ type: "consequence", text }`，分别进入背包、经济、时钟和后果账本。
+绕过代价不只是文字依据。`goldCost` 会先校验金币是否足够并扣除；`worldTensionDelta` 会调用 `WorldEngine.addWorldTension()`；`clockDelta` 搭配 `clockId` / `clockTag` / `clockName` 会调用 `applyClockUpdate()`，且必须匹配到唯一时钟，不唯一或缺失时阶段推进会被拦截；`costs` 可写 `{ type: "item", itemName, quantity }`、`{ type: "gold", amount }`、`{ type: "worldTension", delta }`、`{ type: "clock", id, delta }` 或 `{ type: "consequence", text }`，分别进入背包、经济、时钟和后果账本。
 
 不满足闸门时，阶段状态保持不变，系统写入 `eventLog` 的 `progress` 事件“剧情阶段待确认”，并在当前局势最近风险里提示阶段待确认。
 
@@ -332,7 +332,7 @@ scene.evidenceLedger = [
 
 同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 会按当前场景角色名做一次兼容修复。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。如果某个同伴协助的代价或效果触发胜利/失败结局，当前检定内后续同伴协助不再扣除，该协助未写入的风险后果也不再追加。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
 
-`effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag` 或资源标签延缓/推进公开时钟；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
+`effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag`/`clockName` 或资源标签延缓/推进公开时钟，其中显式引用必须唯一，资源标签隐式匹配也只有最高分唯一时才会生效；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
 
 ### Location
 
@@ -389,7 +389,7 @@ scene.equipmentRefs = {
 
 - `check_bonus`：用于检定；装备和非消耗任务物品可自动生效，`consume: true` 的消耗品需要在检定卡显式点选。
 - 普通叙事输入触发的 AI 检定也必须带上最后一条玩家输入的行动上下文；例如“我用扫描仪扫描墙壁”“我修复控制台”后出现的检定卡，应能匹配已装备扫描仪或可消耗零件包，而不是只有先走行动预览才享受物品修正。
-- `heal/gold/exp/clock_delta/clock_resist/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。`heal`/`gold`/`world_tension` 复用生命、经济和世界紧张度规则入口，时钟效果优先按 `clockId`、`clockTag`、`clockName` 匹配，否则按物品标签匹配公开时钟。
+- `heal/gold/exp/clock_delta/clock_resist/world_tension`：可作为背包直接使用效果，点击“使用”或输入“使用物品名”时立即结算。`heal`/`gold`/`world_tension` 复用生命、经济和世界紧张度规则入口，时钟效果优先按 `clockId`、唯一 `clockTag`、唯一 `clockName` 匹配，否则按物品标签匹配唯一公开时钟；匹配不到或匹配不唯一时不会消耗物品。
 - 直接使用效果必须绑定消耗语义：物品是 `consumable`、带 `uses`，或对应 effect 写 `consume:true`。非消耗装备/杂物不允许反复直接使用来刷资源。
 - 直接使用消耗品只有在直接效果真实生效时才扣除；例如生命已满时使用治疗物品、或时钟物品找不到可影响的公开时钟，都应提示未消耗。
 - 物品效果值会在 `WorldEngine.normalizeItemEffect()` 中按类型限幅；`<state_update>.itemAdd` 单次补丁同名物品最多增加 20 个单位或次数，显式 `effects` 会替换名称推断效果，防止 AI 生成超大加成或超大 `uses`。

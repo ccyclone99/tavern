@@ -450,7 +450,7 @@ UI 要求：
 - 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，也支持主输入框“投入资源名/不用资源名”，选中后随掷骰消耗。
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
 - 装备槽展示名保存在 `scene.equipment`，真实物品 id 保存在 `scene.equipmentRefs`；规则层必须 id 优先、名称兼容，旧存档缺失引用时由当前背包和 `equipped` 标记修复，避免同名物品误卸、误消耗或错误显示。
-- 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
+- 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、唯一 `clockTag`、唯一 `clockName` 或物品标签匹配唯一公开时钟，匹配不到或不唯一时不消耗物品。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。
 - 直接使用型效果必须来自 `type:"consumable"`、带 `uses` 的物品，或显式 `effect.consume:true`；非消耗装备/杂物不能反复点击刷金币、经验、治疗或时钟效果。
 - 直接使用的消耗品只有在至少一个直接效果真实改变状态时才扣除；满血治疗、金币/经验/时钟/紧张度无变化或找不到目标时，只给失败提示，不消耗物品。
@@ -555,7 +555,7 @@ UI 要求：
 
 - `storyPhaseUpdate` 激活下一阶段或完成当前 active 阶段时，必须满足：当前阶段至少完成 1 个挑战；或当前阶段失败并触发替代路线；或玩家绕过阶段但付出明确资源、关系、时钟、金币、后果等代价。
 - 当前实现会在 `WorldEngine.applyStoryPhaseUpdate()` 中强制以上规则；不满足时不改阶段状态，只记录“剧情阶段待确认”。
-- 通过绕过代价推进阶段时，结构化代价必须真实结算：`goldCost` 会扣金币，`worldTensionDelta` 会改变世界紧张度，`clockDelta` 搭配 `clockId/clockTag/clockName` 会推进时钟，`costs` 中的 `item` 会移除背包物品，`consequence` 会写入后果账本。
+- 通过绕过代价推进阶段时，结构化代价必须真实结算：`goldCost` 会扣金币，`worldTensionDelta` 会改变世界紧张度，`clockDelta` 搭配唯一 `clockId/clockTag/clockName` 会推进时钟，若缺失或不唯一则拦截阶段推进；`costs` 中的 `item` 会移除背包物品，`consequence` 会写入后果账本。
 
 ### 4.16 冒险日志
 

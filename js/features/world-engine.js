@@ -2630,6 +2630,11 @@ const WorldEngine = {
                 return { ok: false, message: `绕过阶段需要 ${item.name} x${quantity}，当前只有 ${available}。` };
             }
         }
+        for (const clockCost of costs.clocks) {
+            const resolved = this._resolveStoryPhaseCostClock(scene, clockCost);
+            if (resolved.ambiguous) return { ok: false, message: `绕过阶段需要推进时钟「${resolved.label}」，但匹配到多个时钟，请使用 clockId。` };
+            if (!resolved.clock) return { ok: false, message: `绕过阶段需要推进时钟「${resolved.label || '未指定'}」，但没有找到唯一匹配时钟。` };
+        }
         return { ok: true };
     },
 
@@ -2795,24 +2800,25 @@ const WorldEngine = {
         return result;
     },
 
-    _findStoryPhaseCostClock(scene, clockCost = {}) {
-        const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
+    _resolveStoryPhaseCostClock(scene, clockCost = {}) {
         const id = String(clockCost.id || '').trim();
         const tag = String(clockCost.tag || '').trim();
         const name = String(clockCost.name || '').trim();
-        if (id) {
-            const byId = clocks.find(clock => clock.id === id);
-            if (byId) return byId;
-        }
-        if (tag) {
-            const byTag = clocks.find(clock => clock.tag === tag);
-            if (byTag) return byTag;
-        }
-        if (name) {
-            const byName = clocks.find(clock => clock.name === name);
-            if (byName) return byName;
-        }
-        return null;
+        const label = id || tag || name || String(clockCost.label || '').trim();
+        if (!id && !tag && !name) return { clock: null, ambiguous: false, label };
+        const resolved = this.resolveClockReference(scene, {
+            id,
+            clockId: id,
+            tag,
+            clockTag: tag,
+            name,
+            clockName: name
+        }, { withStatus: true });
+        return { clock: resolved.clock, ambiguous: resolved.ambiguous, label };
+    },
+
+    _findStoryPhaseCostClock(scene, clockCost = {}) {
+        return this._resolveStoryPhaseCostClock(scene, clockCost).clock;
     },
 
     _recordStoryPhaseGateBlocked(scene, fromPhase, toPhase, message) {
@@ -3740,34 +3746,19 @@ const WorldEngine = {
         const clockId = String(effect.clockId || '').trim();
         const clockTag = String(effect.clockTag || '').trim();
         const clockName = String(effect.clockName || '').trim();
-        if (clockId) {
-            const byId = clocks.find(clock => clock.id === clockId);
-            if (byId) return byId;
-        }
-        if (clockTag) {
-            const byTag = clocks.find(clock => clock.tag === clockTag);
-            if (byTag) return byTag;
-        }
-        if (clockName) {
-            const byName = clocks.find(clock => clock.name === clockName);
-            if (byName) return byName;
+        if (clockId || clockTag || clockName) {
+            const resolved = this.resolveClockReference(scene, {
+                id: clockId,
+                clockId,
+                tag: clockTag,
+                clockTag,
+                name: clockName,
+                clockName
+            }, { withStatus: true });
+            return resolved.ambiguous ? null : resolved.clock;
         }
         const tags = new Set((item?.tags || []).map(tag => String(tag || '').toLowerCase()).filter(Boolean));
-        const matched = clocks
-            .filter(clock => clock.visibility !== 'hidden')
-            .map(clock => {
-                const haystack = `${clock.id || ''} ${clock.name || ''} ${clock.tag || ''} ${clock.description || ''}`.toLowerCase();
-                let score = 0;
-                tags.forEach(tag => {
-                    if (tag && haystack.includes(tag)) score += 2;
-                });
-                if (String(clock.tag || '').toLowerCase() === 'main') score += 1;
-                return { clock, score };
-            })
-            .filter(entry => entry.score > 0)
-            .sort((a, b) => b.score - a.score || Number(b.clock.value || 0) - Number(a.clock.value || 0));
-        if (matched.length > 0) return matched[0].clock;
-        return clocks.filter(clock => clock.visibility !== 'hidden').sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
+        return this._findUniqueVisibleClockByTokens(scene, tags);
     },
 
     _equipmentSlotForItem(item) {
@@ -6053,30 +6044,41 @@ const WorldEngine = {
         if (clocks.length === 0) return null;
         const clockId = String(effect.clockId || modifier.clockId || '').trim();
         const clockTag = String(effect.clockTag || modifier.clockTag || '').trim();
-        if (clockId) {
-            const byId = clocks.find(clock => clock.id === clockId);
-            if (byId) return byId;
-        }
-        if (clockTag) {
-            const byTag = clocks.find(clock => clock.tag === clockTag);
-            if (byTag) return byTag;
+        const clockName = String(effect.clockName || modifier.clockName || '').trim();
+        if (clockId || clockTag || clockName) {
+            const resolved = this.resolveClockReference(scene, {
+                id: clockId,
+                clockId,
+                tag: clockTag,
+                clockTag,
+                name: clockName,
+                clockName
+            }, { withStatus: true });
+            return resolved.ambiguous ? null : resolved.clock;
         }
         const tags = new Set([...(resource.tags || []), ...(effect.evidenceTags || [])].map(tag => String(tag || '').toLowerCase()).filter(Boolean));
-        const matched = clocks
+        return this._findUniqueVisibleClockByTokens(scene, tags);
+    },
+
+    _findUniqueVisibleClockByTokens(scene, tokens = new Set()) {
+        const tokenList = [...tokens].map(token => String(token || '').toLowerCase()).filter(Boolean);
+        if (tokenList.length === 0) return null;
+        const matched = (scene?.clocks || [])
             .filter(clock => clock.visibility !== 'hidden')
             .map(clock => {
                 const haystack = `${clock.id || ''} ${clock.name || ''} ${clock.tag || ''} ${clock.description || ''}`.toLowerCase();
                 let score = 0;
-                tags.forEach(tag => {
+                tokenList.forEach(tag => {
                     if (tag && haystack.includes(tag)) score += 2;
                 });
-                if (String(clock.tag || '').toLowerCase() === 'main') score += 1;
                 return { clock, score };
             })
             .filter(entry => entry.score > 0)
             .sort((a, b) => b.score - a.score || Number(b.clock.value || 0) - Number(a.clock.value || 0));
-        if (matched.length > 0) return matched[0].clock;
-        return clocks.filter(clock => clock.visibility !== 'hidden').sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
+        if (matched.length === 0) return null;
+        const topScore = matched[0].score;
+        const top = matched.filter(entry => entry.score === topScore);
+        return top.length === 1 ? top[0].clock : null;
     },
 
     _applyCompanionEvidenceReliability(scene, resource, effect = {}, reliability = '') {
