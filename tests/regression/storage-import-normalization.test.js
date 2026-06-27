@@ -73,9 +73,58 @@ async function testImportFallbackNormalizesWithoutState() {
     assert.strictEqual(scene.gameState, 'playing');
 }
 
+async function testImportFallbackClearsEndedPendingState() {
+    const writes = [];
+    const Storage = loadStorage({ console });
+    Storage.put = async (store, data) => writes.push({ store, data });
+    Storage.getSettings = async () => ({});
+
+    await Storage.importAll({
+        scenes: [{
+            id: 'ended_scene',
+            name: '结束备份',
+            gameState: 'defeated',
+            pendingAction: { intent: '旧行动' },
+            pendingCheck: { statName: '感知', dc: 14 },
+            inputContext: { state: 'pending_check', prompt: '掷骰', suggestions: [], lastIntentId: '' }
+        }]
+    });
+
+    const scene = writes.find(write => write.store === 'scenes').data;
+    assert.strictEqual(scene.pendingAction, null);
+    assert.strictEqual(scene.pendingCheck, null);
+    assert.strictEqual(scene.inputContext.state, 'ended');
+}
+
+async function testExportNormalizesScenesAndStripsApiKey() {
+    const Storage = loadStorage({ console });
+    Storage.getAll = async store => {
+        if (store === 'characters') return [];
+        if (store === 'scenes') return [{
+            id: 'ended_scene',
+            name: '结束备份',
+            gameState: 'victorious',
+            pendingAction: { intent: '旧行动' },
+            pendingCheck: { statName: '感知', dc: 14 },
+            inputContext: { state: 'pending_action', prompt: '执行', suggestions: [], lastIntentId: '' }
+        }];
+        return [];
+    };
+    Storage.getSettings = async () => ({ apiKey: 'local-key', model: 'local-model' });
+
+    const exported = await Storage.exportAll();
+
+    assert.strictEqual(exported.settings.apiKey, '');
+    assert.strictEqual(exported.scenes[0].pendingAction, null);
+    assert.strictEqual(exported.scenes[0].pendingCheck, null);
+    assert.strictEqual(exported.scenes[0].inputContext.state, 'ended');
+}
+
 (async () => {
     await testImportNormalizesScenesAndPreservesLocalApiKey();
     await testImportFallbackNormalizesWithoutState();
+    await testImportFallbackClearsEndedPendingState();
+    await testExportNormalizesScenesAndStripsApiKey();
     console.log('storage-import-normalization regression tests passed');
 })().catch(err => {
     console.error(err);

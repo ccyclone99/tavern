@@ -121,7 +121,9 @@ const Storage = {
 
     async exportAll() {
         const chars = await this.getAll('characters');
-        const scenes = await this.getAll('scenes');
+        const scenes = (await this.getAll('scenes'))
+            .map(scene => this._normalizeImportedScene(scene))
+            .filter(Boolean);
         const settings = await this.getSettings();
         // 导出备份时剔除 API Key，避免明文泄露
         const exportSettings = { ...settings, apiKey: '' };
@@ -168,6 +170,13 @@ const Storage = {
         }
         if (!Array.isArray(normalized.inputContext.suggestions)) normalized.inputContext.suggestions = [];
         if (!normalized.gameState) normalized.gameState = 'playing';
+        if (normalized.pendingAction === undefined) normalized.pendingAction = null;
+        if (normalized.pendingCheck === undefined) normalized.pendingCheck = null;
+        if (normalized.gameState !== 'playing') {
+            normalized.pendingAction = null;
+            normalized.pendingCheck = null;
+            normalized.inputContext.state = 'ended';
+        }
         return normalized;
     }
 };

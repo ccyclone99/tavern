@@ -181,7 +181,7 @@
 | `createdAt` / `updatedAt` | number | 毫秒时间戳 |
 | `snapshots` | array | 存档快照预留字段 |
 
-`State.normalizeScene(scene)` 会为旧存档补齐以上字段。新增字段必须在 `State.createScene()` 和 `normalizeScene()` 中同时提供兼容默认值；`Storage.importAll()` 写入导入场景前也会先归一化，避免旧备份以缺字段状态落库。
+`State.normalizeScene(scene)` 会为旧存档补齐以上字段。新增字段必须在 `State.createScene()` 和 `normalizeScene()` 中同时提供兼容默认值；`Storage.importAll()` 写入导入场景前、`Storage.exportAll()` 生成备份前也会先归一化，避免旧备份以缺字段或 stale pending 状态落库或流出。
 
 如果旧存档或简化自定义世界已有任务、冲突种子、剧情弧或线索，但缺少 `storyPhases`、`sceneChallenges` 或 `flowGuide`，`WorldEngine.normalizeScene()` 会补一个轻量可玩骨架：至少一个 active phase、一个 active challenge 和基础卡住提示。完全空白的新场景不会被强行补成副本；`completed/failed/bypassed` 等终态阶段不会被重新激活，也不会再补活新的挑战。
 

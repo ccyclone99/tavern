@@ -581,7 +581,7 @@ UI 要求：
 - 通关/失败时的 `scene.runRecord.phaseSummaries` 必须把 `storyPhases`、挑战、证据、主线目标和检定与完整 transcript 关联，生成可展开的关键原文摘录；完整对话仍保留为独立折叠列表。
 - 存档快照必须保存并恢复运行态规则字段，包括 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让装备精确引用、探索奖励防重日志或待领取探索物品丢失，避免同名装备误操作、重复刷经验、物资丢失或输入状态错乱。
 - 读档后必须刷新聊天、左侧角色、右侧详情/局势/线索/世界书/地图/任务/背包/计策、行动条、pending action/check 预览和输入区状态，不能只恢复数据而让旧线索、旧地图、旧世界书、旧输入提示或旧 pending 控件留在 UI 上。
-- `Storage.importAll()` 导入场景前必须归一化旧存档字段；新建场景的 `State.createScene()` 也必须直接初始化 `equipmentRefs`，不能依赖下一次加载才补齐运行态装备引用。
+- `Storage.importAll()` 导入场景前、`Storage.exportAll()` 导出备份前都必须归一化旧存档字段；新建场景的 `State.createScene()` 也必须直接初始化 `equipmentRefs`，不能依赖下一次加载才补齐运行态装备引用。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
 
