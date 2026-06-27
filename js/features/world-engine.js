@@ -2584,7 +2584,13 @@ const WorldEngine = {
                     }
                     const currentActiveId = currentActive.id;
                     const targetPhaseId = phase.id;
-                    if (gate.cost === true) this._applyStoryPhaseCosts(scene, currentActive, update, gate);
+                    if (gate.cost === true) {
+                        this._applyStoryPhaseCosts(scene, currentActive, update, gate);
+                        if (!this.isScenePlaying(scene)) {
+                            changed = true;
+                            return;
+                        }
+                    }
                     const activeRef = scene.storyPhases.find(p => p.id === currentActiveId) || currentActive;
                     phase = scene.storyPhases.find(p => p.id === targetPhaseId) || phase;
                     activeRef.status = 'completed';
@@ -2613,7 +2619,13 @@ const WorldEngine = {
                     return;
                 }
                 const targetPhaseId = phase.id;
-                if (gate.cost === true) this._applyStoryPhaseCosts(scene, phase, update, gate);
+                if (gate.cost === true) {
+                    this._applyStoryPhaseCosts(scene, phase, update, gate);
+                    if (!this.isScenePlaying(scene)) {
+                        changed = true;
+                        return;
+                    }
+                }
                 phase = scene.storyPhases.find(p => p.id === targetPhaseId) || phase;
                 phase.status = 'completed';
                 phase.lastReason = gate.reason;
@@ -2747,20 +2759,22 @@ const WorldEngine = {
         const phaseName = phase?.title || '剧情阶段';
         const summary = [];
         let freedInventorySpace = false;
+        const canContinueCosts = () => this.isScenePlaying(scene);
 
-        if (costs.gold > 0) {
+        if (costs.gold > 0 && canContinueCosts()) {
             const result = this.addGold(scene, -costs.gold, { source: `阶段代价：${phaseName}`, silent: true });
             if (result.ok) summary.push(`金币 -${Math.abs(result.amount)}`);
         }
-        if (costs.worldTension !== 0) {
+        if (costs.worldTension !== 0 && canContinueCosts()) {
             const result = this.addWorldTension(scene, costs.worldTension, { source: `阶段代价：${phaseName}`, silent: true });
             if (result.ok) summary.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
         }
-        costs.clocks.forEach(clockCost => {
+        for (const clockCost of costs.clocks) {
+            if (!canContinueCosts()) break;
             const clock = this._findStoryPhaseCostClock(scene, clockCost);
             if (!clock) {
                 if (clockCost.label) costs.notes.push(clockCost.label);
-                return;
+                continue;
             }
             const result = this.applyClockUpdate(scene, [{
                 id: clock.id,
@@ -2768,8 +2782,9 @@ const WorldEngine = {
                 reason: `阶段代价：${phaseName}`
             }]);
             if (result.changed) summary.push(`${clock.name || '局势时钟'} ${clockCost.delta >= 0 ? '+' : ''}${clockCost.delta}`);
-        });
-        costs.items.forEach(itemCost => {
+        }
+        for (const itemCost of costs.items) {
+            if (!canContinueCosts()) break;
             const result = this.removeInventoryItem(scene, itemCost.itemRef, itemCost.quantity, {
                 source: `阶段代价：${phaseName}`,
                 record: true,
@@ -2780,8 +2795,9 @@ const WorldEngine = {
                 summary.push(`${result.itemName} -${result.quantity}`);
                 if (result.removedAll) freedInventorySpace = true;
             }
-        });
-        costs.consequences.forEach(item => {
+        }
+        for (const item of costs.consequences) {
+            if (!canContinueCosts()) break;
             const consequence = this.recordConsequence(scene, {
                 title: item.title || `${phaseName}的绕过代价`,
                 cause: `阶段代价：${phaseName}`,
@@ -2791,17 +2807,17 @@ const WorldEngine = {
                 tags: ['story_phase', phase?.id].filter(Boolean)
             });
             if (consequence) summary.push(`后果：${consequence.title}`);
-        });
+        }
 
         const notes = [...new Set(costs.notes.map(item => String(item || '').trim()).filter(Boolean))].slice(0, 4);
-        if (notes.length > 0) {
+        if (notes.length > 0 && canContinueCosts()) {
             this.recordEvent(scene, {
                 category: 'progress',
                 title: '阶段代价',
                 text: `${phaseName}：${notes.join('；')}`
             });
         }
-        if (summary.length > 0 || notes.length > 0) {
+        if ((summary.length > 0 || notes.length > 0) && canContinueCosts()) {
             this.addSystemMessage(scene, `【阶段代价：${phaseName}】${[...summary, ...notes].slice(0, 6).join('，') || gate.costText || '代价已记录。'}`, 'system');
             if (freedInventorySpace) {
                 this._retryPendingQuestRewardsAfterInventoryChange(scene);
@@ -2814,7 +2830,7 @@ const WorldEngine = {
             }
             return true;
         }
-        return false;
+        return summary.length > 0 || notes.length > 0;
     },
 
     _extractStoryPhaseCosts(update = {}) {

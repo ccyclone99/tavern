@@ -311,6 +311,8 @@ scene.evidenceLedger = [
 
 绕过代价不只是文字依据。`goldCost` 会先校验金币是否足够并扣除；`worldTensionDelta` 会调用 `WorldEngine.addWorldTension()`；`clockDelta` 搭配 `clockId` / `clockTag` / `clockName` 会调用 `applyClockUpdate()`，且必须匹配到唯一时钟，不唯一或缺失时阶段推进会被拦截；`costs` 可写 `{ type: "item", itemName, quantity }`、`{ type: "gold", amount }`、`{ type: "worldTension", delta }`、`{ type: "clock", id, delta }` 或 `{ type: "consequence", text }`，分别进入背包、经济、时钟和后果账本。
 
+若阶段绕过代价中的时钟或世界紧张度触发结局，后续代价、阶段状态变更和奖励补领都必须停止；结局后不能继续扣物品、写后果或把阶段推进成完成/激活。
+
 不满足闸门时，阶段状态保持不变，系统写入 `eventLog` 的 `progress` 事件“剧情阶段待确认”，并在当前局势最近风险里提示阶段待确认。
 
 ### CompanionResource
