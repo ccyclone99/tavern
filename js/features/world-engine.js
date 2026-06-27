@@ -2068,11 +2068,17 @@ const WorldEngine = {
         const validQuestStatuses = ['active', 'completed', 'failed', 'abandoned'];
         const results = [];
         let changed = false;
+        const checkQuestEndings = () => {
+            this.checkFailureStates(scene, { type: 'quest' });
+            if (this.isScenePlaying(scene)) this.checkVictory(scene);
+            return !this.isScenePlaying(scene);
+        };
 
-        updates.slice(0, 12).forEach(update => {
-            if (!update || typeof update !== 'object') return;
+        for (const update of updates.slice(0, 12)) {
+            if (!this.isScenePlaying(scene)) break;
+            if (!update || typeof update !== 'object') continue;
             const quest = this.resolveQuestReference(scene, update);
-            if (!quest) return;
+            if (!quest) continue;
             const reason = update.reason || options.reason || '';
 
             const idx = this.resolveQuestObjectiveIndex(quest, update);
@@ -2087,6 +2093,7 @@ const WorldEngine = {
                 });
                 results.push({ questId: quest.id, objectiveIdx: idx, ...result });
                 changed = result.ok || changed;
+                if (!this.isScenePlaying(scene) || (result.ok && checkQuestEndings())) break;
             }
 
             if (update.status && validQuestStatuses.includes(update.status)) {
@@ -2101,7 +2108,9 @@ const WorldEngine = {
                         this.grantQuestReward(scene, quest);
                         changed = true;
                     } else if (!structured) {
-                        (quest.objectives || []).forEach((objective, idx) => {
+                        const objectives = quest.objectives || [];
+                        for (let idx = 0; idx < objectives.length; idx += 1) {
+                            const objective = objectives[idx];
                             if (!objective.completed) {
                                 const result = this.completeQuestObjective(scene, quest, idx, {
                                     reason,
@@ -2109,8 +2118,9 @@ const WorldEngine = {
                                 });
                                 results.push({ questId: quest.id, objectiveIdx: idx, ...result });
                                 changed = result.ok || changed;
+                                if (!this.isScenePlaying(scene) || (result.ok && checkQuestEndings())) break;
                             }
-                        });
+                        }
                     } else {
                         this.addSystemMessage(scene, `【任务完成待确认：${quest.name}】仍有目标缺少挑战、证据或结论支持。`, 'system');
                     }
@@ -2118,12 +2128,13 @@ const WorldEngine = {
                     quest.status = update.status;
                     changed = true;
                 }
+                if (changed && checkQuestEndings()) break;
             }
-        });
+        }
 
         if (changed) {
             if (typeof SidebarRight !== 'undefined') SidebarRight.renderSituation?.();
-            this.checkVictory(scene);
+            if (this.isScenePlaying(scene)) this.checkVictory(scene);
         }
         return { changed, results };
     },
