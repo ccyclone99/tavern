@@ -635,7 +635,7 @@ DM 续写检定结果时仍会清洗白名单标记：`[quest:]`、`[item_add:]`
 }
 ```
 
-`WorldEngine.applyClockUpdate()` 支持 `value`、`delta`、`visibility`、`trigger`。更新时钟时优先使用 `clockId/id`，也可按唯一 `clockTag/tag` 或唯一名称匹配；重名或同 tag 不唯一会跳过，不能把压力写到第一个同名时钟。新增时钟至少需要提供 id、name 或 tag 之一，纯 `delta` 不会凭空创建默认时钟。跨过 `trigger.at` 时会插入公开或模糊系统事件。
+`WorldEngine.applyClockUpdate()` 支持 `value`、`delta`、`visibility`、`trigger`。更新时钟时优先使用 `clockId/id`，也可按唯一 `clockTag/tag` 或唯一名称匹配；重名或同 tag 不唯一会跳过，不能把压力写到第一个同名时钟。新增时钟至少需要提供 id、name 或 tag 之一，纯 `delta` 不会凭空创建默认时钟。跨过 `trigger.at` 时会插入公开或模糊系统事件。同一批时钟更新逐条检查失败条件；某条更新触发 `defeated/victorious` 后，后续时钟更新停止。
 
 ### CounterStrategy
 

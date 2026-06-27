@@ -2342,18 +2342,19 @@ const WorldEngine = {
         let changed = false;
         const triggered = [];
 
-        updates.slice(0, 12).forEach(update => {
-            if (!update || typeof update !== 'object') return;
+        for (const update of updates.slice(0, 12)) {
+            if (!this.isScenePlaying(scene)) break;
+            if (!update || typeof update !== 'object') continue;
             const id = update.id ? String(update.id) : '';
             const name = update.name || update.clockName || update.title ? String(update.name || update.clockName || update.title) : '';
             const tag = update.tag || update.clockTag ? String(update.tag || update.clockTag) : '';
             const resolved = this.resolveClockReference(scene, update, { withStatus: true });
             let clock = resolved.clock;
-            if (resolved.ambiguous) return;
+            if (resolved.ambiguous) continue;
             if (!clock) {
-                if (!id && !name && !tag) return;
+                if (!id && !name && !tag) continue;
                 clock = this.normalizeClock({ ...update, name, tag });
-                if (!clock) return;
+                if (!clock) continue;
                 scene.clocks.push(clock);
                 changed = true;
             }
@@ -2375,9 +2376,8 @@ const WorldEngine = {
             const events = this._collectClockTriggers(scene, clock, oldValue, String(update.reason || '局势推进'));
             triggered.push(...events);
             changed = true;
-        });
-
-        if (changed) this.checkFailureStates(scene, { type: 'clock' });
+            this.checkFailureStates(scene, { type: 'clock' });
+        }
         return { changed, triggered };
     },
 
