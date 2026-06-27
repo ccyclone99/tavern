@@ -449,6 +449,7 @@ UI 要求：
 - 检定卡展示自动生效物品、可点选/可输入投入的消耗品和同伴协助。
 - 消耗品必须经过玩家显式选择后才扣除；当前稳定版在检定卡提供点选 UI，也支持主输入框“投入资源名/不用资源名”，选中后随掷骰消耗。
 - 武器、防具和饰品可在背包按钮装备 / 卸下，也可直接输入“装备物品名”“卸下物品名”完成本地结算。
+- 装备槽展示名保存在 `scene.equipment`，真实物品 id 保存在 `scene.equipmentRefs`；规则层必须 id 优先、名称兼容，旧存档缺失引用时由当前背包和 `equipped` 标记修复，避免同名物品误卸、误消耗或错误显示。
 - 背包中带 `heal/gold/exp/clock_delta/clock_resist/world_tension` 等直接效果的物品显示“使用”，点击或输入“使用物品名”会立即结算并消耗；`world_tension` 复用 `WorldEngine.addWorldTension()`，`clock_delta`/`clock_resist` 可通过 `clockId`、`clockTag`、`clockName` 或物品标签匹配公开时钟。
 - 物品直接效果中的 `heal` 和 `gold` 必须分别复用 `WorldEngine.applyPlayerHealing()` 与 `WorldEngine.addGold()`，避免背包按钮、输入命令和 AI 标记各自改状态。
 - 直接使用型效果必须来自 `type:"consumable"`、带 `uses` 的物品，或显式 `effect.consume:true`；非消耗装备/杂物不能反复点击刷金币、经验、治疗或时钟效果。
@@ -463,8 +464,8 @@ UI 要求：
 - 计策处于计划阶段时列出可用物品不会扣除；当 `<state_update>.strategies.update` 明确把可消耗物品名或物品 ID 写入 `resources` 或 `usedIntel`，且计策推进到 `action/complication/resolution` 或 `executing/resolved/failed` 时，系统会消耗该物品一次并用 `consumedItemResourceIds` 防重复。若物品已在筹备阶段登记到计策的 `resources/usedIntel`，后续补丁首次把计策推进到执行/结算阶段时，即使没有重复写物品名，也必须扣除已登记的可消耗物品。去重键必须兼容物品 `id`、物品名和 `strategy_item:xxx` UI 资源 ID；标签、效果标签和风险说明只用于展示/匹配可用性，不能单独触发扣除，避免一个泛化标签误扣多个物品。
 - 医疗、治疗、补给类消耗品即使没有显式 `heal`，也会有保守的本地恢复兜底。
 - 任务奖励和 `[item_add:]` 只给出物品名时，系统会对治疗药水、补给、零件包、武器、防具、地图、钥匙、证据等常见名称做轻量规则推断，生成可使用或可加成的物品。
-- `[item_add:]` 和 `[item_remove:]` 必须分别走 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()`，统一堆叠、事件日志、装备槽清理和侧栏刷新。
-- 直接使用导致物品耗尽并从背包移除时，也必须清理对应装备槽，避免装备面板引用已不存在的物品。
+- `[item_add:]` 和 `[item_remove:]` 必须分别走 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()`，统一堆叠、事件日志、装备槽/`equipmentRefs` 清理和侧栏刷新。
+- 直接使用导致物品耗尽并从背包移除时，也必须按物品 id 清理对应装备槽，避免装备面板引用已不存在的物品。
 - 计策面板展示可用于当前计策的物品。
 
 ### 4.12 探索与证据奖励
@@ -571,7 +572,7 @@ UI 要求：
 - `WorldEngine.addSystemMessage()` 会自动把系统事件写入日志；检定结果、任务奖励、升级、移动、证据取得、HP 归零和通关会显式写入日志。HP 归零、剧本失败和主线通关的结局消息统一由规则层写入，不能由 UI 或聊天层直接改写 `scene.gameState`。
 - 检定投入的消耗品扣除后必须写入 `【资源消耗】检定投入` 系统消息和 `eventLog.resource`，不能只静默减少背包次数。
 - 通关/失败时的 `scene.runRecord.phaseSummaries` 必须把 `storyPhases`、挑战、证据、主线目标和检定与完整 transcript 关联，生成可展开的关键原文摘录；完整对话仍保留为独立折叠列表。
-- 存档快照必须保存并恢复运行态规则字段，包括 `explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让探索奖励防重日志或待领取探索物品丢失，避免重复刷经验、物资丢失或输入状态错乱。
+- 存档快照必须保存并恢复运行态规则字段，包括 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`；读档后不能让装备精确引用、探索奖励防重日志或待领取探索物品丢失，避免同名装备误操作、重复刷经验、物资丢失或输入状态错乱。
 - 旧存档没有 `eventLog` 时，右侧局势面板可从已有 `check/system/event/victory/gameover` 消息临时派生最近事件。
 - 右侧“局势”面板展示最近事件，帮助玩家回流时快速知道刚发生了什么。
 

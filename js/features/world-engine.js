@@ -26,6 +26,12 @@ const WorldEngine = {
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
+        if (!Array.isArray(scene.inventory)) scene.inventory = [];
+        scene.inventory = scene.inventory
+            .map(item => this.normalizeItem(item))
+            .filter(item => item && typeof item === 'object')
+            .slice(0, 200);
+        this.normalizeEquipmentState(scene);
         scene.gameplayProfile = this.normalizeGameplayProfile(scene.gameplayProfile);
         scene.storyTexture = this.normalizeStoryTexture(scene.storyTexture);
         if (!scene.questProgressGuards || typeof scene.questProgressGuards !== 'object') {
@@ -808,6 +814,77 @@ const WorldEngine = {
             item.uses = Number.isFinite(uses) ? Math.max(0, Math.floor(uses)) : undefined;
         }
         return item;
+    },
+
+    normalizeEquipmentState(scene) {
+        if (!scene) return scene;
+        if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = {};
+        if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') scene.equipmentRefs = {};
+        const slots = this._equipmentSlots();
+        slots.forEach(slot => {
+            const raw = scene.equipment[slot];
+            if (raw && typeof raw === 'object') {
+                scene.equipment[slot] = raw.name || raw.itemName || '';
+                scene.equipmentRefs[slot] = scene.equipmentRefs[slot] || raw.id || raw.itemId || '';
+            }
+            scene.equipment[slot] = scene.equipment[slot] ? String(scene.equipment[slot]) : null;
+            scene.equipmentRefs[slot] = scene.equipmentRefs[slot] ? String(scene.equipmentRefs[slot]) : null;
+        });
+
+        const equippedBySlot = new Map();
+        slots.forEach(slot => {
+            const item = this._resolveEquipmentSlotItem(scene, slot);
+            if (!item) {
+                scene.equipment[slot] = null;
+                scene.equipmentRefs[slot] = null;
+                return;
+            }
+            item.equipped = true;
+            scene.equipment[slot] = item.name || '';
+            scene.equipmentRefs[slot] = item.id || null;
+            equippedBySlot.set(slot, item);
+        });
+
+        (scene.inventory || []).forEach(item => {
+            if (!item || item.equipped !== true) return;
+            const slot = this._equipmentSlotForItem(item);
+            const current = equippedBySlot.get(slot);
+            if (!current) {
+                scene.equipment[slot] = item.name || '';
+                scene.equipmentRefs[slot] = item.id || null;
+                equippedBySlot.set(slot, item);
+            } else if (current !== item) {
+                item.equipped = false;
+            }
+        });
+        return scene;
+    },
+
+    getEquippedInventoryItem(scene, slot) {
+        if (!scene) return null;
+        if (!scene.equipment || !scene.equipmentRefs) this.normalizeEquipmentState(scene);
+        const normalizedSlot = this._equipmentSlots().includes(slot) ? slot : '';
+        return normalizedSlot ? this._resolveEquipmentSlotItem(scene, normalizedSlot) : null;
+    },
+
+    _equipmentSlots() {
+        return ['weapon', 'armor', 'accessory'];
+    },
+
+    _resolveEquipmentSlotItem(scene, slot) {
+        const inventory = Array.isArray(scene?.inventory) ? scene.inventory.filter(Boolean) : [];
+        if (inventory.length === 0) return null;
+        const ref = String(scene?.equipmentRefs?.[slot] || '').trim();
+        const name = String(scene?.equipment?.[slot] || '').trim();
+        if (ref) {
+            const byId = inventory.find(item => item && item.id === ref && this._equipmentSlotForItem(item) === slot);
+            return byId || null;
+        }
+        if (name) {
+            const byName = inventory.find(item => item && item.name === name && this._equipmentSlotForItem(item) === slot);
+            if (byName) return byName;
+        }
+        return inventory.find(item => item?.equipped === true && this._equipmentSlotForItem(item) === slot) || null;
     },
 
     normalizePendingExplorationReward(reward = {}, index = 0) {
@@ -3162,7 +3239,8 @@ const WorldEngine = {
         if (!scene || !Array.isArray(scene.inventory)) return null;
         const ref = String(itemRef || '').trim();
         if (!ref) return null;
-        const item = scene.inventory.find(i => i && ((i.id && i.id === ref) || i.name === ref));
+        const item = scene.inventory.find(i => i && i.id === ref) ||
+            scene.inventory.find(i => i && i.name === ref);
         if (item) this.normalizeItem(item);
         return item || null;
     },
@@ -3173,7 +3251,8 @@ const WorldEngine = {
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         const ref = String(itemRef || '').trim();
         if (!ref) return { ok: false, message: '没有指定物品。' };
-        const idx = scene.inventory.findIndex(item => item && ((item.id && item.id === ref) || item.name === ref));
+        let idx = scene.inventory.findIndex(item => item && item.id === ref);
+        if (idx < 0) idx = scene.inventory.findIndex(item => item && item.name === ref);
         if (idx < 0) return { ok: false, message: '没有找到这个物品。' };
 
         const item = scene.inventory[idx];
@@ -3338,9 +3417,22 @@ const WorldEngine = {
         if (!scene.equipment || typeof scene.equipment !== 'object') {
             scene.equipment = { weapon: null, armor: null, accessory: null };
         }
+        if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') {
+            scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
+        }
+        const itemId = String(item.id || '').trim();
+        const itemName = String(item.name || '').trim();
         item.equipped = false;
-        Object.keys(scene.equipment).forEach(slot => {
-            if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
+        this._equipmentSlots().forEach(slot => {
+            const slotRef = String(scene.equipmentRefs[slot] || '').trim();
+            const slotName = String(scene.equipment[slot] || '').trim();
+            const matched = itemId && slotRef
+                ? slotRef === itemId
+                : !!itemName && slotName === itemName;
+            if (matched) {
+                scene.equipment[slot] = null;
+                scene.equipmentRefs[slot] = null;
+            }
         });
     },
 
@@ -3354,7 +3446,8 @@ const WorldEngine = {
 
     _consumeInventoryItem(scene, item) {
         if (!scene || !item || !Array.isArray(scene.inventory)) return false;
-        const idx = scene.inventory.findIndex(i => i === item || (item.id && i.id === item.id) || i.name === item.name);
+        let idx = scene.inventory.findIndex(i => i === item || (item.id && i.id === item.id));
+        if (idx < 0 && !item.id) idx = scene.inventory.findIndex(i => i && i.name === item.name);
         if (idx < 0) return false;
         const target = scene.inventory[idx];
         if (target.uses !== undefined) {
@@ -4644,9 +4737,9 @@ const WorldEngine = {
             if (!mod.consume || !mod.source) return;
             const key = mod.itemId || mod.source;
             if (consumedKeys.has(key)) return;
-            const idx = scene.inventory.findIndex(i =>
-                (mod.itemId && i.id === mod.itemId) || i.name === mod.source
-            );
+            const idx = mod.itemId
+                ? scene.inventory.findIndex(i => i && i.id === mod.itemId)
+                : scene.inventory.findIndex(i => i && i.name === mod.source);
             if (idx < 0) return;
             const item = scene.inventory[idx];
             const itemName = item.name || mod.source;
@@ -4820,16 +4913,16 @@ const WorldEngine = {
         resources.forEach(resource => {
             const resourceKeys = this._strategyResourceKeys(resource);
             if (resourceKeys.length === 0 || resourceKeys.some(key => consumedKeys.has(key))) return;
-            const idx = scene.inventory.findIndex(item =>
-                item && ((resource.itemId && item.id === resource.itemId) || item.name === resource.name)
-            );
+            const idx = resource.itemId
+                ? scene.inventory.findIndex(item => item && item.id === resource.itemId)
+                : scene.inventory.findIndex(item => item && item.name === resource.name);
             if (idx < 0) return;
             const item = scene.inventory[idx];
             const before = item.uses !== undefined ? Number(item.uses || 0) : Number(item.quantity || 1);
             if (!this._consumeInventoryItem(scene, item)) return;
-            const afterItem = scene.inventory.find(next =>
-                next && ((resource.itemId && next.id === resource.itemId) || next.name === resource.name)
-            );
+            const afterItem = resource.itemId
+                ? scene.inventory.find(next => next && next.id === resource.itemId)
+                : scene.inventory.find(next => next && next.name === resource.name);
             const after = afterItem
                 ? (afterItem.uses !== undefined ? Number(afterItem.uses || 0) : Number(afterItem.quantity || 1))
                 : 0;
@@ -4947,6 +5040,7 @@ const WorldEngine = {
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
+        if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (!this.canEquipInventoryItem(item)) return { ok: false, message: `${item.name} 不能作为装备使用。` };
@@ -4956,6 +5050,7 @@ const WorldEngine = {
         if (previous) previous.equipped = false;
         item.equipped = true;
         scene.equipment[slot] = item.name;
+        scene.equipmentRefs[slot] = item.id || null;
         const slotLabels = { weapon: '武器', armor: '防具', accessory: '饰品' };
         const replaced = previous ? previous.name : '';
         this.addSystemMessage(scene, `【装备】${slotLabels[slot] || '装备'}：${item.name}${replaced ? `（替换 ${replaced}）` : ''}`, 'system');
@@ -4972,13 +5067,18 @@ const WorldEngine = {
         this.normalizeScene(scene);
         if (!this.isScenePlaying(scene)) return { ok: false, message: this.endedSceneMessage(scene) };
         if (!scene.equipment || typeof scene.equipment !== 'object') scene.equipment = { weapon: null, armor: null, accessory: null };
+        if (!scene.equipmentRefs || typeof scene.equipmentRefs !== 'object') scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
         const item = this._findInventoryItem(scene, itemRef);
         if (!item) return { ok: false, message: '没有找到这个物品。' };
         if (!item.equipped) return { ok: false, message: `${item.name} 当前没有装备。` };
 
         item.equipped = false;
         const slot = this._equipmentSlotForItem(item);
-        if (scene.equipment[slot] === item.name) scene.equipment[slot] = null;
+        const slotRef = String(scene.equipmentRefs[slot] || '').trim();
+        if ((item.id && slotRef === item.id) || (!slotRef && scene.equipment[slot] === item.name)) {
+            scene.equipment[slot] = null;
+            scene.equipmentRefs[slot] = null;
+        }
         this.addSystemMessage(scene, `【卸下装备】${item.name}`, 'system');
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();

@@ -862,11 +862,13 @@ const SidebarRight = {
         const slotLabels = { weapon: '⚔ 武器', armor: '🛡 防具', accessory: '💍 饰品' };
         eqEl.innerHTML = Object.entries(slotLabels).map(([slot, label]) => {
             const itemName = equipment[slot];
-            const item = itemName ? inventory.find(i => i.name === itemName) : null;
+            const item = typeof WorldEngine !== 'undefined' && WorldEngine.getEquippedInventoryItem
+                ? WorldEngine.getEquippedInventoryItem(scene, slot)
+                : (itemName ? inventory.find(i => i.name === itemName) : null);
             return `<div class="eq-slot ${item ? 'occupied' : ''}">
                 <div class="eq-slot-label">${label}</div>
                 <div class="eq-slot-item">${item ? Renderer.escapeHtml(item.name) : '空'}</div>
-                ${item && canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : ''}
+                ${item && canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : ''}
             </div>`;
         }).join('');
 
@@ -923,10 +925,10 @@ const SidebarRight = {
                     ? WorldEngine.canEquipInventoryItem(item)
                     : item.type !== 'consumable';
                 const actionHtml = item.equipped
-                    ? (canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : '<span class="inv-hint">已装备</span>')
+                    ? (canMutateInventory ? `<button class="text-btn inv-unequip-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">卸下</button>` : '<span class="inv-hint">已装备</span>')
                     : `<span class="inv-actions">
                         ${canMutateInventory && canUse ? `<button class="text-btn inv-use-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">使用</button>` : ''}
-                        ${canMutateInventory && canEquip ? `<button class="text-btn inv-equip-btn" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>` : (!canMutateInventory ? '<span class="inv-hint">回顾</span>' : (!canUse ? `<span class="inv-hint">${depleted ? '已用尽' : '检定时可用'}</span>` : ''))}
+                        ${canMutateInventory && canEquip ? `<button class="text-btn inv-equip-btn" data-item-id="${Renderer.escapeAttr(item.id || '')}" data-item-name="${Renderer.escapeAttr(item.name)}" style="font-size:10px;">装备</button>` : (!canMutateInventory ? '<span class="inv-hint">回顾</span>' : (!canUse ? `<span class="inv-hint">${depleted ? '已用尽' : '检定时可用'}</span>` : ''))}
                     </span>`;
                 return `<div class="inventory-item ${item.equipped ? 'equipped' : ''}">
                     <span class="inv-icon">${icon}</span>
@@ -945,16 +947,16 @@ const SidebarRight = {
 
         // 绑定按钮事件（避免动态 onclick 属性带来的注入风险）
         eqEl.querySelectorAll('.inv-unequip-btn').forEach(btn => {
-            btn.onclick = () => this._unequipItem(btn.dataset.itemName);
+            btn.onclick = () => this._unequipItem(btn.dataset.itemId || btn.dataset.itemName);
         });
         listEl.querySelectorAll('.inv-equip-btn').forEach(btn => {
-            btn.onclick = () => this._equipItem(btn.dataset.itemName);
+            btn.onclick = () => this._equipItem(btn.dataset.itemId || btn.dataset.itemName);
         });
         listEl.querySelectorAll('.inv-use-btn').forEach(btn => {
             btn.onclick = () => this._useItem(btn.dataset.itemId || btn.dataset.itemName);
         });
         listEl.querySelectorAll('.inv-unequip-btn').forEach(btn => {
-            btn.onclick = () => this._unequipItem(btn.dataset.itemName);
+            btn.onclick = () => this._unequipItem(btn.dataset.itemId || btn.dataset.itemName);
         });
     },
 

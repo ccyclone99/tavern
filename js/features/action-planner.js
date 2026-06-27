@@ -202,11 +202,19 @@ ${risks}
         }
 
         const equipment = scene?.equipment || {};
-        if (profile.type === 'combat' && equipment.weapon) {
-            modifiers.push({ source: `武器：${equipment.weapon}`, label: '风险 -6', riskDelta: -6, dcDelta: -1 });
+        const equippedWeapon = typeof WorldEngine !== 'undefined' && WorldEngine.getEquippedInventoryItem
+            ? WorldEngine.getEquippedInventoryItem(scene, 'weapon')
+            : null;
+        const equippedArmor = typeof WorldEngine !== 'undefined' && WorldEngine.getEquippedInventoryItem
+            ? WorldEngine.getEquippedInventoryItem(scene, 'armor')
+            : null;
+        const weaponName = equippedWeapon?.name || equipment.weapon;
+        const armorName = equippedArmor?.name || equipment.armor;
+        if (profile.type === 'combat' && weaponName) {
+            modifiers.push({ source: `武器：${weaponName}`, label: '风险 -6', riskDelta: -6, dcDelta: -1 });
         }
-        if (['combat', 'force'].includes(profile.type) && equipment.armor) {
-            modifiers.push({ source: `防具：${equipment.armor}`, label: '风险 -4', riskDelta: -4, dcDelta: 0 });
+        if (['combat', 'force'].includes(profile.type) && armorName) {
+            modifiers.push({ source: `防具：${armorName}`, label: '风险 -4', riskDelta: -4, dcDelta: 0 });
         }
 
         if (typeof WorldEngine !== 'undefined') {

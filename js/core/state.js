@@ -135,6 +135,7 @@ const State = {
         if (scene.currentLocation === undefined) scene.currentLocation = '';
         if (!Array.isArray(scene.inventory)) scene.inventory = [];
         if (!scene.equipment) scene.equipment = { weapon: null, armor: null, accessory: null };
+        if (!scene.equipmentRefs) scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
         if (!Array.isArray(scene.snapshots)) scene.snapshots = [];
         if (!scene.characters) scene.characters = [];
         // 桌游核心字段（HP/经济/成长/结局）

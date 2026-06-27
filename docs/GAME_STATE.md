@@ -69,6 +69,11 @@
     armor: null,
     accessory: null
   },
+  equipmentRefs: {
+    weapon: null,
+    armor: null,
+    accessory: null
+  },
 
   gold: 0,
   exp: 0,
@@ -133,7 +138,8 @@
 | `locations` | Location[] | 地图节点列表 |
 | `currentLocation` | string | 当前地点 id |
 | `inventory` | Item[] | 背包物品 |
-| `equipment` | object | 当前装备槽 |
+| `equipment` | object | 当前装备槽的展示名称，兼容旧存档和 prompt 展示 |
+| `equipmentRefs` | object | 当前装备槽的物品 id 引用，用于同名物品精确装备、卸下、消耗和存档恢复 |
 | `gold` | number | 金币，最小为 0 |
 | `exp` | number | 当前等级内经验 |
 | `level` | number | 玩家等级 |
@@ -181,7 +187,7 @@
 
 `flowGuide.lastProgressTurn` 记录最近一次任务、探索、挑战、检定、移动或剧情进展所在回合；`lastSoftMoveTurn` 记录最近一次系统防卡住提示所在回合。两者是运行态防重复字段，用于在连续无进展时提示下一步，不代表任务进度。
 
-`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致探索奖励重复发放、待领取探索物品丢失、输入状态错乱或 DM 叙事人格丢失。
+`SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值；否则可能导致装备引用回退成名称匹配、探索奖励重复发放、待领取探索物品丢失、输入状态错乱或 DM 叙事人格丢失。
 
 ## 三、子结构
 
@@ -364,14 +370,20 @@ scene.evidenceLedger = [
 装备槽：
 
 ```js
-{
+scene.equipment = {
   weapon: "短剑",
   armor: "皮甲",
   accessory: "护符"
 }
+
+scene.equipmentRefs = {
+  weapon: "item_short_sword",
+  armor: "item_light_armor",
+  accessory: "item_charm"
+}
 ```
 
-`weapon`、`armor` 进入对应槽，其它类型默认进入 `accessory` 槽。非消耗品可通过背包按钮或主输入框“装备物品名”“卸下物品名”切换装备状态；同槽位只保留一件装备。
+`weapon`、`armor` 进入对应槽，其它类型默认进入 `accessory` 槽。非消耗品可通过背包按钮或主输入框“装备物品名”“卸下物品名”切换装备状态；同槽位只保留一件装备。运行时以 `equipmentRefs` 的物品 id 为精确引用，`equipment` 只保留名称用于显示和旧存档兼容；旧存档缺少 `equipmentRefs` 时会由 `WorldEngine.normalizeEquipmentState()` 按当前背包与 `equipped` 标记自动修复。
 
 物品效果约定：
 
@@ -389,7 +401,7 @@ scene.evidenceLedger = [
 - 出售、剧情移除和阶段绕过代价会把 `uses` 视为可扣次数；出售多次使用的消耗品按实际售出的次数计价，不能按剩余总次数估价却只扣 1 次。
 - 检定投入的消耗品扣除后会生成 `【资源消耗】检定投入` 系统消息，并写入 `eventLog.resource`，方便右侧局势和通关回顾追溯。
 - 任务奖励和 `[item_add:]` 可只提供名称；系统会根据名称/描述推断常见物品类型和效果，例如治疗药水、补给、零件包、短剑、护甲、地图、钥匙、证据。
-- `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除或直接消耗已装备物品时会同步清理装备槽。
+- `[item_add:]` 和 `[item_remove:]` 由 `WorldEngine.grantInventoryItem()` / `WorldEngine.removeInventoryItem()` 处理；移除或直接消耗已装备物品时会按 id 同步清理装备槽和 `equipmentRefs`。
 - `grantQuestReward()` 会先预检物品奖励是否可放入背包；容量不足且无法合并时不会发放任何奖励，也不会设置 `rewardGranted`。
 - 出售、移除、直接使用、检定投入和计策资源消耗如果真实腾出背包格子，会静默重试已完成但未领取的任务奖励；成功时写入正常任务奖励摘要。
 - 主线奖励未领取时不会进入胜利结局；清理背包触发补领成功后会重新检查通关，避免结局锁死未发奖励。

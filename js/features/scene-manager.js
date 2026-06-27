@@ -74,6 +74,7 @@ const SceneManager = {
                         dmPersona: scene.dmPersona ? JSON.parse(JSON.stringify(scene.dmPersona)) : null,
                         inventory: JSON.parse(JSON.stringify(scene.inventory || [])),
                         equipment: JSON.parse(JSON.stringify(scene.equipment || {})),
+                        equipmentRefs: JSON.parse(JSON.stringify(scene.equipmentRefs || {})),
                         quests: JSON.parse(JSON.stringify(scene.quests || [])),
                         locations: JSON.parse(JSON.stringify(scene.locations || [])),
                         currentLocation: scene.currentLocation || '',
@@ -202,7 +203,7 @@ const SceneManager = {
         if (s.characters) scene.characters = JSON.parse(JSON.stringify(s.characters));
         if (s.lorebookEntries) scene.lorebookEntries = JSON.parse(JSON.stringify(s.lorebookEntries));
         // 完整字段恢复（新快照）
-        ['inventory', 'equipment', 'quests', 'locations', 'playerStats', 'playerPersona',
+        ['inventory', 'equipment', 'equipmentRefs', 'quests', 'locations', 'playerStats', 'playerPersona',
          'dmPersona',
          'strategies', 'intel', 'knowledge', 'discoveries', 'factions', 'conflictSeeds', 'storyArcs',
          'storyPhases', 'clueGraph', 'consequenceLedger', 'eventLog', 'failureStates', 'runRecord', 'runHistory', 'transcriptLog', 'clocks', 'counterStrategies', 'flowGuide',
@@ -210,6 +211,9 @@ const SceneManager = {
          'gameplayProfile', 'storyTexture', 'flowGraph', 'sceneChallenges', 'evidenceLedger', 'companionResources', 'explorationRewardLog', 'pendingExplorationRewards', 'questProgressGuards'].forEach(f => {
             if (s[f] !== undefined) scene[f] = JSON.parse(JSON.stringify(s[f]));
         });
+        if (s.equipment !== undefined && s.equipmentRefs === undefined) {
+            scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
+        }
         ['currentLocation', 'playerHp', 'playerMaxHp', 'gold', 'exp', 'level',
          'attrPoints', 'worldTension', 'turnCount', 'activeStrategyId', 'gameState', 'background', 'userName'].forEach(f => {
             if (s[f] !== undefined) scene[f] = s[f];
