@@ -166,7 +166,7 @@ const IntentRouter = {
             .sort((a, b) => String(b.name).length - String(a.name).length);
         const matched = usable.find(item => normalized.includes(this._normalize(item.name)));
         if (!matched) return null;
-        return { itemId: matched.id || '', itemName: matched.name };
+        return { itemId: '', itemName: matched.name };
     },
 
     matchInventoryEquipment(raw, scene) {
@@ -190,7 +190,7 @@ const IntentRouter = {
         if (!matched) return null;
         return {
             action: wantsUnequip ? 'unequip' : 'equip',
-            itemId: matched.id || '',
+            itemId: '',
             itemName: matched.name
         };
     },
@@ -211,7 +211,7 @@ const IntentRouter = {
         const all = normalized.includes('全部') || normalized.includes('全卖');
         const quantity = quantityMatch && quantityMatch[2] ? Number(quantityMatch[2]) : 1;
         return {
-            itemId: matched.id || '',
+            itemId: '',
             itemName: matched.name,
             quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
             all
