@@ -262,7 +262,7 @@
 
 同一条 AI 回复中，如果状态补丁或标记已经触发胜利/失败，后续标记、自动检定、自动任务推断和自动关系分析都应停止，避免结局消息之后继续改变 NPC 关系或世界状态。
 
-剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。`failureStateUpdate` 更新失败条件时优先使用 `failureId/id`，也可按当前场景唯一标题匹配；重名或模糊不唯一会跳过，不能猜测禁用或触发哪个失败条件。HP 归零由 `WorldEngine.triggerHpGameOver()` 处理，旧的 `GroupChat._triggerGameOver()` 只保留为包装器。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
+剧本级失败由 `scene.failureStates` 描述。状态为 `armed` 的失败条件会被 `WorldEngine.checkFailureStates()` 自动判定；触发后会把 `scene.gameState` 设为 `defeated` 并插入 `gameover` 消息。`failureStateUpdate` 更新失败条件时优先使用 `failureId/id`，也可按当前场景唯一标题匹配；重名或模糊不唯一会跳过，不能猜测禁用或触发哪个失败条件；同一批更新中某条手动触发失败后，后续失败条件更新停止。HP 归零由 `WorldEngine.triggerHpGameOver()` 处理，旧的 `GroupChat._triggerGameOver()` 只保留为包装器。剧本失败、HP 归零和主线通关都会写入 `eventLog`，并触发 `RunRecorder.complete()` 生成回顾。
 
 结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。长对话自动摘要前会先把被压缩的原始消息写入 `scene.transcriptLog`，因此结局回顾不会只剩最近 300 条或摘要文本。阶段回顾会按阶段挑战、证据、主线目标和检定匹配 transcript，保留可展开的关键原文摘录；右侧“局势”面板展示这份冒险回顾时，完整对话默认折叠，阶段原文也默认折叠，供玩家需要时展开复盘。
 

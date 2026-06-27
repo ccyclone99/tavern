@@ -3235,23 +3235,24 @@ const WorldEngine = {
         if (!this.isScenePlaying(scene)) return false;
         const statuses = ['armed', 'triggered', 'disabled'];
         let changed = false;
-        updates.slice(0, 8).forEach(update => {
-            if (!update || typeof update !== 'object') return;
+        for (const update of updates.slice(0, 8)) {
+            if (!this.isScenePlaying(scene)) break;
+            if (!update || typeof update !== 'object') continue;
             const id = update.id ? String(update.id) : '';
             const title = update.title ? String(update.title) : '';
             const resolved = this.resolveFailureStateReference(scene, update, { withStatus: true });
             let failure = resolved.failure;
-            if (resolved.ambiguous) return;
+            if (resolved.ambiguous) continue;
             if (!failure && (id || title)) {
                 failure = this.normalizeFailureState({
                     id: id || undefined,
                     title: title || '失败结局',
                     trigger: update.trigger || { type: 'manual' }
                 }, scene.failureStates.length);
-                if (!failure) return;
+                if (!failure) continue;
                 scene.failureStates.push(failure);
             }
-            if (!failure) return;
+            if (!failure) continue;
             if (update.status !== undefined && statuses.includes(update.status)) failure.status = update.status;
             ['title', 'severity', 'message', 'aftermath', 'hint'].forEach(key => {
                 if (update[key] !== undefined) failure[key] = String(update[key]).slice(0, key === 'message' ? 800 : 500);
@@ -3265,7 +3266,7 @@ const WorldEngine = {
             if (update.status === 'triggered' || update.triggered === true || update.triggerNow === true) {
                 this.triggerFailureState(scene, failure, { type: 'manual', reason: update.reason || 'AI 状态补丁触发' });
             }
-        });
+        }
         return changed;
     },
 
