@@ -64,7 +64,8 @@ const IntentRouter = {
         const textLower = String(text || '').toLowerCase();
         const hasRiskWord = contextualRiskWords.some(w => textLower.includes(w.toLowerCase()));
         const isChallengeAction = !!action?.challengeContext;
-        const isRisky = isChallengeAction || (type !== 'talk' && (
+        const lowRiskFreeform = this._isLowRiskFreeformAction(type, text, { risk, hasRiskWord, isChallengeAction });
+        const isRisky = isChallengeAction || (!lowRiskFreeform && type !== 'talk' && (
             forcePreviewTypes.includes(type) ||
             risk >= 35 ||
             hasRiskWord
@@ -81,6 +82,25 @@ const IntentRouter = {
             reason: isRisky ? (isChallengeAction ? 'challenge_action' : 'risky_action') : `classified_${type}`,
             targetCharacterIds: currentCharacterId ? [currentCharacterId] : []
         };
+    },
+
+    _isLowRiskFreeformAction(type, text, context = {}) {
+        if (context.isChallengeAction || context.hasRiskWord) return false;
+        if (Number(context.risk || 0) >= 55) return false;
+        if (['observe', 'ask'].includes(type)) return true;
+        if (!['investigate', 'use_item'].includes(type)) return false;
+        const normalized = this._normalize(text);
+        const invasiveTerms = [
+            '破解', '撬锁', '开锁', '偷', '偷拿', '拿走', '抢', '潜入', '闯入', '闯',
+            '破坏', '拆掉', '拆开', '删除', '伪造', '黑入', '强行', '威胁', '骗'
+        ].map(item => this._normalize(item));
+        if (invasiveTerms.some(term => term && normalized.includes(term))) return false;
+        const safeTerms = [
+            '查看', '看看', '观察', '检查', '检测', '扫描', '探测', '侦测',
+            '找找', '寻找', '翻找', '调查', '研究', '分析', '核对', '读取', '记录',
+            '拿出', '使用', '用', '问问', '询问', '打听'
+        ].map(item => this._normalize(item));
+        return safeTerms.some(term => term && normalized.includes(term));
     },
 
     isHelp(raw, normalized = this._normalize(raw)) {
