@@ -3713,6 +3713,21 @@ const WorldEngine = {
                 effects: [{ type: 'check_bonus', stat: 'intelligence', actionType: 'use_item', value: 2, consume: true }]
             };
         }
+        if (has('freeform') && has('location', 'mystery', 'observe', 'investigate', 'use_item')) {
+            return {
+                id: `reward_${evidence.id}_note`,
+                name: '现场线索便签',
+                description: '自由探索中整理出的临时记录，可在一次观察或调查检定中投入。',
+                type: 'consumable',
+                quantity: 1,
+                uses: 1,
+                tags: ['线索', '观察', '调查'],
+                effects: [
+                    { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: true },
+                    { type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: true }
+                ]
+            };
+        }
         return null;
     },
 
@@ -7229,6 +7244,11 @@ const WorldEngine = {
         }
 
         if (discoveries.length === 0) return { changed: false, reason: 'no_contextual_outcome' };
+        const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
+            actionType,
+            sourceText,
+            messageId: options.messageId || ''
+        });
         const title = discoveries[0].title || '自由行动收获';
         this.recordEvent(scene, {
             category: actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration',
@@ -7242,7 +7262,71 @@ const WorldEngine = {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries };
+        return { changed: true, discoveries, evidenceIds };
+    },
+
+    _createFreeformEvidence(scene, discoveries = [], options = {}) {
+        if (!scene || !Array.isArray(discoveries) || discoveries.length === 0) return [];
+        const actionType = String(options.actionType || '');
+        if (!['observe', 'investigate', 'use_item'].includes(actionType)) return [];
+        const discovery = discoveries.find(item => this._canCreateFreeformEvidence(item));
+        if (!discovery) return [];
+        const evidenceId = this._freeformEvidenceId(discovery);
+        const tags = [
+            'freeform',
+            actionType,
+            discovery.subjectType,
+            discovery.subjectId,
+            ...(discovery.tags || [])
+        ].map(String).filter(Boolean);
+        const supports = [
+            discovery.subjectId,
+            ...(discovery.tags || []).filter(tag => /^clue_|^rev_|^ch_|^challenge_/i.test(String(tag)))
+        ].map(String).filter(Boolean);
+        const evidence = {
+            id: evidenceId,
+            title: discovery.title || '自由探索发现',
+            text: discovery.text || discovery.title || '玩家通过自由探索取得了可继续利用的发现。',
+            tags,
+            sourceNodeId: scene.currentLocation || '',
+            reliability: discovery.reliability === 'confirmed' || ['evidence', 'inference', 'truth'].includes(discovery.level)
+                ? 'confirmed'
+                : 'partial',
+            visible: true,
+            obtainedBy: `自由行动：${this._shortChoiceText(options.sourceText || discovery.source || '', 80)}`,
+            supports
+        };
+        this.applyEvidenceAdd(scene, [evidence]);
+        this._linkKnowledgeDiscoveryEvidence(scene, discovery.id, evidenceId);
+        return [evidenceId];
+    },
+
+    _canCreateFreeformEvidence(discovery) {
+        if (!discovery || typeof discovery !== 'object') return false;
+        const blockedTypes = new Set(['character', 'item']);
+        const subjectType = String(discovery.subjectType || '').toLowerCase();
+        if (blockedTypes.has(subjectType)) return false;
+        const id = String(discovery.id || '');
+        if (!id || id.includes('_hidden_') || id.includes('_tool_')) return false;
+        return true;
+    },
+
+    _freeformEvidenceId(discovery) {
+        const base = String(discovery?.id || discovery?.title || Date.now())
+            .replace(/^disc_/, '')
+            .replace(/[^A-Za-z0-9_\-\u4e00-\u9fa5]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 80) || `free_${Date.now()}`;
+        return `ev_${base}`.slice(0, 100);
+    },
+
+    _linkKnowledgeDiscoveryEvidence(scene, discoveryId, evidenceId) {
+        if (!scene?.knowledge || !Array.isArray(scene.knowledge.discoveries)) return false;
+        const entry = scene.knowledge.discoveries.find(item => item?.id === discoveryId);
+        if (!entry) return false;
+        entry.evidenceIds = [...new Set([...(entry.evidenceIds || []), evidenceId].map(String).filter(Boolean))].slice(0, 20);
+        entry.updatedAt = Date.now();
+        return true;
     },
 
     _matchFreeformClueStage(scene, text, actionType = '') {
