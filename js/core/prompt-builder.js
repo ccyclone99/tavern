@@ -273,6 +273,12 @@ const PromptBuilder = {
             const lowHpWarn = (typeof scene.playerHp === 'number' && scene.playerHp > 0 && scene.playerHp / scene.playerMaxHp < 0.3) ? '（警告：玩家生命值危急！）' : '';
             parts.push(`【玩家状态】${vitaTxt}${lowHpWarn}`);
         }
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.getPlayerAptitudes) {
+            const aptitudes = WorldEngine.getPlayerAptitudes(scene, { limit: 3 });
+            if (aptitudes.length > 0) {
+                parts.push(`【行动倾向】${aptitudes.map(item => `${item.title}：${item.detail}`).join('；')}这些倾向只影响合理行动的风险预览，不能替代检定或证据。`);
+            }
+        }
 
         // 当前位置 + 地图概览
         if (locs.length > 0) {

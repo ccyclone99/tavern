@@ -427,6 +427,8 @@ scene.equipmentRefs = {
 
 属性点通过玩家详情面板或单输入框命令分配（如“加一点敏捷”“体质+1”）。单项属性当前上限为 20；分配体质时会重算最大生命，最大生命提升会同步提高当前生命。
 
+2 级起，`WorldEngine.getPlayerAptitudes()` 会按最高属性自动派生行动倾向，不需要玩家额外选择。行动倾向会进入 `getPreparationHints()` 和行动预览：当行动类型匹配时，`ActionPlanner` 通过 `getPlayerAptitudeModifier()` 加入风险/DC 修正。倾向只表示玩家擅长的切入方式，不能替代检定、证据、物品消耗或挑战进度。
+
 ### 生命字段
 
 `playerHp` 和 `playerMaxHp` 由规则层维护。AI 标记 `[damage:N|原因]`、`[heal:N|原因]` 会分别调用 `WorldEngine.applyPlayerDamage()` 和 `WorldEngine.applyPlayerHealing()`，写入 survival 事件并刷新顶部状态。生命降到 0 时由 `WorldEngine.triggerHpGameOver()` 触发 HP 归零失败结局和失败回顾记录。

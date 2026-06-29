@@ -218,6 +218,23 @@ ${risks}
         }
 
         if (typeof WorldEngine !== 'undefined') {
+            if (WorldEngine.getPlayerAptitudeModifier) {
+                const aptitude = WorldEngine.getPlayerAptitudeModifier(scene, {
+                    actionType: profile.type,
+                    stat: profile.stat,
+                    intent
+                });
+                if (aptitude) {
+                    modifiers.push({
+                        source: aptitude.source,
+                        label: aptitude.label,
+                        riskDelta: aptitude.riskDelta,
+                        dcDelta: aptitude.dcDelta,
+                        aptitudeId: aptitude.aptitudeId
+                    });
+                }
+            }
+
             const itemEffects = WorldEngine.collectApplicableItemEffects(scene, {
                 actionType: profile.type,
                 stat: profile.stat,

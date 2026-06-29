@@ -2323,6 +2323,130 @@ const WorldEngine = {
         return { ok: true, stat: key, label: statLabels[key], value: scene.playerStats[key], attrPoints: scene.attrPoints };
     },
 
+    getPlayerAptitudes(scene, options = {}) {
+        if (!scene || !scene.playerStats) return [];
+        const level = Math.max(1, Math.floor(Number(scene.level || 1)));
+        const slots = Math.min(3, Math.floor(level / 2));
+        if (slots <= 0) return [];
+        const limit = this._clamp(Number(options.limit || slots), 1, 3);
+        const stats = scene.playerStats || {};
+        const defs = this._playerAptitudeDefinitions();
+        return defs
+            .map((def, idx) => ({
+                ...def,
+                statValue: Number(stats[def.stat] || 10),
+                priority: idx
+            }))
+            .sort((a, b) => b.statValue - a.statValue || a.priority - b.priority)
+            .slice(0, Math.min(limit, slots))
+            .map(({ priority, ...item }) => item);
+    },
+
+    getPlayerAptitudeModifier(scene, context = {}) {
+        const actionType = String(context.actionType || context.type || '').trim();
+        if (!actionType) return null;
+        const aptitudes = this.getPlayerAptitudes(scene, { limit: 3 });
+        const matched = aptitudes.find(apt => this._aptitudeMatchesAction(apt, context));
+        if (!matched) return null;
+        return {
+            source: `行动倾向：${matched.title}`,
+            label: `风险 ${matched.riskDelta >= 0 ? '+' : ''}${matched.riskDelta}，DC ${matched.dcDelta >= 0 ? '+' : ''}${matched.dcDelta}`,
+            riskDelta: matched.riskDelta,
+            dcDelta: matched.dcDelta,
+            aptitudeId: matched.id,
+            stat: matched.stat,
+            actionTypes: matched.actionTypes.slice()
+        };
+    },
+
+    _aptitudeMatchesAction(aptitude, context = {}) {
+        const actionType = String(context.actionType || context.type || '').trim();
+        if (!aptitude || !actionType) return false;
+        if ((aptitude.actionTypes || []).includes(actionType)) return true;
+        const stat = String(context.stat || context.key || '').trim();
+        if (stat && stat === aptitude.stat && ['investigate', 'observe', 'probe', 'persuade', 'sneak', 'force', 'combat', 'use_item'].includes(actionType)) {
+            return true;
+        }
+        const intent = this._normalizeQuestText(context.intent || '');
+        if (!intent) return false;
+        const aliases = (aptitude.actionTypes || [])
+            .flatMap(type => this._actionTypeMatchTerms(type))
+            .map(item => this._normalizeQuestText(item))
+            .filter(Boolean);
+        return aliases.some(alias => intent.includes(alias));
+    },
+
+    _playerAptitudeDefinitions() {
+        return [
+            {
+                id: 'breakthrough',
+                title: '正面突破',
+                stat: 'strength',
+                statName: '力量',
+                actionTypes: ['force', 'combat'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '强行突破、近身冲突和压制行动更稳。',
+                command: '尝试强行突破障碍'
+            },
+            {
+                id: 'quick_hands',
+                title: '灵巧手段',
+                stat: 'dexterity',
+                statName: '敏捷',
+                actionTypes: ['sneak', 'use_item'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '潜入、开锁、绕行和精细操作更稳。',
+                command: '规划潜入或开锁路线'
+            },
+            {
+                id: 'survival_grit',
+                title: '坚韧生存',
+                stat: 'constitution',
+                statName: '体质',
+                actionTypes: ['force', 'combat', 'rest'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '承受环境压力、硬扛风险和恢复行动更稳。',
+                command: '评估能否承受这段风险'
+            },
+            {
+                id: 'technical_inquiry',
+                title: '技术调查',
+                stat: 'intelligence',
+                statName: '智力',
+                actionTypes: ['investigate', 'use_item'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '调查、破解、修复和设备操作更稳。',
+                command: '分析当前线索或设备'
+            },
+            {
+                id: 'sharp_instinct',
+                title: '敏锐直觉',
+                stat: 'wisdom',
+                statName: '感知',
+                actionTypes: ['observe', 'probe', 'investigate'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '观察异常、读反应和追踪细节更稳。',
+                command: '观察当前异常和人物反应'
+            },
+            {
+                id: 'social_hand',
+                title: '社交手腕',
+                stat: 'charisma',
+                statName: '魅力',
+                actionTypes: ['persuade', 'ask', 'trade', 'probe', 'lie'],
+                riskDelta: -6,
+                dcDelta: -1,
+                detail: '说服、询问、交易和试探更稳。',
+                command: '找人谈谈并争取支持'
+            }
+        ];
+    },
+
     resolveClockReference(scene, ref = {}, options = {}) {
         const clocks = Array.isArray(scene?.clocks) ? scene.clocks.filter(Boolean) : [];
         const result = { clock: null, ambiguous: false };
@@ -6730,6 +6854,18 @@ const WorldEngine = {
                 command: `加一点${statSuggestion.label}`,
                 label: `${statSuggestion.label}+1`,
                 priority: 100
+            });
+        }
+
+        const aptitude = this.getPlayerAptitudes(scene, { limit: 1 })[0];
+        if (aptitude) {
+            add({
+                kind: 'aptitude',
+                title: `行动倾向：${aptitude.title}`,
+                detail: `${aptitude.detail} 匹配行动预览时：风险 ${aptitude.riskDelta}，DC ${aptitude.dcDelta}。`,
+                command: aptitude.command,
+                label: aptitude.title,
+                priority: 64
             });
         }
 
