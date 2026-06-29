@@ -24,6 +24,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.evidenceLedger)) scene.evidenceLedger = [];
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
+        if (!Array.isArray(scene.socialActionLog)) scene.socialActionLog = [];
         if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         if (!Array.isArray(scene.inventory)) scene.inventory = [];
@@ -72,6 +73,7 @@ const WorldEngine = {
             .filter(Boolean)
             .slice(0, 24);
         scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
+        scene.socialActionLog = scene.socialActionLog.map(String).filter(Boolean).slice(-200);
         scene.pendingExplorationRewards = scene.pendingExplorationRewards
             .map((reward, idx) => this.normalizePendingExplorationReward(reward, idx))
             .filter(Boolean)
@@ -558,7 +560,7 @@ const WorldEngine = {
         if (!data || typeof data !== 'object') return null;
         const validCategories = [
             'system', 'check', 'quest', 'inventory', 'resource', 'exploration',
-            'challenge', 'progress', 'survival', 'economy', 'level', 'movement', 'failure', 'victory'
+            'social', 'challenge', 'progress', 'survival', 'economy', 'level', 'movement', 'failure', 'victory'
         ];
         const category = validCategories.includes(data.category) ? data.category : this._eventCategoryFromText(data.title || data.text || '');
         return {
@@ -5160,6 +5162,7 @@ const WorldEngine = {
         if (/检定|D20|掷骰/.test(clean)) return 'check';
         if (/任务|主线|支线/.test(clean)) return 'quest';
         if (/挑战|阶段推进|里程碑/.test(clean)) return 'challenge';
+        if (/社交|关系|好感|信任|警觉/.test(clean)) return 'social';
         if (/线索|证据|探索收获|知识/.test(clean)) return 'exploration';
         if (/购买|交易|金币|花费/.test(clean)) return 'economy';
         if (/物品|背包|使用物品|获得 .+包|获得 .+药|装备|卸下/.test(clean)) return 'inventory';
@@ -5172,7 +5175,7 @@ const WorldEngine = {
         return 'system';
     },
 
-    addSystemMessage(scene, content, type = 'system') {
+    addSystemMessage(scene, content, type = 'system', options = {}) {
         if (!scene || !content) return null;
         const msg = {
             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -5183,13 +5186,15 @@ const WorldEngine = {
             timestamp: Date.now()
         };
         scene.messages.push(msg);
-        this.recordEvent(scene, {
-            category: this._eventCategoryFromText(content),
-            title: this._eventTitleFromText(content),
-            text: String(content),
-            messageId: msg.id,
-            timestamp: msg.timestamp
-        });
+        if (options.record !== false) {
+            this.recordEvent(scene, {
+                category: this._eventCategoryFromText(content),
+                title: this._eventTitleFromText(content),
+                text: String(content),
+                messageId: msg.id,
+                timestamp: msg.timestamp
+            });
+        }
         if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
         return msg;
     },
@@ -7371,7 +7376,10 @@ const WorldEngine = {
             });
         }
 
-        if (discoveries.length === 0) return { changed: false, reason: 'no_contextual_outcome' };
+        const socialOutcome = this._applyFreeformSocialOutcome(scene, this._focusCharacterForFreeform(scene), sourceText, actionType, {
+            messageId: options.messageId || ''
+        });
+        if (discoveries.length === 0 && !socialOutcome) return { changed: false, reason: 'no_contextual_outcome' };
         const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
             actionType,
             sourceText,
@@ -7390,7 +7398,113 @@ const WorldEngine = {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries, evidenceIds };
+        return { changed: true, discoveries, evidenceIds, socialOutcome };
+    },
+
+    _applyFreeformSocialOutcome(scene, character, text = '', actionType = '', options = {}) {
+        if (!scene || !character || !['ask', 'probe'].includes(actionType)) return null;
+        const normalized = this._normalizeFlowText(text).slice(0, 90) || actionType;
+        if (!Array.isArray(scene.socialActionLog)) scene.socialActionLog = [];
+        const key = `social:${character.id}:${actionType}:${normalized}`;
+        if (scene.socialActionLog.includes(key)) return null;
+        const relationInfo = this._getCompanionRelation(scene, character.id, true);
+        const relation = relationInfo?.relation;
+        if (!relation) return null;
+
+        const deltas = this._freeformSocialDeltas(text, actionType);
+        if (!deltas.affectionDelta && !deltas.trustDelta && !deltas.suspicionDelta) return null;
+        scene.socialActionLog.push(key);
+        scene.socialActionLog = scene.socialActionLog.slice(-200);
+
+        relation.affection = this._clamp(Number(relation.affection || 0) + deltas.affectionDelta, -100, 100);
+        relation.trust = this._clamp(Number(relation.trust || 0) + deltas.trustDelta, -100, 100);
+        relation.suspicion = this._clamp(Number(relation.suspicion || 0) + deltas.suspicionDelta, -100, 100);
+        relation.mood = deltas.mood || relation.mood || '平静';
+        if (!Array.isArray(relation.history)) relation.history = [];
+        relation.history.push({
+            timestamp: Date.now(),
+            delta: deltas.affectionDelta,
+            affectionDelta: deltas.affectionDelta,
+            trustDelta: deltas.trustDelta,
+            suspicionDelta: deltas.suspicionDelta,
+            mood: relation.mood,
+            reason: deltas.reason,
+            source: 'freeform_social'
+        });
+        relation.history = relation.history.slice(-80);
+
+        const changes = [
+            deltas.affectionDelta ? `好感 ${this._formatSigned(deltas.affectionDelta)}` : '',
+            deltas.trustDelta ? `信任 ${this._formatSigned(deltas.trustDelta)}` : '',
+            deltas.suspicionDelta ? `警觉 ${this._formatSigned(deltas.suspicionDelta)}` : ''
+        ].filter(Boolean);
+        this.recordEvent(scene, {
+            category: 'social',
+            title: '社交推进',
+            text: `${character.name || '角色'}：${changes.join('，')}（${deltas.reason}）`,
+            messageId: options.messageId || '',
+            refId: character.id,
+            turn: scene.turnCount || 0
+        });
+        this.addSystemMessage(scene, `【社交推进：${character.name || '角色'}】${changes.join('，')}。${deltas.reason}。可在角色详情查看关系变化。`, 'system', { record: false });
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderDetail?.();
+            SidebarRight.markTabNew?.('detail');
+            SidebarRight.markTabNew?.('situation');
+        }
+        if (relationInfo.character && typeof Storage !== 'undefined' && Storage.saveCharacter) {
+            Storage.saveCharacter(relationInfo.character).catch(e => console.warn('保存自由社交关系失败:', e));
+        }
+        if (typeof State !== 'undefined' && State.emit) State.emit('charactersChanged', State.characters);
+        return {
+            characterId: character.id,
+            characterName: character.name || '',
+            ...deltas,
+            key
+        };
+    },
+
+    _freeformSocialDeltas(text = '', actionType = '') {
+        const source = this._normalizeQuestText(text);
+        const has = terms => terms.some(term => source.includes(this._normalizeQuestText(term)));
+        const positive = has(['谢谢', '感谢', '请', '请教', '诚恳', '道歉', '解释', '尊重', '倾听', '帮忙', '合作', '分享']);
+        const intrusive = has(['试探', '套话', '旁敲侧击', '隐瞒', '逼问', '质问', '怀疑', '套出']);
+        const hostile = has(['威胁', '恐吓', '滚', '蠢', '闭嘴', '命令', '逼']);
+        let affectionDelta = 0;
+        let trustDelta = 0;
+        let suspicionDelta = 0;
+        let mood = '平静';
+        let reason = '一次非主线互动被记录下来';
+
+        if (actionType === 'ask') {
+            trustDelta += 1;
+            reason = '主动询问让对方更愿意交换信息';
+            if (positive) {
+                affectionDelta += 1;
+                mood = '缓和';
+                reason = '语气克制，交流气氛略有缓和';
+            }
+        } else if (actionType === 'probe') {
+            suspicionDelta += 1;
+            mood = '警觉';
+            reason = '试探让对方意识到你在寻找更多信息';
+            if (positive) {
+                trustDelta += 1;
+                reason = '谨慎试探带来一点信息交换，也提高了对方警觉';
+            }
+        }
+        if (intrusive) {
+            suspicionDelta += 1;
+            mood = '警觉';
+            reason = '带有套话意味的互动提高了对方警觉';
+        }
+        if (hostile) {
+            affectionDelta -= 1;
+            suspicionDelta += 2;
+            mood = '戒备';
+            reason = '带有压迫感的措辞让关系承受压力';
+        }
+        return { affectionDelta, trustDelta, suspicionDelta, mood, reason };
     },
 
     _createFreeformEvidence(scene, discoveries = [], options = {}) {

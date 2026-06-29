@@ -929,6 +929,7 @@ const ChatUI = {
         };
 
         scene.messages.push(msg);
+        this.onMessageAdded(msg);
         if (!isOoc && !isStrategy && typeof WorldEngine !== 'undefined' && WorldEngine.markFlowMoveCompleted) {
             WorldEngine.markFlowMoveCompleted(scene, text);
         }
@@ -938,7 +939,6 @@ const ChatUI = {
                 msg.intentMeta.freeformOutcomeIds = (outcome.discoveries || []).map(item => item.id).filter(Boolean).slice(0, 6);
             }
         }
-        this.onMessageAdded(msg);
         await State.saveCurrentSceneDebounced();
         this.inputEl.value = '';
         this.inputEl.style.height = 'auto';

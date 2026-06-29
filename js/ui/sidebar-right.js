@@ -618,6 +618,7 @@ const SidebarRight = {
             inventory: '物品',
             resource: '资源',
             exploration: '探索',
+            social: '社交',
             challenge: '挑战',
             progress: '进展',
             survival: '生存',
