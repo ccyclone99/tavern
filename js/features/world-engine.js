@@ -740,6 +740,7 @@ const WorldEngine = {
             message: String(data.message || '').slice(0, 800),
             aftermath: String(data.aftermath || '').slice(0, 500),
             hint: String(data.hint || '').slice(0, 260),
+            counterplay: Array.isArray(data.counterplay) ? data.counterplay.map(String).filter(Boolean).slice(0, 6) : [],
             recoverable: data.recoverable !== false,
             triggeredAt: typeof data.triggeredAt === 'number' ? data.triggeredAt : null,
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now()
@@ -3418,6 +3419,7 @@ const WorldEngine = {
             ['title', 'severity', 'message', 'aftermath', 'hint'].forEach(key => {
                 if (update[key] !== undefined) failure[key] = String(update[key]).slice(0, key === 'message' ? 800 : 500);
             });
+            if (Array.isArray(update.counterplay)) failure.counterplay = update.counterplay.map(String).filter(Boolean).slice(0, 6);
             if (update.recoverable !== undefined) failure.recoverable = update.recoverable !== false;
             if (update.trigger && typeof update.trigger === 'object') {
                 failure.trigger = this.normalizeFailureState({ ...failure, trigger: update.trigger }, 0).trigger;
@@ -7564,7 +7566,9 @@ const WorldEngine = {
         const itemActions = this._buildItemActionSuggestions(scene, data.itemActionLeads);
         this._buildFreedomActions(scene, data).slice(0, optionalActions.length > 0 ? 5 : 6).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
-        if (failureWarning) add(`处理失败风险：${failureWarning.title}`);
+        if (failureWarning) {
+            (failureWarning.actions?.length ? failureWarning.actions.slice(0, 2) : [failureWarning.action || `处理失败风险：${failureWarning.title}`]).forEach(add);
+        }
         optionalActions.slice(0, 2).forEach(add);
         itemActions.slice(0, 2).forEach(add);
         const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
@@ -8379,29 +8383,209 @@ const WorldEngine = {
         const failures = Array.isArray(scene?.failureStates) ? scene.failureStates : [];
         return failures
             .filter(f => f && f.status === 'armed')
-            .map(f => {
-                const trigger = f.trigger || {};
-                if (trigger.type !== 'clock') return null;
-                const clock = (scene.clocks || []).find(c =>
-                    (trigger.clockId && c.id === trigger.clockId) ||
-                    (trigger.clockTag && c.tag === trigger.clockTag)
-                );
-                if (!clock || clock.visibility === 'hidden') return null;
-                const ratio = Number(clock.value || 0) / Math.max(1, Number(clock.max || 1));
-                if (ratio < 0.5) return null;
-                return {
-                    id: f.id,
-                    title: f.title,
-                    severity: f.severity,
-                    text: f.hint || `${clock.name} 满格会导致失败结局。`,
-                    clockName: clock.name,
-                    value: clock.value,
-                    max: clock.max
-                };
-            })
+            .map(f => this._buildFailureWarning(scene, f))
             .filter(Boolean)
-            .sort((a, b) => (b.value / Math.max(1, b.max)) - (a.value / Math.max(1, a.max)))
+            .sort((a, b) => b.urgency - a.urgency)
             .slice(0, 3);
+    },
+
+    _buildFailureWarning(scene, failure) {
+        const trigger = failure?.trigger || {};
+        const type = String(trigger.type || 'manual');
+        if (type === 'clock') {
+            const clock = (scene.clocks || []).find(c =>
+                (trigger.clockId && c.id === trigger.clockId) ||
+                (trigger.clockTag && c.tag === trigger.clockTag)
+            );
+            if (!clock || clock.visibility === 'hidden') return null;
+            const target = trigger.at === 'max' || trigger.at === undefined
+                ? Number(clock.max || 1)
+                : Number(trigger.at || clock.max || 1);
+            const value = Number(clock.value || 0);
+            const ratio = value / Math.max(1, target);
+            if (ratio < 0.5) return null;
+            const actions = this._failureMitigationActions(scene, failure, { type, clock }).slice(0, 3);
+            return this._formatFailureWarning(failure, {
+                triggerType: type,
+                text: failure.hint || `${clock.name} 接近临界，继续拖延会导致失败结局。`,
+                sourceName: clock.name,
+                value,
+                max: target,
+                urgency: ratio,
+                actions
+            });
+        }
+        if (type === 'counter') {
+            const counter = (scene.counterStrategies || []).find(c =>
+                c && c.status !== 'resolved' &&
+                (!trigger.counterId || c.id === trigger.counterId)
+            );
+            if (!counter || counter.visibility === 'hidden') return null;
+            const target = trigger.at === 'max' || trigger.at === undefined ? 100 : Number(trigger.at || 100);
+            const value = Number(counter.progress || 0);
+            const ratio = value / Math.max(1, target);
+            if (ratio < 0.5) return null;
+            const actions = this._failureMitigationActions(scene, failure, { type, counter }).slice(0, 3);
+            return this._formatFailureWarning(failure, {
+                triggerType: type,
+                text: failure.hint || counter.hint || `${counter.title} 接近失控。`,
+                sourceName: counter.title,
+                value,
+                max: target,
+                urgency: ratio,
+                actions
+            });
+        }
+        if (type === 'worldTension') {
+            const target = Number(trigger.at || 100);
+            const value = Number(scene.worldTension || 0);
+            const ratio = value / Math.max(1, target);
+            if (ratio < 0.5) return null;
+            const actions = this._failureMitigationActions(scene, failure, { type }).slice(0, 3);
+            return this._formatFailureWarning(failure, {
+                triggerType: type,
+                text: failure.hint || '世界紧张度接近失控，继续升级会导致失败结局。',
+                sourceName: '世界紧张度',
+                value,
+                max: target,
+                urgency: ratio,
+                actions
+            });
+        }
+        if (type === 'quest') {
+            const quest = (scene.quests || []).find(q => !trigger.questId || q.id === trigger.questId);
+            if (!quest || !failure.hint) return null;
+            const actions = this._failureMitigationActions(scene, failure, { type, quest }).slice(0, 3);
+            return this._formatFailureWarning(failure, {
+                triggerType: type,
+                text: failure.hint,
+                sourceName: quest.name || '任务',
+                value: quest.status === trigger.status ? 1 : 0.5,
+                max: 1,
+                urgency: quest.status === trigger.status ? 1 : 0.55,
+                actions
+            });
+        }
+        return null;
+    },
+
+    _formatFailureWarning(failure, data = {}) {
+        const actions = (data.actions || []).map(String).filter(Boolean);
+        return {
+            id: failure.id,
+            title: failure.title,
+            severity: failure.severity,
+            triggerType: data.triggerType || '',
+            text: data.text || failure.hint || '失败风险正在上升。',
+            sourceName: data.sourceName || '',
+            clockName: data.triggerType === 'clock' ? data.sourceName || '' : '',
+            value: data.value,
+            max: data.max,
+            urgency: Number(data.urgency || 0),
+            actions,
+            action: actions[0] || `处理失败风险：${failure.title}`
+        };
+    },
+
+    _failureMitigationActions(scene, failure, source = {}) {
+        const actions = [];
+        const add = action => {
+            const text = String(action || '').trim();
+            if (text && !actions.includes(text)) actions.push(text);
+        };
+        (failure.counterplay || []).forEach(add);
+
+        const sourceText = [
+            failure.id,
+            failure.title,
+            failure.hint,
+            failure.aftermath,
+            source.clock?.id,
+            source.clock?.name,
+            source.clock?.tag,
+            source.counter?.id,
+            source.counter?.title,
+            source.counter?.target
+        ].map(item => this._normalizeQuestText(item || '')).filter(Boolean).join(' ');
+
+        if (source.counter) {
+            (source.counter.counterplay || []).forEach(add);
+            if (!actions.length) add(`调查反制：${source.counter.title}`);
+        }
+
+        (scene.counterStrategies || [])
+            .filter(counter => counter && counter.status !== 'resolved' && counter.visibility !== 'hidden')
+            .map(counter => ({
+                counter,
+                score: this._counterFailureMatchScore(counter, sourceText)
+            }))
+            .filter(entry => entry.score > 0)
+            .sort((a, b) => b.score - a.score || Number(b.counter.progress || 0) - Number(a.counter.progress || 0))
+            .slice(0, 2)
+            .forEach(entry => {
+                (entry.counter.counterplay || []).slice(0, 2).forEach(add);
+                if (!entry.counter.counterplay?.length) add(`调查反制：${entry.counter.title}`);
+            });
+
+        const challenge = this.getActiveChallenge(scene);
+        if (challenge) {
+            const challengeTags = [
+                challenge.id,
+                challenge.title,
+                challenge.goal,
+                ...(challenge.tags || [])
+            ].map(item => this._normalizeQuestText(item || '')).filter(Boolean);
+            const matched = challengeTags.some(tag => tag && sourceText.includes(tag));
+            if (matched) {
+                this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(approach => add(approach.label));
+            }
+        }
+
+        const clock = source.clock || null;
+        const clockText = `${clock?.name || ''} ${clock?.tag || ''} ${failure.title || ''} ${failure.hint || ''}`;
+        if (source.type === 'worldTension') {
+            add('先处理公开危机，降低世界紧张度');
+            add('休整并谈判降温，避免局势继续升级');
+            return actions.slice(0, 5);
+        }
+        if (/配给|物资|饥饿|补给|ration|supply/i.test(clockText)) {
+            add(clock?.name ? `寻找或交换补给，降低${clock.name}` : '寻找或交换补给，稳定物资风险');
+        }
+        if (/恐慌|隔离|怀疑|清洗|panic|suspicion/i.test(clockText)) {
+            add(clock?.name ? `公开可信证据，压低${clock.name}` : '公开可信证据，压低恐慌和怀疑');
+        }
+        if (/风暴|路线|storm|route/i.test(clockText)) {
+            add(clock?.name ? `优先完成路线探索，抢在${clock.name}前行动` : '优先完成路线探索，抢在风险满格前行动');
+        }
+        if (/腐化|遗物|亚空间|污染|灵气|失控|relic|warp|corruption/i.test(clockText)) {
+            add(clock?.name ? `隔离或封印异常源，降低${clock.name}` : '隔离或封印异常源');
+        }
+        if (source.quest) {
+            const objective = (source.quest.objectives || []).find(obj => !obj.completed);
+            add(objective?.text ? `稳住任务「${source.quest.name}」：${objective.text}` : `稳住任务「${source.quest.name}」`);
+        }
+        if (!actions.length && clock?.name) add(`降低${clock.name}：调查成因或投入资源`);
+        if (!actions.length) add(`处理失败风险：${failure.title}`);
+        return actions.slice(0, 5);
+    },
+
+    _counterFailureMatchScore(counter, sourceText = '') {
+        if (!counter || !sourceText) return 0;
+        const fields = [
+            counter.id,
+            counter.title,
+            counter.actorName,
+            counter.target,
+            counter.hint,
+            ...(counter.counterplay || [])
+        ].map(item => this._normalizeQuestText(item || '')).filter(Boolean);
+        let score = 0;
+        fields.forEach(field => {
+            if (!field) return;
+            if (sourceText.includes(field) || field.includes(sourceText)) score += 4;
+            else if (field.length >= 3 && sourceText.includes(field.slice(0, Math.min(8, field.length)))) score += 2;
+        });
+        return score;
     },
 
     _buildFlowActions(scene) {
@@ -8468,7 +8652,9 @@ const WorldEngine = {
         const failureWarnings = this.getFailureWarnings(scene);
         this.refreshFlowNodeAvailability(scene);
         const flowNodes = this.getVisibleFlowNodes(scene);
-        return { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes };
+        const optionalQuests = this.getOptionalQuestLeads(scene, { limit: 4 });
+        const itemActionLeads = this.getItemActionLeads(scene, { activeChallenge, limit: 4 });
+        return { activeQuest, optionalQuests, itemActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes };
     },
 
     _normalizeFlowText(text) {

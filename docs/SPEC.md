@@ -575,6 +575,7 @@ UI 要求：
 - `scene.gameState` 进入 `victorious` 或 `defeated` 后，输入框、地图、背包、交易、休息、属性点、玩家人物卡、世界书编辑、任务手动操作、行动预览、检定卡、消息删除/重新生成和计策创建/更新/放弃不得再改变世界状态；结束后只允许 OOC、帮助和回顾。旧存档或读档中残留的 `pendingAction/pendingCheck` 必须在归一化时清空，输入区也不能再显示执行、取消、投入资源或掷骰引导；右侧局势里的推荐行动、挑战方法和准备项只能以只读回顾标签展示，地图节点不能绑定移动事件，世界书新增/AI 生成按钮必须禁用。
 - 结局锁必须同时存在于 UI/输入入口和规则层：`StrategyManager.applyStateUpdate()` 先拦截，`WorldEngine.apply*Update()` 在非 `playing` 场景也必须 no-op，防止外部 agent 或未来 UI 误调用继续推进世界状态。
 - 同一批 `failureStateUpdate` 中，如果某条更新手动触发 `defeated`，后续失败条件更新必须停止，不能在失败结局后继续禁用、改写或新增失败条件。
+- 可见失败风险必须给玩家可执行的缓解方向：`WorldEngine.getFailureWarnings()` 应从失败状态 `counterplay`、可见反制、公开时钟、当前挑战或世界紧张度中派生推荐行动；隐藏失败来源不能泄露标题、满格条件或私密真相。
 - 日志条目只保存摘要和引用，不复制完整聊天文本。
 - 地图移动统一走 `WorldEngine.moveToLocation()`；UI、输入路由和 `[move:]` 标记不能直接改写 `scene.currentLocation`，必须复用相邻地点校验、结局锁、移动消息和 `eventLog.movement`。按地点名移动必须先由 `WorldEngine.resolveLocationReference()` 唯一解析，重名或模糊不唯一时提示/跳过，不能默认移动到第一个同名地点。
 - `factionsUpdate` 和 `locationUpdate` 必须委托 `WorldEngine.applyFactionUpdates()` / `applyLocationUpdates()`，同时有单条补丁上限与场景总量上限；势力最多 40 个，地点最多 80 个，新增/更新字段和列表必须截断、去重并写入事件日志。
