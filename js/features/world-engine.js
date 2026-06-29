@@ -7022,12 +7022,13 @@ const WorldEngine = {
         const revelations = this.getVisibleRevelations(scene);
         this.refreshFlowNodeAvailability(scene);
         const flowNodes = this.getVisibleFlowNodes(scene);
+        const itemActionLeads = this.getItemActionLeads(scene, { activeChallenge, limit: 4 });
         const storyTexture = scene.storyTexture || null;
         const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
         const optionalQuests = this.getOptionalQuestLeads(scene, { limit: 4 });
-        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
+        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, itemActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, optionalQuests, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
+        return { location, activeQuest, optionalQuests, itemActionLeads, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
     },
 
     buildSoftMove(scene, options = {}) {
@@ -7054,6 +7055,7 @@ const WorldEngine = {
         };
         this._buildFreedomActions(scene, situation).slice(0, 6).forEach(addAction);
         (situation.optionalQuests || []).slice(0, 2).forEach(lead => addAction(lead.action));
+        (situation.itemActionLeads || []).slice(0, 2).forEach(lead => addAction(lead.action));
         if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         if (challenge) {
             this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
@@ -7236,6 +7238,186 @@ const WorldEngine = {
         return `支线可选：${questName} - ${objectiveText}`;
     },
 
+    getItemActionLeads(scene, options = {}) {
+        if (!scene || !Array.isArray(scene.inventory)) return [];
+        const limit = this._clamp(Number(options.limit || 4), 1, 8);
+        const activeChallenge = options.activeChallenge || this.getActiveChallenge(scene);
+        const leads = [];
+        scene.inventory.forEach((item, itemIndex) => {
+            if (!item?.name || !this._itemHasRemainingUse(item)) return;
+            if (!this._itemCanUnlockAction(item)) return;
+            const challengeLead = this._itemActionLeadForChallenge(scene, item, activeChallenge);
+            const fallbackLead = this._fallbackItemActionLead(scene, item);
+            const lead = challengeLead || fallbackLead;
+            if (!lead?.action) return;
+            leads.push({
+                itemId: String(item.id || item.name || `item_${itemIndex}`).slice(0, 120),
+                itemName: String(item.name || '物品').slice(0, 80),
+                itemType: String(item.type || 'misc').slice(0, 40),
+                actionType: String(lead.actionType || '').slice(0, 40),
+                action: String(lead.action || '').slice(0, 120),
+                detail: String(lead.detail || '').slice(0, 160),
+                challengeId: String(lead.challengeId || '').slice(0, 120),
+                approachId: String(lead.approachId || '').slice(0, 120),
+                score: Number(lead.score || 0),
+                consume: item.type === 'consumable' || (item.effects || []).some(effect => effect?.consume === true),
+                equipped: item.equipped === true || item.type === 'quest'
+            });
+        });
+        return leads
+            .sort((a, b) => b.score - a.score || a.itemName.localeCompare(b.itemName, 'zh-CN'))
+            .slice(0, limit);
+    },
+
+    _itemCanUnlockAction(item) {
+        if (!item || item.type === 'armor') return false;
+        const consumable = item.type === 'consumable';
+        const ready = item.equipped === true || item.type === 'quest' || consumable;
+        if (!ready) return false;
+        const tags = (item.tags || []).join(' ');
+        const text = `${item.name || ''} ${item.description || ''} ${tags}`;
+        const hasUsefulEffect = (item.effects || []).some(effect =>
+            ['check_bonus', 'dc_delta', 'risk_delta', 'clock_delta', 'clock_resist'].includes(effect?.type) ||
+            ['observe', 'investigate', 'use_item', 'sneak', 'lie', 'persuade', 'probe', 'force', 'combat'].includes(String(effect?.actionType || ''))
+        );
+        return hasUsefulEffect || /扫描|探测|观察|调查|线索|记录|地图|路线|修复|维修|工具|开锁|伪装|追踪|封印|净化|医疗|样本|终端|控制台/.test(text);
+    },
+
+    _itemActionLeadForChallenge(scene, item, challenge) {
+        if (!challenge || this._isTerminalProgressStatus(challenge.status)) return null;
+        const approaches = this.getChallengeVisibleApproaches(challenge);
+        const ranked = approaches
+            .map(approach => ({
+                approach,
+                score: this._scoreItemForApproach(item, approach)
+            }))
+            .filter(entry => entry.score > 0)
+            .sort((a, b) => b.score - a.score);
+        if (ranked.length === 0) return null;
+        const { approach, score } = ranked[0];
+        return {
+            actionType: approach.actionType || '',
+            action: this._formatItemApproachAction(item, approach),
+            detail: `${item.name} 与当前挑战「${challenge.title || challenge.goal || '挑战'}」相关。`,
+            challengeId: challenge.id || '',
+            approachId: approach.id || '',
+            score: 70 + score + (item.equipped === true || item.type === 'quest' ? 8 : 0)
+        };
+    },
+
+    _scoreItemForApproach(item, approach) {
+        if (!item || !approach) return 0;
+        const norm = value => this._normalizeQuestText(value || '');
+        const itemTokens = this._itemActionTokens(item).map(norm).filter(token => token.length >= 2);
+        const itemTokenSet = new Set(itemTokens);
+        const approachTokens = [
+            approach.actionType,
+            approach.stat,
+            approach.label,
+            ...(approach.tags || []),
+            ...(approach.keywords || [])
+        ].map(norm).filter(token => token.length >= 2);
+        let score = 0;
+        const effectActionTypes = (item.effects || []).map(effect => String(effect?.actionType || '')).filter(Boolean);
+        if (approach.actionType && effectActionTypes.includes(approach.actionType)) score += 12;
+        approachTokens.forEach(token => {
+            if (itemTokenSet.has(token)) score += 5;
+            else if (itemTokens.some(itemToken => itemToken.includes(token) || token.includes(itemToken))) score += 2;
+        });
+        const aliases = this._actionTypeMatchTerms(approach.actionType || '').map(norm).filter(Boolean);
+        if (aliases.some(alias => itemTokens.some(token => token.includes(alias) || alias.includes(token)))) score += 4;
+        return Math.min(24, score);
+    },
+
+    _itemActionTokens(item) {
+        const effects = Array.isArray(item?.effects) ? item.effects : [];
+        return [
+            item?.name,
+            item?.description,
+            item?.type,
+            ...(item?.tags || []),
+            ...effects.flatMap(effect => [
+                effect?.type,
+                effect?.actionType,
+                effect?.stat,
+                effect?.when,
+                effect?.tag
+            ])
+        ].map(value => String(value || '').trim()).filter(Boolean);
+    },
+
+    _formatItemApproachAction(item, approach) {
+        const rawLabel = String(approach?.label || '处理当前挑战').trim();
+        const label = rawLabel.replace(/^(用|使用|投入|借助|利用|协助|尝试|进行|完成)/, '') || rawLabel;
+        if (String(item?.type || '') === 'consumable') {
+            return `投入${item.name}${label}`;
+        }
+        return `用${item.name}${label}`;
+    },
+
+    _fallbackItemActionLead(scene, item) {
+        const actionType = this._primaryItemActionType(item);
+        if (!actionType) return null;
+        const loc = (scene?.locations || []).find(location => location.id === scene.currentLocation) || null;
+        const place = loc?.name || '当前地点';
+        const itemText = `${item.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`;
+        let action = '';
+        let score = 42;
+        if (actionType === 'observe') {
+            action = /扫描|探测|检测/.test(itemText)
+                ? `用${item.name}扫描${place}的异常读数`
+                : `用${item.name}观察${place}里被忽略的细节`;
+        } else if (actionType === 'investigate') {
+            action = /记录|册|笔记|档案/.test(itemText)
+                ? `用${item.name}整理已知线索和矛盾点`
+                : `用${item.name}排查${place}的关键疑点`;
+        } else if (actionType === 'use_item') {
+            if (/封印|净化/.test(itemText)) action = `用${item.name}准备封印或净化异常`;
+            else if (/医疗|样本|血清|治疗/.test(itemText)) action = `用${item.name}检查伤势、污染或样本风险`;
+            else action = `用${item.name}修复或调试${place}里的设备`;
+            score += 2;
+        } else if (actionType === 'sneak') {
+            action = /开锁|撬具|工具/.test(itemText)
+                ? `用${item.name}开锁或绕过${place}的障碍`
+                : `用${item.name}规划一条低暴露路线`;
+        } else if (actionType === 'lie') {
+            action = `用${item.name}伪装身份或制造掩护`;
+        } else if (actionType === 'persuade') {
+            action = `用${item.name}作为谈判筹码争取支持`;
+        } else if (actionType === 'probe') {
+            action = `用${item.name}试探对方知道多少`;
+        } else if (actionType === 'force') {
+            action = `用${item.name}强行突破${place}的障碍`;
+        } else if (actionType === 'combat') {
+            action = `准备${item.name}应对可能的冲突`;
+        }
+        if (!action) return null;
+        return {
+            actionType,
+            action,
+            detail: this._itemEffectSummary(item) || item.description || '这个资源可以打开一个新的行动切入点。',
+            score: score + (item.equipped === true || item.type === 'quest' ? 8 : 0)
+        };
+    },
+
+    _primaryItemActionType(item) {
+        const effects = Array.isArray(item?.effects) ? item.effects : [];
+        const actionTypes = effects.map(effect => String(effect?.actionType || '')).filter(Boolean);
+        const text = `${item?.name || ''} ${item?.description || ''} ${(item?.tags || []).join(' ')}`;
+        if (/扫描|探测|检测/.test(text) && actionTypes.includes('observe')) return 'observe';
+        if (actionTypes.includes('investigate')) return 'investigate';
+        if (actionTypes.includes('observe')) return 'observe';
+        if (actionTypes.includes('use_item')) return 'use_item';
+        if (actionTypes.includes('sneak')) return 'sneak';
+        if (actionTypes.length > 0) return actionTypes[0];
+        if (/扫描|探测|观察|检测/.test(text)) return 'observe';
+        if (/调查|线索|记录|地图|路线|档案/.test(text)) return 'investigate';
+        if (/修复|维修|工具|零件|终端|控制台|封印|净化|医疗|样本/.test(text)) return 'use_item';
+        if (/开锁|潜行|追踪|绕过|伪装/.test(text)) return /伪装/.test(text) ? 'lie' : 'sneak';
+        if (/武器|攻击|战斗/.test(text)) return 'combat';
+        return '';
+    },
+
     _buildRecommendedActions(scene, data) {
         const actions = [];
         const add = action => {
@@ -7243,10 +7425,12 @@ const WorldEngine = {
             if (text && !actions.includes(text)) actions.push(text);
         };
         const optionalActions = this._buildOptionalQuestActions(scene, data.optionalQuests);
+        const itemActions = this._buildItemActionSuggestions(scene, data.itemActionLeads);
         this._buildFreedomActions(scene, data).slice(0, optionalActions.length > 0 ? 5 : 6).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
         if (failureWarning) add(`处理失败风险：${failureWarning.title}`);
         optionalActions.slice(0, 2).forEach(add);
+        itemActions.slice(0, 2).forEach(add);
         const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
         if (unknown) add(unknown.actions[0]);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
@@ -7277,6 +7461,11 @@ const WorldEngine = {
 
     _buildOptionalQuestActions(scene, leads = null) {
         const items = Array.isArray(leads) ? leads : this.getOptionalQuestLeads(scene, { limit: 3 });
+        return items.map(item => item?.action).filter(Boolean);
+    },
+
+    _buildItemActionSuggestions(scene, leads = null) {
+        const items = Array.isArray(leads) ? leads : this.getItemActionLeads(scene, { limit: 4 });
         return items.map(item => item?.action).filter(Boolean);
     },
 
