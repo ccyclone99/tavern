@@ -621,7 +621,8 @@ scene.inputContext = {
   state: "idle", // idle | pending_action | pending_check | help_context
   prompt: "你想说什么，或打算怎么做？",
   suggestions: [
-    { label: "观察四周", action: "fill", text: "我观察四周有什么异常。" },
+    { label: "翻现场", action: "fill", text: "我在当前地点慢慢转一圈，找被忽略的痕迹。" },
+    { label: "换角度", action: "fill", text: "我先不急着硬闯，换个角度观察当前挑战有没有更稳的办法。" },
     { label: "掷骰", action: "roll_check" }
   ],
   lastIntentId: "intent_xxx"
@@ -653,6 +654,8 @@ pendingAction.adjudication = {
 
 - 旧存档没有 `inputContext` 时默认为 idle。
 - 旧 `State.inputMode` 不删除，但新流程默认忽略它。
+- idle 建议必须是可编辑灵感，不是模式入口；优先结合 `WorldEngine.getPressurePrompt()`、当前挑战、关键未知、地点、当前 NPC、已装备/可用物品和已解锁同伴协助生成自然语言。
+- pending check/action 建议可以是立即处理命令；idle 建议默认只填入输入框，让玩家改写后再发送。
 - 旧 `/strategy` 和 `/ooc` 仍可解析。
 
 ## 12. Prompt 约束

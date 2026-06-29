@@ -789,7 +789,7 @@ const WorldGenerator = {
 - flowGraph: 剧本节点图 { nodes:[{id,phaseId,type,title,status,visibleText,privateTruth,npcs,challengeIds,clueIds,exits}], revelations:[{id,conclusion,status:"unknown",core:true,clueIds,requiredFor}] }
 - sceneChallenges: 3-6个可玩挑战，每个含 { id,phaseId,title,status,targetProgress,maxStrain,checkBudget:{min,target,max},approaches:[{id,label,stat,dc,effect,actionType,tags,keywords,onSuccess,onPartial,onFailure}],supports,coreRevelations,failForward }
 - evidenceLedger: 初始为空数组，后续记录玩家取得的证据；不要预填隐藏真相
-- companionResources: 1-3个同伴协助资源，每个含 { id,characterName,name,unlock,uses,cost,effect,risk }；characterName 必须对应上方 characters 中的角色名，系统会回填真实 characterId；unlock 可用 trustAtLeast/evidenceTags/knowledgeTags/revelationIds 控制逐步公开，revelationIds 默认要求 confirmed，若只需怀疑阶段解锁必须显式写 revelationStatus:"suspected"；effect 可含 checkBonus/dcDelta/riskDelta/clockDelta/clockId/clockTag/evidenceReliability/resolveConsequenceTags
+- companionResources: 1-3个同伴协助资源，每个含 { id,characterName,name,scope,unlock,uses,cost,effect,risk }；scope 只能是 present/remote/pledged：present 必须是当前在场才可用，remote 是远程背书/资料/渠道，pledged 是已承诺但稍后兑现的帮助；characterName 必须对应上方 characters 中的角色名，系统会回填真实 characterId；unlock 必须明确填写，可用 trustAtLeast/evidenceTags/knowledgeTags/revelationIds 控制逐步公开，不能留空后默认开局可用；若剧情职责要求开局可用，显式写 trustAtLeast:0 或 immediate:true；revelationIds 默认要求 confirmed，若只需怀疑阶段解锁必须显式写 revelationStatus:"suspected"；effect 可含 checkBonus/dcDelta/riskDelta/clockDelta/clockId/clockTag/evidenceReliability/resolveConsequenceTags
 - inventory: 2-4个起始物品，每个含 { id,name,description,type,quantity,uses,tags,effects }；effects 可含 check_bonus/dc_delta/risk_delta/heal/clock_delta/clock_resist/world_tension/strategy_leverage，消耗品必须写 consume:true；至少一个常驻调查/观察工具、一个一次性消耗资源和一个可作为计策筹码的物品
 - dmPersona: DM叙事者对象 { name: "叙事风格名称", emoji: "emoji", description: "叙事风格的详细描述，包括语气、视角、擅长的描写方式、偶尔插入的特色旁注等。约80-150字。" }
 - lorebook: 3-5个世界书条目
@@ -1447,6 +1447,8 @@ const WorldGenerator = {
             characterId: char.id || '',
             characterName: char.name || '',
             name: `${char.name || '同伴'}的专业背书`,
+            scope: 'remote',
+            unlock: { trustAtLeast: 10 },
             uses: 1,
             cost: { trust: 0, time: 10 },
             effect: { dcDelta: -2 },

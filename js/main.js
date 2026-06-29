@@ -108,12 +108,14 @@ const WorldPicker = {
 
     show() {
         this.el.classList.remove('hidden');
+        document.body.classList.add('world-picker-active');
         this.renderSaved();
         this.maybeRenderQuickstart();
     },
 
     hide() {
         this.el.classList.add('hidden');
+        document.body.classList.remove('world-picker-active');
     },
 
     async onSelectPreset(tmpl, isTutorial = false) {

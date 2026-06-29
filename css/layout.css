@@ -7,6 +7,14 @@
     overflow: hidden;
 }
 
+body.world-picker-active .top-bar,
+body.world-picker-active .app-layout,
+body.world-picker-active .bg-layer,
+body.world-picker-active .bg-overlay,
+body.world-picker-active .sidebar-backdrop {
+    display: none;
+}
+
 /* ===== 侧边栏通用 ===== */
 .sidebar {
     display: flex;

@@ -155,7 +155,7 @@
 | `flowGraph` | object | 剧本节点图和关键结论 revelations |
 | `sceneChallenges` | SceneChallenge[] | 当前阶段可玩的挑战、进度、压力和检定方向 |
 | `evidenceLedger` | Evidence[] | 玩家已取得的证据，用于任务/结论推进闸门 |
-| `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟 |
+| `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟；含 `scope` 范围语义 |
 | `explorationRewardLog` | string[] | 已发放探索奖励的证据 id 记录，防止重复刷经验/物资 |
 | `pendingExplorationRewards` | PendingExplorationReward[] | 背包满时暂存的探索奖励物品，腾出背包格后自动补发 |
 | `questProgressGuards` | object | 连续自动任务推进保护，防止无挑战/无证据跳目标 |
@@ -334,7 +334,7 @@ scene.evidenceLedger = [
 }
 ```
 
-同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 只会按当前场景唯一角色名做一次兼容修复；重名、模糊或资源名同时提到多个角色时不猜测绑定。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。如果某个同伴协助的代价或效果触发胜利/失败结局，当前检定内后续同伴协助不再扣除，该协助未写入的风险后果也不再追加。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
+同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`；若资源没有写任何 `unlock` 条件，运行时会按默认关系门槛处理，要求绑定 NPC 对玩家 `trust >= 10`，避免“刚认识就能动用背书”。剧本确实需要开局可用时，应显式写 `unlock:{ immediate:true }`、`unlock:{ always:true }` 或 `unlock:{ trustAtLeast:0 }`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 只会按当前场景唯一角色名做一次兼容修复；重名、模糊或资源名同时提到多个角色时不猜测绑定。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。如果某个同伴协助的代价或效果触发胜利/失败结局，当前检定内后续同伴协助不再扣除，该协助未写入的风险后果也不再追加。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
 
 `effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag`/`clockName` 或资源标签延缓/推进公开时钟，其中显式引用必须唯一，资源标签隐式匹配也只有最高分唯一时才会生效；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
 
@@ -431,7 +431,7 @@ scene.equipmentRefs = {
 
 2 级起，`WorldEngine.getPlayerAptitudes()` 会按最高属性自动派生行动倾向，不需要玩家额外选择。行动倾向会进入 `getPreparationHints()` 和行动预览：当行动类型匹配时，`ActionPlanner` 通过 `getPlayerAptitudeModifier()` 加入风险/DC 修正。倾向只表示玩家擅长的切入方式，不能替代检定、证据、物品消耗或挑战进度。
 
-已解锁且仍有次数的 `companionResources` 会通过 `WorldEngine.getCompanionActionLeads()` 生成“请某某协助……”行动线索，并进入 `getCurrentSituation()`、推荐动作和 `getPreparationHints()`。未满足 `unlock` 的协助不会出现在这些线索中，避免提前公开 NPC 底牌；实际消耗仍发生在玩家合理请求、行动预览或检定结算时。
+已解锁且仍有次数的 `companionResources` 会通过 `WorldEngine.getCompanionActionLeads()` 生成“请某某协助……”行动线索，并进入 `getCurrentSituation()`、推荐动作和 `getPreparationHints()`。未满足 `unlock` 或默认关系门槛的协助不会出现在这些线索中，避免提前公开 NPC 底牌；实际消耗仍发生在玩家合理请求、行动预览或检定结算时。`scope` 可为 `present`、`remote` 或 `pledged`，旧档缺失时按 `remote` 兼容；`present` 资源必须绑定 NPC 当前在场才会展示或进入检定资源，不能让暂时无关的角色跨场景帮忙。
 
 ### 生命字段
 
@@ -608,7 +608,7 @@ scene.equipmentRefs = {
     { id: "item:item_x", legacyIds: ["item:item_x:0"], source: "专注药剂", label: "+2 检定，可消耗使用", value: 2, consume: true }
   ],
   availableCompanionModifiers: [
-    { id: "companion:ally_silas", source: "塞拉斯的专业背书", label: "DC -2，使用后消耗", dcDelta: -2, consume: true }
+    { id: "companion:ally_silas", source: "塞拉斯的专业背书", scope: "remote", scopeLabel: "远程", label: "远程协助，DC -2，使用后消耗", dcDelta: -2, consume: true }
   ],
   selectedItemModifierIds: ["item:item_x"],
   selectedCompanionResourceIds: [],

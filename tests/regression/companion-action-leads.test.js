@@ -8,15 +8,34 @@ const root = path.resolve(__dirname, '..', '..');
 function loadWorldEngine() {
     const context = {
         console,
-        State: { activeCharacters: [], characters: [], currentCharacterId: '' },
+        State: {
+            activeCharacters: [],
+            characters: [{ id: 'susan', name: '苏珊', _relations: {} }],
+            currentCharacterId: ''
+        },
         SidebarRight: {
             markTabNew() {},
             renderSituation() {}
         }
     };
+    context.State.activeCharacters = context.State.characters;
     const code = fs.readFileSync(path.join(root, 'js/features/world-engine.js'), 'utf8') + '\nthis.WorldEngine = WorldEngine;';
     vm.runInNewContext(code, context, { filename: 'js/features/world-engine.js' });
-    return context.WorldEngine;
+    return { WorldEngine: context.WorldEngine, State: context.State };
+}
+
+function setSusanTrust(State, trust) {
+    State.characters[0]._relations['测试玩家'] = {
+        affection: trust,
+        trust,
+        suspicion: 0,
+        fear: 0,
+        debt: 0,
+        leverage: [],
+        mood: '平静',
+        memories: [],
+        history: []
+    };
 }
 
 function makeScene(overrides = {}) {
@@ -35,7 +54,7 @@ function makeScene(overrides = {}) {
         eventLog: [],
         inventory: [],
         quests: [],
-        characters: [],
+        characters: ['susan'],
         currentLocation: 'clinic',
         locations: [{
             id: 'clinic',
@@ -94,7 +113,8 @@ function susanBacking(overrides = {}) {
     };
 }
 
-function testUnlockedCompanionCreatesActionLead(WorldEngine) {
+function testUnlockedCompanionCreatesActionLead(WorldEngine, State) {
+    setSusanTrust(State, 12);
     const scene = makeScene({ companionResources: [susanBacking()] });
     const leads = WorldEngine.getCompanionActionLeads(scene);
     const situation = WorldEngine.getCurrentSituation(scene);
@@ -114,7 +134,32 @@ function testUnlockedCompanionCreatesActionLead(WorldEngine) {
     ));
 }
 
-function testLockedCompanionDoesNotLeak(WorldEngine) {
+function testBareCompanionWithoutRelationshipDoesNotLeak(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({ companionResources: [susanBacking()] });
+    const check = { stat: 'charisma', actionType: 'persuade', intent: '公开证据链' };
+
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+    assert.strictEqual(WorldEngine.getAvailableCompanionResources(scene, check).length, 0);
+}
+
+function testImmediateCompanionCanBeExplicitlyUnlocked(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({ companionResources: [susanBacking({ unlock: { immediate: true } })] });
+    const leads = WorldEngine.getCompanionActionLeads(scene);
+
+    assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing'));
+}
+
+function testInvalidUnlockFallsBackToRelationshipGate(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({ companionResources: [susanBacking({ unlock: { immediate: false, note: '占位字段' } })] });
+
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+}
+
+function testLockedCompanionDoesNotLeak(WorldEngine, State) {
+    State.characters[0]._relations = {};
     const scene = makeScene({
         companionResources: [susanBacking({ unlock: { evidenceTags: ['medical'] } })],
         evidenceLedger: [{ id: 'hidden_report', title: '隐藏体检报告', visible: false, tags: ['medical'] }]
@@ -126,7 +171,8 @@ function testLockedCompanionDoesNotLeak(WorldEngine) {
     assert.ok(!hints.some(hint => hint.kind === 'companion'));
 }
 
-function testEvidenceUnlockSurfacesCompanion(WorldEngine) {
+function testEvidenceUnlockSurfacesCompanion(WorldEngine, State) {
+    State.characters[0]._relations = {};
     const scene = makeScene({
         companionResources: [susanBacking({ unlock: { evidenceTags: ['medical'] } })],
         evidenceLedger: [{ id: 'public_report', title: '公开体检报告', visible: true, tags: ['medical'] }]
@@ -136,7 +182,8 @@ function testEvidenceUnlockSurfacesCompanion(WorldEngine) {
     assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing'));
 }
 
-function testSpentCompanionDoesNotCreateLead(WorldEngine) {
+function testSpentCompanionDoesNotCreateLead(WorldEngine, State) {
+    setSusanTrust(State, 12);
     const scene = makeScene({
         companionResources: [susanBacking({ uses: 0 })]
     });
@@ -144,10 +191,84 @@ function testSpentCompanionDoesNotCreateLead(WorldEngine) {
     assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
 }
 
-const WorldEngine = loadWorldEngine();
-testUnlockedCompanionCreatesActionLead(WorldEngine);
-testLockedCompanionDoesNotLeak(WorldEngine);
-testEvidenceUnlockSurfacesCompanion(WorldEngine);
-testSpentCompanionDoesNotCreateLead(WorldEngine);
+function testPresentCompanionRequiresActivePresence(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = [];
+    const scene = makeScene({
+        characters: [],
+        companionResources: [susanBacking({ scope: 'present' })]
+    });
+
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+    assert.strictEqual(
+        WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]).reason,
+        '需要同伴在场'
+    );
+}
+
+function testPresentCompanionSurfacesWhenActive(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({ companionResources: [susanBacking({ scope: 'present' })] });
+    const leads = WorldEngine.getCompanionActionLeads(scene);
+    const check = { stat: 'charisma', actionType: 'persuade', intent: '公开证据链' };
+    const resources = WorldEngine.getAvailableCompanionResources(scene, check);
+
+    assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing' && lead.scope === 'present'));
+    assert.ok(resources.some(resource => resource.scope === 'present' && resource.scopeLabel === '在场'));
+}
+
+function testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = [];
+    const scene = makeScene({
+        characters: [],
+        companionResources: [susanBacking({ scope: 'remote' })]
+    });
+    const leads = WorldEngine.getCompanionActionLeads(scene);
+
+    assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing' && lead.scopeLabel === '远程'));
+}
+
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testUnlockedCompanionCreatesActionLead(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testBareCompanionWithoutRelationshipDoesNotLeak(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testImmediateCompanionCanBeExplicitlyUnlocked(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testInvalidUnlockFallsBackToRelationshipGate(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testLockedCompanionDoesNotLeak(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testEvidenceUnlockSurfacesCompanion(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testSpentCompanionDoesNotCreateLead(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testPresentCompanionRequiresActivePresence(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testPresentCompanionSurfacesWhenActive(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State);
+}
 
 console.log('companion-action-leads regression tests passed');

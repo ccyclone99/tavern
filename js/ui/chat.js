@@ -282,7 +282,7 @@ const ChatUI = {
             } else if (State.scene?.pendingAction) {
                 this.suggestionHelpEl.textContent = '输入建议：确认和取消会立即处理；改写会填入输入框。';
             } else {
-                this.suggestionHelpEl.textContent = '输入建议：点击只是填入示例句，可以改完再发送。';
+                this.suggestionHelpEl.textContent = '输入建议：这些只是可改写的灵感；直接用自己的话输入也可以。';
             }
         }
         this.suggestionChipsEl.innerHTML = chips.map(chip => {
@@ -374,23 +374,99 @@ const ChatUI = {
         const recommended = Array.isArray(situation?.recommendedActions)
             ? situation.recommendedActions
             : (Array.isArray(scene?.currentSituation?.recommendedActions) ? scene.currentSituation.recommendedActions : []);
+        const currentChar = State.currentCharacterId
+            ? State.characters.find(c => c.id === State.currentCharacterId)
+            : null;
+        this._buildContextualSuggestionChips(scene, situation, currentChar).forEach(add);
         recommended.slice(0, 2).forEach(action => {
             const text = String(action || '').trim();
             if (text) add({ label: this._shortChipLabel(text), text, behavior: 'fill', primary: chips.length === 0 });
         });
 
-        const currentChar = State.currentCharacterId
-            ? State.characters.find(c => c.id === State.currentCharacterId)
-            : null;
-        add({ label: '观察', text: '我观察当前地点有什么异常。', behavior: 'fill' });
+        const locationName = situation?.location?.name || (scene?.locations || []).find(l => l.id === scene.currentLocation)?.name || '当前地点';
+        add({ label: '翻现场', text: `我在${locationName}慢慢转一圈，找被忽略的痕迹。`, behavior: 'fill' });
         add({
-            label: currentChar ? `询问${currentChar.name}` : '询问建议',
-            text: currentChar ? `@${currentChar.name} 我想问问现在该注意什么。` : '我询问在场的人最近发生了什么。',
+            label: currentChar ? `问${currentChar.name}` : '问在场人',
+            text: currentChar ? `@${currentChar.name} 我不直接问答案，先问你最担心哪件事。` : '我询问在场的人最近发生了什么变化。',
             behavior: 'fill'
         });
         add({ label: '制定计划', text: '我想制定一个计划：', behavior: 'fill' });
         add({ label: '问下一步', text: '我现在该干什么？', behavior: 'fill' });
         return chips.slice(0, 5);
+    },
+
+    _buildContextualSuggestionChips(scene, situation, currentChar) {
+        if (!scene || !situation) return [];
+        const chips = [];
+        const add = chip => {
+            if (!chip?.text || chips.some(item => item.text === chip.text)) return;
+            chips.push(chip);
+        };
+        const pressure = typeof WorldEngine !== 'undefined' && WorldEngine.getPressurePrompt
+            ? WorldEngine.getPressurePrompt(scene, situation)
+            : null;
+        if (pressure?.action) {
+            add({
+                label: pressure.label || '处理压力',
+                text: pressure.action,
+                behavior: 'fill',
+                primary: true
+            });
+        }
+
+        const challenge = situation.activeChallenge;
+        if (challenge && challenge.status !== 'completed') {
+            const title = challenge.title || challenge.goal || '当前挑战';
+            add({
+                label: '换角度',
+                text: `我先不急着硬闯，换个角度观察「${title}」有没有更稳的办法。`,
+                behavior: 'fill',
+                primary: chips.length === 0
+            });
+            add({
+                label: '先准备',
+                text: `我先整理一下手头资源，再决定怎么处理「${title}」。`,
+                behavior: 'fill'
+            });
+        }
+
+        const unknown = (situation.knownUnknowns || []).find(item => item.actions?.length) || (situation.knownUnknowns || [])[0];
+        if (unknown?.title) {
+            add({
+                label: '追线索',
+                text: `我想顺着「${unknown.title}」查下去，看看谁最可能知道答案。`,
+                behavior: 'fill',
+                primary: chips.length === 0
+            });
+        }
+
+        const itemLead = (situation.itemActionLeads || [])[0];
+        if (itemLead?.action) {
+            add({
+                label: `用${this._shortChipLabel(itemLead.itemName || '物品')}`,
+                text: itemLead.action,
+                behavior: 'fill'
+            });
+        }
+
+        const companionLead = (situation.companionActionLeads || [])[0];
+        if (companionLead?.action) {
+            const scope = companionLead.scopeLabel ? `${companionLead.scopeLabel}协助` : '协助';
+            add({
+                label: scope,
+                text: companionLead.action,
+                behavior: 'fill'
+            });
+        }
+
+        if (currentChar?.name && chips.length < 4) {
+            add({
+                label: `探${currentChar.name}`,
+                text: `@${currentChar.name} 我想先听听你的判断，但不会照单全收。`,
+                behavior: 'fill'
+            });
+        }
+        return chips.slice(0, 4);
     },
 
     _buildPrepSuggestionChips(scene) {

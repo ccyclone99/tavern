@@ -581,10 +581,15 @@ const WorldEngine = {
         const list = (key, limit, itemLimit = 80) => (
             Array.isArray(data[key]) ? data[key] : []
         ).map(String).filter(Boolean).map(s => s.slice(0, itemLimit)).slice(0, limit);
+        const rawScope = String(data.scope || '').trim();
+        const scope = ['present', 'remote', 'pledged'].includes(rawScope)
+            ? rawScope
+            : (data.requiresPresence === true ? 'present' : (data.pledged === true ? 'pledged' : 'remote'));
         return {
             id: String(data.id || 'ally_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)).slice(0, 100),
             characterId: String(data.characterId || '').slice(0, 100),
             name: String(data.name || '同伴协助').slice(0, 120),
+            scope,
             unlock: obj('unlock'),
             uses: this._clamp(Number(data.uses ?? 1), 0, 10),
             cost: obj('cost'),
@@ -1113,7 +1118,8 @@ const WorldEngine = {
             : Number(normalized.quantity || 1);
         const qtyText = quantity > 1 ? ` x${quantity}` : '';
         const source = String(options.source || '').trim().slice(0, 120);
-        const text = `${source ? `${source}，` : ''}获得 ${normalized.name}${qtyText}`;
+        const hint = this._itemNarrativeHint(normalized, 'gain');
+        const text = `${source ? `${source}，` : ''}获得 ${normalized.name}${qtyText}${hint ? `。${hint}` : ''}`;
         if (options.record !== false) {
             this.recordEvent(scene, {
                 category: 'inventory',
@@ -5929,7 +5935,8 @@ const WorldEngine = {
         scene.equipmentRefs[slot] = item.id || null;
         const slotLabels = { weapon: '武器', armor: '防具', accessory: '饰品' };
         const replaced = previous ? previous.name : '';
-        this.addSystemMessage(scene, `【装备】${slotLabels[slot] || '装备'}：${item.name}${replaced ? `（替换 ${replaced}）` : ''}`, 'system');
+        const hint = this._itemNarrativeHint(item, 'equip');
+        this.addSystemMessage(scene, `【装备】${slotLabels[slot] || '装备'}：${item.name}${replaced ? `（替换 ${replaced}）` : ''}${hint ? `。${hint}` : ''}`, 'system');
         if (typeof SidebarRight !== 'undefined') {
             SidebarRight.renderInventory?.();
             SidebarRight.renderDetail?.();
@@ -6084,7 +6091,8 @@ const WorldEngine = {
         const inventoryCountBefore = scene.inventory.length;
         const consumed = shouldConsume ? this._consumeInventoryItem(scene, item) : false;
         const summary = applied.join('，');
-        this.addSystemMessage(scene, `【使用物品：${item.name}】${summary}`, 'system');
+        const hint = this._itemNarrativeHint(item, 'use');
+        this.addSystemMessage(scene, `【使用物品：${item.name}】${summary}${hint ? `。${hint}` : ''}`, 'system');
         const retriedRewards = consumed && scene.inventory.length < inventoryCountBefore
             ? this._retryPendingQuestRewardsAfterInventoryChange(scene)
             : [];
@@ -6247,6 +6255,7 @@ const WorldEngine = {
                 item: { tags: resource.tags || [] }
             }))
             .map(resource => {
+                const availability = this.getCompanionResourceAvailability(scene, resource);
                 const effect = resource.effect || {};
                 const checkBonus = Number(effect.checkBonus || 0);
                 const dcDelta = Number(effect.dcDelta || 0);
@@ -6270,7 +6279,9 @@ const WorldEngine = {
                     resourceId: resource.id,
                     characterId: resource.characterId || '',
                     source: resource.name,
-                    label: `${parts.join('，')}，使用后消耗${costText ? `（${costText}）` : ''}`,
+                    scope: availability.scope || this._companionScope(resource),
+                    scopeLabel: availability.scopeLabel || this._companionScopeLabel(resource),
+                    label: `${availability.scopeLabel ? `${availability.scopeLabel}协助，` : ''}${parts.join('，')}，使用后消耗${costText ? `（${costText}）` : ''}`,
                     value: checkBonus,
                     checkBonus,
                     dcDelta,
@@ -6326,6 +6337,8 @@ const WorldEngine = {
                 costText: this._companionCostText(resource),
                 risk: String(resource.risk || '').slice(0, 160),
                 uses: Number(resource.uses || 0),
+                scope: this._companionScope(resource),
+                scopeLabel: this._companionScopeLabel(resource),
                 challengeId: String(lead.challengeId || '').slice(0, 120),
                 approachId: String(lead.approachId || '').slice(0, 120),
                 score: Number(lead.score || 0)
@@ -6495,42 +6508,108 @@ const WorldEngine = {
         ].filter(Boolean).join('，');
     },
 
+    _companionScope(resource) {
+        const raw = String(resource?.scope || '').trim();
+        if (['present', 'remote', 'pledged'].includes(raw)) return raw;
+        if (resource?.requiresPresence === true) return 'present';
+        if (resource?.pledged === true) return 'pledged';
+        return 'remote';
+    },
+
+    _companionScopeLabel(resource) {
+        const labels = {
+            present: '在场',
+            remote: '远程',
+            pledged: '承诺'
+        };
+        return labels[this._companionScope(resource)] || '远程';
+    },
+
+    _isCompanionPresent(scene, characterId) {
+        const id = String(characterId || '').trim();
+        if (!scene || !id) return false;
+        const currentLocation = String(scene.currentLocation || '').trim();
+        const byId = character => character && String(character.id || '') === id;
+        const character = (typeof State !== 'undefined' && Array.isArray(State.characters))
+            ? State.characters.find(byId)
+            : null;
+        const charLocation = String(character?.locationId || character?.currentLocation || character?.currentLocationId || '').trim();
+        if (currentLocation && charLocation) return charLocation === currentLocation;
+
+        const activeCharacters = (typeof State !== 'undefined' && Array.isArray(State.activeCharacters))
+            ? State.activeCharacters
+            : [];
+        if (activeCharacters.some(byId)) return true;
+        if (Array.isArray(scene.characters) && scene.characters.map(String).includes(id)) return true;
+
+        return (scene.messages || []).slice(-20).some(message => {
+            if (!message || typeof message !== 'object') return false;
+            const visibility = message.visibility || {};
+            const messageLocation = String(visibility.locationId || message.locationId || '').trim();
+            if (currentLocation && messageLocation && messageLocation !== currentLocation) return false;
+            const participants = [
+                message.characterId,
+                ...(Array.isArray(message.participants) ? message.participants : []),
+                ...(Array.isArray(visibility.participants) ? visibility.participants : []),
+                ...(Array.isArray(visibility.overheardBy) ? visibility.overheardBy : [])
+            ].map(value => String(value || '').trim()).filter(Boolean);
+            return participants.includes(id);
+        });
+    },
+
     getCompanionResourceAvailability(scene, resource) {
         if (!scene || !resource) return { ok: false, reason: '缺少场景或协助资源' };
+        const scope = this._companionScope(resource);
+        const scopeLabel = this._companionScopeLabel(resource);
         const unlock = resource.unlock && typeof resource.unlock === 'object' ? resource.unlock : {};
-        const keys = Object.keys(unlock).filter(key => unlock[key] !== undefined && unlock[key] !== null && unlock[key] !== '');
-        if (keys.length === 0) return { ok: true, reason: '' };
-
         const relationInfo = this._getCompanionRelation(scene, resource.characterId, false);
         const trust = Number(relationInfo?.relation?.trust || 0);
+        if (scope === 'present' && !this._isCompanionPresent(scene, resource.characterId)) {
+            return { ok: false, reason: '需要同伴在场', trust, scope, scopeLabel };
+        }
+        if (unlock.immediate === true || unlock.always === true) {
+            return { ok: true, reason: '', trust, immediate: true, scope, scopeLabel };
+        }
         const trustAtLeast = Number.isFinite(Number(unlock.trustAtLeast))
             ? Number(unlock.trustAtLeast)
             : (Number.isFinite(Number(unlock.trust)) ? Number(unlock.trust) : null);
-        if (trustAtLeast !== null) {
-            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: trustAtLeast };
-            if (trust < trustAtLeast) return { ok: false, reason: `需要信任 ${trustAtLeast}+`, trust, requiredTrust: trustAtLeast };
-        }
-
         const trustBelow = Number.isFinite(Number(unlock.trustBelow)) ? Number(unlock.trustBelow) : null;
-        if (trustBelow !== null && trust >= trustBelow) {
-            return { ok: false, reason: `信任需低于 ${trustBelow}`, trust, requiredTrustBelow: trustBelow };
+        const evidenceTags = this._asStringList(unlock.evidenceTags || unlock.requiredEvidenceTags, 12);
+        const knowledgeTags = this._asStringList(unlock.knowledgeTags || unlock.discoveryTags, 12);
+        const revelationIds = this._asStringList(unlock.revelationIds || unlock.revelations, 12);
+        const hasExplicitGate = trustAtLeast !== null ||
+            trustBelow !== null ||
+            evidenceTags.length > 0 ||
+            knowledgeTags.length > 0 ||
+            revelationIds.length > 0;
+        if (!hasExplicitGate) {
+            const implicitTrust = 10;
+            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: implicitTrust, scope, scopeLabel };
+            if (trust < implicitTrust) return { ok: false, reason: `需要建立关系（信任 ${implicitTrust}+）`, trust, requiredTrust: implicitTrust, scope, scopeLabel };
+            return { ok: true, reason: '', trust, requiredTrust: implicitTrust, scope, scopeLabel };
         }
 
-        const evidenceTags = this._asStringList(unlock.evidenceTags || unlock.requiredEvidenceTags, 12);
+        if (trustAtLeast !== null) {
+            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: trustAtLeast, scope, scopeLabel };
+            if (trust < trustAtLeast) return { ok: false, reason: `需要信任 ${trustAtLeast}+`, trust, requiredTrust: trustAtLeast, scope, scopeLabel };
+        }
+
+        if (trustBelow !== null && trust >= trustBelow) {
+            return { ok: false, reason: `信任需低于 ${trustBelow}`, trust, requiredTrustBelow: trustBelow, scope, scopeLabel };
+        }
+
         if (evidenceTags.length > 0) {
             const knownEvidenceTags = this._collectVisibleEvidenceTags(scene);
             const missing = evidenceTags.filter(tag => !knownEvidenceTags.has(this._normalizeUnlockToken(tag)));
-            if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}` };
+            if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}`, scope, scopeLabel };
         }
 
-        const knowledgeTags = this._asStringList(unlock.knowledgeTags || unlock.discoveryTags, 12);
         if (knowledgeTags.length > 0) {
             const knownTags = this._collectKnowledgeTags(scene);
             const missing = knowledgeTags.filter(tag => !knownTags.has(this._normalizeUnlockToken(tag)));
-            if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}` };
+            if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}`, scope, scopeLabel };
         }
 
-        const revelationIds = this._asStringList(unlock.revelationIds || unlock.revelations, 12);
         if (revelationIds.length > 0) {
             const requiredStatus = unlock.allowSuspectedRevelation === true
                 ? 'suspected'
@@ -6549,11 +6628,11 @@ const WorldEngine = {
             const missing = revelationIds.filter(id => (revelationStatus.get(this._normalizeUnlockToken(id)) || 0) < requiredRank);
             if (missing.length > 0) {
                 const statusText = requiredStatus === 'suspected' ? '发现' : '确认';
-                return { ok: false, reason: `缺少${statusText}关键结论：${missing.join('、')}`, requiredRevelationStatus: requiredStatus };
+                return { ok: false, reason: `缺少${statusText}关键结论：${missing.join('、')}`, requiredRevelationStatus: requiredStatus, scope, scopeLabel };
             }
         }
 
-        return { ok: true, reason: '', trust };
+        return { ok: true, reason: '', trust, scope, scopeLabel };
     },
 
     getSelectedCheckResourceModifiers(scene, check) {
@@ -7303,11 +7382,67 @@ const WorldEngine = {
             if (effect.type === 'check_bonus') return `检定 ${value >= 0 ? '+' : ''}${value}${effect.consume ? '（消耗）' : ''}`;
             if (effect.type === 'risk_delta') return `风险 ${value >= 0 ? '+' : ''}${value}`;
             if (effect.type === 'dc_delta') return `DC ${value >= 0 ? '+' : ''}${value}`;
+            if (effect.type === 'clock_delta' || effect.type === 'clock_resist') return `时钟 ${value >= 0 ? '+' : ''}${value}`;
+            if (effect.type === 'world_tension') return `世界紧张度 ${value >= 0 ? '+' : ''}${value}`;
             if (effect.type === 'gold') return `金币 ${value >= 0 ? '+' : ''}${value}`;
             if (effect.type === 'exp') return `经验 +${value}`;
             return '';
         }).filter(Boolean);
         return labels.slice(0, 3).join('，');
+    },
+
+    _itemNarrativeHint(item, context = 'gain') {
+        if (!item) return '';
+        const effects = Array.isArray(item.effects) ? item.effects : [];
+        const hasCheckResource = effects.some(effect =>
+            ['check_bonus', 'dc_delta', 'risk_delta'].includes(effect?.type) ||
+            ['observe', 'investigate', 'use_item', 'sneak', 'lie', 'persuade', 'probe', 'force', 'combat'].includes(String(effect?.actionType || ''))
+        );
+        const hasDirectUse = this.canUseInventoryItem?.(item);
+        const actionType = this._primaryItemActionType(item);
+        const actionLabel = this._actionTypeNarrativeLabel(actionType);
+        const summary = this._itemEffectSummary(item);
+
+        if (context === 'equip') {
+            const effectText = summary ? `当前效果：${summary}` : '会在匹配行动中作为常驻资源。';
+            return actionLabel ? `${effectText} 适合${actionLabel}时使用。` : effectText;
+        }
+        if (context === 'use') {
+            if (effects.some(effect => effect?.type === 'clock_delta' || effect?.type === 'clock_resist')) return '局势时钟已按效果结算，下一步可以围绕变化继续行动。';
+            if (effects.some(effect => effect?.type === 'world_tension')) return '世界紧张度已变化，后续叙事会按新压力处理。';
+            return '效果已结算，相关数值和记录会刷新。';
+        }
+        if (item.type === 'quest') {
+            return `这是剧情关键物；可围绕它调查、询问 NPC，或在相关地点输入“查看${item.name}”。`;
+        }
+        if (this.canEquipInventoryItem(item) && item.type !== 'consumable') {
+            const effectText = summary ? `装备后${summary}` : '装备后可成为后续行动资源';
+            return actionLabel ? `${effectText}，适合${actionLabel}。` : `${effectText}。`;
+        }
+        if (hasDirectUse) {
+            return `可直接输入“使用${item.name}”结算效果。`;
+        }
+        if (hasCheckResource) {
+            return actionLabel
+                ? `可在${actionLabel}相关检定前投入，掷骰时才会消耗。`
+                : '可在相关检定前投入，掷骰时才会消耗。';
+        }
+        return '';
+    },
+
+    _actionTypeNarrativeLabel(actionType) {
+        const labels = {
+            observe: '观察',
+            investigate: '调查',
+            use_item: '处理设备或道具',
+            sneak: '潜行或绕行',
+            lie: '伪装或欺瞒',
+            persuade: '说服或谈判',
+            probe: '试探',
+            force: '强行突破',
+            combat: '冲突'
+        };
+        return labels[actionType] || '';
     },
 
     _suggestPreparationPurchase(scene) {
@@ -7379,6 +7514,63 @@ const WorldEngine = {
         const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, itemActionLeads, companionActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
         scene.currentSituation.recommendedActions = recommendedActions;
         return { location, activeQuest, optionalQuests, itemActionLeads, companionActionLeads, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
+    },
+
+    getPressurePrompt(scene, situation = null) {
+        if (!scene) return null;
+        const data = situation || this.getCurrentSituation(scene);
+        if (!data) return null;
+        const warning = (data.failureWarnings || [])[0];
+        if (warning) {
+            const title = warning.title || warning.failureTitle || '失败风险';
+            const action = (warning.actions || [])[0] || warning.action || `先处理失败风险：${title}`;
+            return {
+                kind: 'failure',
+                label: '处理失败',
+                title,
+                text: `失败条件已经接近触发：${title}`,
+                action: String(action).slice(0, 140),
+                priority: 95
+            };
+        }
+        const urgentClock = (data.clocks || [])
+            .filter(clock => Number(clock.max || 0) > 0)
+            .map(clock => ({ clock, ratio: Number(clock.value || 0) / Math.max(1, Number(clock.max || 1)) }))
+            .filter(entry => entry.ratio >= 0.66 || Number(entry.clock.value || 0) >= Math.max(1, Number(entry.clock.max || 1) - 2))
+            .sort((a, b) => b.ratio - a.ratio)[0]?.clock || null;
+        if (urgentClock) {
+            return {
+                kind: 'clock',
+                label: '压低压力',
+                title: urgentClock.name || '局势时钟',
+                text: `${urgentClock.name || '局势时钟'} 已到 ${urgentClock.value}/${urgentClock.max}`,
+                action: `我先想办法压低「${urgentClock.name || '局势时钟'}」的风险。`,
+                priority: 84
+            };
+        }
+        const recentRisk = (data.recentRisks || []).slice(-1)[0] || '';
+        if (recentRisk) {
+            return {
+                kind: 'risk',
+                label: '处理后果',
+                title: recentRisk,
+                text: `最近后果仍在影响局面：${recentRisk}`,
+                action: `我先处理「${recentRisk}」造成的麻烦。`,
+                priority: 68
+            };
+        }
+        const counter = (data.counterStrategies || [])[0];
+        if (counter) {
+            return {
+                kind: 'counter',
+                label: '反制对手',
+                title: counter.title || '对手反制',
+                text: counter.hint || counter.title || '对手正在推进反制。',
+                action: (counter.counterplay || [])[0] || `我想先反制「${counter.title || '对手计划'}」。`,
+                priority: 62
+            };
+        }
+        return null;
     },
 
     buildSoftMove(scene, options = {}) {

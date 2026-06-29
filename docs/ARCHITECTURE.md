@@ -207,7 +207,7 @@ AI 回复文本
 
 线索账本 UI 位于右侧 `knowledge` tab，由 `SidebarRight.renderKnowledge()` 渲染。它只读取玩家已知的 `scene.knowledge.discoveries` 和已解锁的 `scene.discoveries.characters` 档案槽，不直接展示 NPC 私密设定。
 
-当前局势 UI 位于右侧 `situation` tab，由 `SidebarRight.renderSituation()` 渲染。它读取 `WorldEngine.getCurrentSituation(scene)` 和 `WorldEngine.getPreparationHints(scene)`，展示当前位置、主线目标、公开时钟、隐藏压力提示、反制、最近风险、可用成长/准备、可用线索和可选行动。已解锁的物品行动、同伴协助和支线目标会先转成自然语言行动线索，再进入推荐动作，避免玩家只能在检定卡里才知道可用资源。
+当前局势 UI 位于右侧 `situation` tab，由 `SidebarRight.renderSituation()` 渲染。它读取 `WorldEngine.getCurrentSituation(scene)` 和 `WorldEngine.getPreparationHints(scene)`，首屏优先展示当前位置、当前目标、关键压力、最近风险、当前挑战和主要行动；公开时钟、隐藏压力提示、反制、未解决后果、可用成长/准备、同伴协助、可用线索、证据、未知和记录回顾进入可展开分组。已解锁的物品行动、同伴协助和支线目标会先转成自然语言行动线索，再进入推荐动作，避免玩家只能在检定卡里才知道可用资源；冒险回顾和最近事件保留在“记录与回顾”分组，不能压在实时决策信息之前。
 
 ### WorldEngine 负责“世界如何自己动”
 
@@ -224,10 +224,10 @@ AI 回复文本
 - `applyEvidenceAdd()`：把探索取得的证据写入证据账本，同步线索链、知识账本、关键结论，并按证据首次取得发放少量经验和主题补给；背包满时主题补给进入待领取队列，腾出格子后自动补发。
 - `addExperience()`：统一任务、剧情标记、探索、挑战和物品的经验结算；负责升级、属性点、最大生命和升级提示。
 - `addWorldTension()`：统一世界紧张度变化、事件日志、局势刷新和世界紧张度失败条件检查。
-- `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()` / `sellInventoryItem()`：处理背包直接使用、休息恢复、基础购买与出售非关键物品，复杂交易仍交给行动/AI 流程。
+- `useInventoryItem()` / `restPlayer()` / `buyBasicSupply()` / `sellInventoryItem()`：处理背包直接使用、休息恢复、基础购买与出售非关键物品，复杂交易仍交给行动/AI 流程；物品获得、装备和直接使用会通过规则层写入用途反馈。
 - `createInventoryItemFromReward()` / `grantInventoryItem()` / `removeInventoryItem()` / `addOrMergeInventoryItem()` / `allocateStatPoint()`：把任务/AI 奖励物品语义化，统一物品堆叠、移除、装备槽清理，并处理属性点分配与 HP 重算。
 - `getPreparationHints()`：统一生成属性点、行动倾向、可请求同伴协助、回血、装备、可用物品、购买和待领取探索奖励提示，供聊天 chips、顶部摘要和局势面板复用。
-- `buildSoftMove()` / `formatSoftMove()`：基于当前挑战、关键未知、主线目标、时钟和推荐行动生成防卡住提示；`tickAfterPlayerTurn()` 会在连续无进展时自动插入一次本地提示。
+- `getPressurePrompt()` / `buildSoftMove()` / `formatSoftMove()`：基于失败预警、时钟、最近后果、当前挑战、关键未知、主线目标和推荐行动生成压力提示或防卡住提示；`tickAfterPlayerTurn()` 会在连续无进展时自动插入一次本地提示。
 - `recordEvent()` / `getEventLog()`：记录并读取冒险过程日志；旧存档没有日志时可从关键消息派生最近事件。
 - `recordConsequence()` / `getActiveConsequences()` / `getConsequenceRiskModifier()`：把持续后果写入账本、展示到局势面板，并反馈到行动预览风险/DC。
 

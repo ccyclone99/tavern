@@ -163,6 +163,18 @@ const SidebarRight = {
         return `<span class="situation-action${compact} readonly" data-action="${Renderer.escapeAttr(command)}" aria-disabled="true" title="${Renderer.escapeAttr(this._endedSceneMessage(options.scene))}">${content}</span>`;
     },
 
+    _buildSituationFold(title, content, options = {}) {
+        const body = String(content || '').trim();
+        if (!body) return '';
+        const open = options.open ? ' open' : '';
+        const cls = options.className ? ` ${Renderer.escapeAttr(options.className)}` : '';
+        const meta = options.meta ? `<small>${Renderer.escapeHtml(options.meta)}</small>` : '';
+        return `<details class="situation-fold${cls}"${open}>
+            <summary><span>${Renderer.escapeHtml(title)}</span>${meta}</summary>
+            <div class="situation-fold-body">${body}</div>
+        </details>`;
+    },
+
     renderSituation() {
         if (!this.situationEl) return;
         const scene = State.scene;
@@ -189,46 +201,50 @@ const SidebarRight = {
         const phase = situation.storyPhase;
         const challenge = situation.activeChallenge;
         const texture = situation.storyTexture;
-        const runRecordHtml = this._buildRunRecordHtml(scene.runRecord);
-        const eventLogHtml = this._buildEventLogHtml(
-            typeof WorldEngine !== 'undefined' && WorldEngine.getEventLog
-                ? WorldEngine.getEventLog(scene, 8)
-                : (scene.eventLog || []).slice(-8).reverse()
-        );
-        const consequenceHtml = this._buildConsequenceLedgerHtml(
-            typeof WorldEngine !== 'undefined' && WorldEngine.getActiveConsequences
-                ? WorldEngine.getActiveConsequences(scene, { limit: 6 })
-                : (scene.consequenceLedger || []).filter(c => !c.status || c.status === 'active').slice(-6).reverse()
-        );
-        const textureHtml = texture && (texture.tone || texture.sensory?.length || texture.motifs?.length || texture.dramaticQuestions?.length) ? `
-            <div class="situation-section">
-                <h4>氛围锚点</h4>
-                <div class="situation-main-goal">
-                    ${texture.tone ? `<span>${Renderer.escapeHtml(texture.tone)}</span>` : ''}
-                    ${texture.motifs?.[0] ? `<p class="situation-stakes">意象：${Renderer.escapeHtml(texture.motifs[0])}</p>` : ''}
-                    ${texture.dramaticQuestions?.[0] ? `<p class="situation-stakes">问题：${Renderer.escapeHtml(texture.dramaticQuestions[0])}</p>` : ''}
+        const clocks = Array.isArray(situation.clocks) ? situation.clocks : [];
+        const recentRisks = Array.isArray(situation.recentRisks) ? situation.recentRisks : [];
+        const failureWarnings = Array.isArray(situation.failureWarnings) ? situation.failureWarnings : [];
+        const urgentClock = [...clocks]
+            .sort((a, b) => (Number(b.value || 0) / Math.max(1, Number(b.max || 1))) - (Number(a.value || 0) / Math.max(1, Number(a.max || 1))))[0];
+        const urgentClockPct = urgentClock
+            ? Math.min(100, Math.max(0, (Number(urgentClock.value || 0) / Math.max(1, Number(urgentClock.max || 1))) * 100))
+            : 0;
+        const topFailure = [...failureWarnings]
+            .sort((a, b) => (Number(b.value || 0) / Math.max(1, Number(b.max || 1))) - (Number(a.value || 0) / Math.max(1, Number(a.max || 1))))[0];
+        const objectiveText = objective?.text || phase?.goal || quest?.description || quest?.name || '等待玩家选择下一步';
+        const pressureText = topFailure
+            ? `${topFailure.title || '失败临界'} ${topFailure.value || 0}/${topFailure.max || 0}`
+            : (urgentClock
+                ? `${urgentClock.name} ${urgentClock.value || 0}/${urgentClock.max || 0}`
+                : (situation.hiddenPressure > 0 ? `${situation.hiddenPressure} 股暗处压力` : '暂无公开压力'));
+        const latestRisk = recentRisks.slice(-1)[0] || '';
+        const nowCardHtml = `
+            <div class="situation-card situation-now">
+                <div class="situation-now-head">
+                    <div>
+                        <div class="situation-kicker">当前态势</div>
+                        <h4>${Renderer.escapeHtml(locationName)}</h4>
+                    </div>
+                    <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
+                </div>
+                ${locationDesc ? `<p>${Renderer.escapeHtml(locationDesc)}</p>` : ''}
+                <div class="situation-now-grid">
+                    <div class="situation-now-row">
+                        <span>目标</span>
+                        <strong>${Renderer.escapeHtml(objectiveText)}</strong>
+                    </div>
+                    <div class="situation-now-row">
+                        <span>压力</span>
+                        <strong>${Renderer.escapeHtml(pressureText)}</strong>
+                    </div>
+                    <div class="situation-now-row">
+                        <span>风险</span>
+                        <strong>${Renderer.escapeHtml(latestRisk || '暂未出现新的公开风险')}</strong>
+                    </div>
                 </div>
             </div>
-        ` : '';
-        const phaseHtml = phase ? `
-            <div class="situation-section">
-                <h4>当前阶段</h4>
-                <div class="situation-main-goal">
-                    <strong>${Renderer.escapeHtml(phase.title || '剧情阶段')}</strong>
-                    ${phase.goal ? `<span>${Renderer.escapeHtml(phase.goal)}</span>` : ''}
-                    ${phase.stakes ? `<p class="situation-stakes">${Renderer.escapeHtml(phase.stakes)}</p>` : ''}
-                </div>
-            </div>
-        ` : '';
-        const questHtml = quest ? `
-            <div class="situation-section">
-                <h4>主线目标</h4>
-                <div class="situation-main-goal">
-                    <strong>${Renderer.escapeHtml(quest.name)}</strong>
-                    <span>${Renderer.escapeHtml(objective?.text || quest.description || '等待下一步')}</span>
-                </div>
-            </div>
-        ` : '';
+        `;
+
         const challengeHtml = challenge ? (() => {
             const progressPct = Math.min(100, Math.max(0, (Number(challenge.progress || 0) / Math.max(1, Number(challenge.targetProgress || 1))) * 100));
             const strainPct = Math.min(100, Math.max(0, (Number(challenge.strain || 0) / Math.max(1, Number(challenge.maxStrain || 1))) * 100));
@@ -270,63 +286,113 @@ const SidebarRight = {
                 </div>
             `;
         })() : '';
+
+        const recommendedActions = Array.isArray(situation.recommendedActions) ? situation.recommendedActions : [];
+        const primaryActionsHtml = recommendedActions.slice(0, 3)
+            .map(a => this._buildSituationActionHtml(a, canMutateSituation, { scene }))
+            .join('');
+        const moreActionsHtml = recommendedActions.slice(3, 8)
+            .map(a => this._buildSituationActionHtml(a, canMutateSituation, { scene, compact: true }))
+            .join('');
+        const actionPanelHtml = `
+            <div class="situation-section situation-primary-actions">
+                <h4>现在可尝试</h4>
+                ${primaryActionsHtml
+                    ? `<div class="situation-actions situation-actions-primary">${primaryActionsHtml}</div>`
+                    : '<p class="placeholder">可以直接输入你想做的事。</p>'}
+                ${moreActionsHtml ? `<details class="situation-inline-details">
+                    <summary>更多方向</summary>
+                    <div class="situation-actions">${moreActionsHtml}</div>
+                </details>` : ''}
+            </div>
+        `;
+
         const prepHints = typeof WorldEngine !== 'undefined' && WorldEngine.getPreparationHints
             ? WorldEngine.getPreparationHints(scene, { limit: 5 })
             : [];
-        const prepHintsHtml = prepHints.length > 0
-            ? `<div class="situation-section situation-prep-section">
-                <h4>可用准备</h4>
-                <div class="situation-prep-list">
-                    ${prepHints.map(hint => {
-                        const action = hint.command
-                            ? this._buildSituationActionHtml(hint.label || hint.command, canMutateSituation, {
-                                command: hint.command,
-                                compact: true,
-                                ariaPrefix: '采用准备',
-                                scene
-                            })
-                            : '';
-                        return `<div class="situation-prep-item situation-prep-${Renderer.escapeAttr(hint.kind || 'prep')}">
-                            <div>
-                                <strong>${Renderer.escapeHtml(hint.title || '准备')}</strong>
-                                ${hint.detail ? `<p>${Renderer.escapeHtml(hint.detail)}</p>` : ''}
-                            </div>
-                            ${action}
-                        </div>`;
-                    }).join('')}
+        const prepHintsHtml = prepHints.map(hint => {
+            const action = hint.command
+                ? this._buildSituationActionHtml(hint.label || hint.command, canMutateSituation, {
+                    command: hint.command,
+                    compact: true,
+                    ariaPrefix: '采用准备',
+                    scene
+                })
+                : '';
+            return `<div class="situation-prep-item situation-prep-${Renderer.escapeAttr(hint.kind || 'prep')}">
+                <div>
+                    <strong>${Renderer.escapeHtml(hint.title || '准备')}</strong>
+                    ${hint.detail ? `<p>${Renderer.escapeHtml(hint.detail)}</p>` : ''}
                 </div>
-            </div>`
-            : '';
+                ${action}
+            </div>`;
+        }).join('');
         const companionResources = typeof WorldEngine !== 'undefined' && WorldEngine.getUnlockedCompanionResources
             ? WorldEngine.getUnlockedCompanionResources(scene)
             : (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
-        const companionResourcesHtml = companionResources.length > 0
-            ? `<div class="situation-section">
-                <h4>可用协助</h4>
-                <div class="situation-resource-list">
-                    ${companionResources.slice(0, 5).map(resource => {
-                        const effect = resource.effect || {};
-                        const bits = [];
-                        if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
-                        if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
-                        if (effect.riskDelta) bits.push(`风险${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
-                        if (effect.clockDelta) bits.push(`时钟${effect.clockDelta >= 0 ? '+' : ''}${effect.clockDelta}`);
-                        if (effect.evidenceReliability) bits.push(`证据→${effect.evidenceReliability}`);
-                        if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) bits.push('解除后果');
-                        return `<div class="situation-resource">
-                            <div class="situation-row">
-                                <span>${Renderer.escapeHtml(resource.name)}</span>
-                                <strong>${Renderer.escapeHtml(bits.join('、') || '协助')} · ${resource.uses}次</strong>
-                            </div>
-                            ${resource.risk ? `<p>${Renderer.escapeHtml(resource.risk)}</p>` : ''}
-                        </div>`;
-                    }).join('')}
+        const companionResourcesHtml = companionResources.slice(0, 5).map(resource => {
+            const effect = resource.effect || {};
+            const scopeLabel = typeof WorldEngine !== 'undefined' && WorldEngine._companionScopeLabel
+                ? WorldEngine._companionScopeLabel(resource)
+                : (resource.scope === 'present' ? '在场' : (resource.scope === 'pledged' ? '承诺' : '远程'));
+            const bits = [];
+            if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
+            if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
+            if (effect.riskDelta) bits.push(`风险${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
+            if (effect.clockDelta) bits.push(`时钟${effect.clockDelta >= 0 ? '+' : ''}${effect.clockDelta}`);
+            if (effect.evidenceReliability) bits.push(`证据→${effect.evidenceReliability}`);
+            if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) bits.push('解除后果');
+            return `<div class="situation-resource">
+                <div class="situation-row">
+                    <span>${Renderer.escapeHtml(resource.name)}</span>
+                    <strong>${Renderer.escapeHtml(`${scopeLabel} · ${bits.join('、') || '协助'} · ${resource.uses}次`)}</strong>
                 </div>
-            </div>`
-            : '';
+                ${resource.risk ? `<p>${Renderer.escapeHtml(resource.risk)}</p>` : ''}
+            </div>`;
+        }).join('');
+        const toolsBody = [
+            prepHintsHtml ? `<div class="situation-tool-group"><h5>可用准备</h5><div class="situation-prep-list">${prepHintsHtml}</div></div>` : '',
+            companionResourcesHtml ? `<div class="situation-tool-group"><h5>可用协助</h5><div class="situation-resource-list">${companionResourcesHtml}</div></div>` : ''
+        ].join('');
+        const highPriorityPrep = prepHints.some(hint => ['attribute', 'pending_reward', 'healing'].includes(hint.kind));
+        const toolsHtml = this._buildSituationFold('准备与协助', toolsBody, {
+            meta: `${prepHints.length + companionResources.length}项`,
+            open: highPriorityPrep,
+            className: 'situation-tools-fold'
+        });
 
-        const clocksHtml = situation.clocks.length > 0
-            ? situation.clocks.map(clock => {
+        const storyBlocks = [];
+        if (phase) {
+            storyBlocks.push(`<div class="situation-fragment">
+                <h5>当前阶段</h5>
+                <strong>${Renderer.escapeHtml(phase.title || '剧情阶段')}</strong>
+                ${phase.goal ? `<p>${Renderer.escapeHtml(phase.goal)}</p>` : ''}
+                ${phase.stakes ? `<p class="situation-stakes">${Renderer.escapeHtml(phase.stakes)}</p>` : ''}
+            </div>`);
+        }
+        if (quest) {
+            storyBlocks.push(`<div class="situation-fragment">
+                <h5>主线目标</h5>
+                <strong>${Renderer.escapeHtml(quest.name)}</strong>
+                <p>${Renderer.escapeHtml(objective?.text || quest.description || '等待下一步')}</p>
+            </div>`);
+        }
+        if (texture && (texture.tone || texture.sensory?.length || texture.motifs?.length || texture.dramaticQuestions?.length)) {
+            storyBlocks.push(`<div class="situation-fragment">
+                <h5>氛围锚点</h5>
+                ${texture.tone ? `<p>${Renderer.escapeHtml(texture.tone)}</p>` : ''}
+                ${texture.sensory?.[0] ? `<p>感官：${Renderer.escapeHtml(texture.sensory[0])}</p>` : ''}
+                ${texture.motifs?.[0] ? `<p>意象：${Renderer.escapeHtml(texture.motifs[0])}</p>` : ''}
+                ${texture.dramaticQuestions?.[0] ? `<p class="situation-stakes">问题：${Renderer.escapeHtml(texture.dramaticQuestions[0])}</p>` : ''}
+            </div>`);
+        }
+        const storyHtml = this._buildSituationFold('剧情上下文', storyBlocks.join(''), {
+            meta: phase?.title || quest?.name || '',
+            className: 'situation-story-fold'
+        });
+
+        const clocksHtml = clocks.length > 0
+            ? clocks.map(clock => {
                 const pct = Math.min(100, Math.max(0, (clock.value / Math.max(1, clock.max)) * 100));
                 const cls = pct >= 75 ? 'danger' : pct >= 50 ? 'warn' : 'calm';
                 return `<div class="situation-clock situation-clock-${cls}">
@@ -342,8 +408,8 @@ const SidebarRight = {
         const hiddenHtml = situation.hiddenPressure > 0
             ? `<div class="situation-hidden-pressure">有 ${situation.hiddenPressure} 股未公开压力正在暗处推进</div>`
             : '';
-        const failureWarningsHtml = (situation.failureWarnings || []).length > 0
-            ? situation.failureWarnings.map(failure => {
+        const failureWarningsHtml = failureWarnings.length > 0
+            ? failureWarnings.map(failure => {
                 const pct = Math.min(100, Math.max(0, (failure.value / Math.max(1, failure.max)) * 100));
                 const cls = pct >= 80 ? 'danger' : pct >= 50 ? 'warn' : 'calm';
                 return `<div class="situation-failure situation-failure-${cls}">
@@ -356,8 +422,7 @@ const SidebarRight = {
                 </div>`;
             }).join('')
             : '';
-
-        const countersHtml = situation.counterStrategies.length > 0
+        const countersHtml = (situation.counterStrategies || []).length > 0
             ? situation.counterStrategies.slice(0, 5).map(counter => `<div class="situation-counter">
                 <div class="situation-row">
                     <span>${Renderer.escapeHtml(counter.title)}</span>
@@ -367,11 +432,29 @@ const SidebarRight = {
                 ${(counter.counterplay || []).length > 0 ? `<div class="situation-tags">${counter.counterplay.slice(0, 3).map(t => `<span>${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
             </div>`).join('')
             : '<p class="placeholder">暂无可见反制</p>';
-
-        const risksHtml = situation.recentRisks.length > 0
-            ? situation.recentRisks.slice(-5).reverse().map(r => `<li>${Renderer.escapeHtml(r)}</li>`).join('')
+        const risksHtml = recentRisks.length > 0
+            ? recentRisks.slice(-5).reverse().map(r => `<li>${Renderer.escapeHtml(r)}</li>`).join('')
             : '<li>局势暂未出现新的公开风险</li>';
-        const cluesHtml = situation.availableClues.length > 0
+        const consequenceHtml = this._buildConsequenceLedgerHtml(
+            typeof WorldEngine !== 'undefined' && WorldEngine.getActiveConsequences
+                ? WorldEngine.getActiveConsequences(scene, { limit: 6 })
+                : (scene.consequenceLedger || []).filter(c => !c.status || c.status === 'active').slice(-6).reverse(),
+            { embedded: true }
+        );
+        const pressureBody = `
+            ${failureWarningsHtml ? `<div class="situation-tool-group"><h5>失败临界</h5>${failureWarningsHtml}</div>` : ''}
+            <div class="situation-tool-group"><h5>局势时钟</h5>${clocksHtml}${hiddenHtml}</div>
+            ${consequenceHtml}
+            <div class="situation-tool-group"><h5>反制与压力</h5>${countersHtml}</div>
+            <div class="situation-tool-group"><h5>最近风险</h5><ul class="situation-risk-list">${risksHtml}</ul></div>
+        `;
+        const pressureHtml = this._buildSituationFold('压力与后果', pressureBody, {
+            meta: pressureText,
+            open: failureWarnings.length > 0 || urgentClockPct >= 75,
+            className: 'situation-pressure-fold'
+        });
+
+        const cluesHtml = (situation.availableClues || []).length > 0
             ? situation.availableClues.map(c => `<span>${Renderer.escapeHtml(c.title || c.text || '线索')}</span>`).join('')
             : '<span>暂无可用线索</span>';
         const evidenceLabels = { rumor: '传闻', partial: '待验证', confirmed: '已确认', contested: '有争议' };
@@ -410,61 +493,39 @@ const SidebarRight = {
                 </div>`;
             }).join('')
             : '<p class="placeholder">暂无明确关键未知</p>';
-        const actionsHtml = situation.recommendedActions
-            .map(a => this._buildSituationActionHtml(a, canMutateSituation, { scene }))
-            .join('');
+        const knowledgeBody = `
+            <div class="situation-tool-group"><h5>可用线索</h5><div class="situation-tags">${cluesHtml}</div></div>
+            <div class="situation-tool-group"><h5>最近证据</h5>${evidenceHtml}</div>
+            <div class="situation-tool-group"><h5>关键未知</h5>${unknownsHtml}</div>
+        `;
+        const knowledgeCount = (situation.availableClues || []).length + (situation.visibleEvidence || []).length + (situation.knownUnknowns || []).length;
+        const knowledgeHtml = this._buildSituationFold('线索与未知', knowledgeBody, {
+            meta: `${knowledgeCount}项`,
+            className: 'situation-knowledge-fold'
+        });
+
+        const runRecordHtml = this._buildRunRecordHtml(scene.runRecord, { embedded: true });
+        const eventLogHtml = this._buildEventLogHtml(
+            typeof WorldEngine !== 'undefined' && WorldEngine.getEventLog
+                ? WorldEngine.getEventLog(scene, 8)
+                : (scene.eventLog || []).slice(-8).reverse(),
+            { embedded: true }
+        );
+        const recordsHtml = this._buildSituationFold('记录与回顾', `${runRecordHtml}${eventLogHtml}`, {
+            meta: scene.runRecord ? '通关记录' : (eventLogHtml ? '最近事件' : ''),
+            open: !canMutateSituation && !!runRecordHtml,
+            className: 'situation-record-fold'
+        });
 
         this.situationEl.innerHTML = `
-            <div class="situation-card situation-location">
-                <div class="situation-kicker">当前位置</div>
-                <h4>${Renderer.escapeHtml(locationName)}</h4>
-                ${locationDesc ? `<p>${Renderer.escapeHtml(locationDesc)}</p>` : ''}
-                <span class="situation-turn">回合 ${scene.turnCount || 0}</span>
-            </div>
-            ${runRecordHtml}
-            ${textureHtml}
-            ${phaseHtml}
-            ${questHtml}
+            ${nowCardHtml}
             ${challengeHtml}
-            ${prepHintsHtml}
-            ${companionResourcesHtml}
-            ${consequenceHtml}
-            ${eventLogHtml}
-            <div class="situation-section">
-                <h4>局势时钟</h4>
-                ${clocksHtml}
-                ${hiddenHtml}
-            </div>
-            ${failureWarningsHtml ? `
-            <div class="situation-section situation-failure-section">
-                <h4>失败临界</h4>
-                ${failureWarningsHtml}
-            </div>
-            ` : ''}
-            <div class="situation-section">
-                <h4>反制与压力</h4>
-                ${countersHtml}
-            </div>
-            <div class="situation-section">
-                <h4>最近风险</h4>
-                <ul class="situation-risk-list">${risksHtml}</ul>
-            </div>
-            <div class="situation-section">
-                <h4>可用线索</h4>
-                <div class="situation-tags">${cluesHtml}</div>
-            </div>
-            <div class="situation-section">
-                <h4>最近证据</h4>
-                ${evidenceHtml}
-            </div>
-            <div class="situation-section">
-                <h4>关键未知</h4>
-                ${unknownsHtml}
-            </div>
-            <div class="situation-section">
-                <h4>可选行动</h4>
-                <div class="situation-actions">${actionsHtml}</div>
-            </div>
+            ${actionPanelHtml}
+            ${toolsHtml}
+            ${storyHtml}
+            ${pressureHtml}
+            ${knowledgeHtml}
+            ${recordsHtml}
         `;
 
         this.situationEl.querySelectorAll('button.situation-action').forEach(btn => {
@@ -484,10 +545,11 @@ const SidebarRight = {
         });
     },
 
-    _buildRunRecordHtml(record) {
+    _buildRunRecordHtml(record, options = {}) {
         if (!record || typeof record !== 'object') return '';
         const outcomeLabel = record.outcome === 'victorious' ? '通关' : (record.outcome === 'defeated' ? '失败' : '记录');
         const outcomeCls = record.outcome === 'victorious' ? 'victory' : (record.outcome === 'defeated' ? 'defeat' : 'neutral');
+        const wrapperCls = `${options.embedded ? '' : 'situation-section '}run-record run-record-${outcomeCls}`.trim();
         const moments = (record.keyMoments || []).slice(-6).map(m => `
             <li>
                 <strong>${Renderer.escapeHtml(m.title || '事件')}</strong>
@@ -556,7 +618,7 @@ const SidebarRight = {
             </details>`
             : '';
         return `
-            <div class="situation-section run-record run-record-${outcomeCls}">
+            <div class="${wrapperCls}">
                 <div class="run-record-head">
                     <div>
                         <div class="situation-kicker">冒险回顾</div>
@@ -610,7 +672,7 @@ const SidebarRight = {
         }).join('；')}`;
     },
 
-    _buildEventLogHtml(events) {
+    _buildEventLogHtml(events, options = {}) {
         if (!Array.isArray(events) || events.length === 0) return '';
         const labels = {
             check: '检定',
@@ -641,13 +703,14 @@ const SidebarRight = {
                 </div>
             </li>`;
         }).join('');
-        return `<div class="situation-section event-log">
-            <h4>最近事件</h4>
+        const wrapperCls = `${options.embedded ? '' : 'situation-section '}event-log`.trim();
+        return `<div class="${wrapperCls}">
+            ${options.embedded ? '' : '<h4>最近事件</h4>'}
             <ol>${items}</ol>
         </div>`;
     },
 
-    _buildConsequenceLedgerHtml(items) {
+    _buildConsequenceLedgerHtml(items, options = {}) {
         if (!Array.isArray(items) || items.length === 0) return '';
         const labels = { low: '轻微', medium: '中等', high: '严重', critical: '致命' };
         const html = items.slice(0, 6).map(item => {
@@ -661,8 +724,9 @@ const SidebarRight = {
                 ${item.effect ? `<p>影响：${Renderer.escapeHtml(item.effect)}</p>` : ''}
             </div>`;
         }).join('');
-        return `<div class="situation-section consequence-ledger">
-            <h4>未解决后果</h4>
+        const wrapperCls = `${options.embedded ? '' : 'situation-section '}consequence-ledger`.trim();
+        return `<div class="${wrapperCls}">
+            ${options.embedded ? '<h5>未解决后果</h5>' : '<h4>未解决后果</h4>'}
             ${html}
         </div>`;
     },
