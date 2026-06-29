@@ -1193,7 +1193,8 @@ const SidebarRight = {
                 <span class="st-clue-text">${Renderer.escapeHtml(item.text || item.title)}</span>
             </div>`).join('')
             : '<p class="placeholder">尚未掌握关于此人的可靠线索</p>';
-        const firstImpression = publicProfile.firstImpression || '尚未形成可靠公开印象';
+        const firstImpression = publicProfile.firstImpression || char.firstImpression || '尚未形成可靠公开印象';
+        const discoveryStateLabels = { locked: '未解锁', hinted: '已察觉', suspected: '可疑', confirmed: '已确认' };
         const hiddenFactsHtml = hiddenFacts.length > 0
             ? hiddenFacts.map(fact => {
                 const state = characterDiscovery[fact.id]?.state || 'locked';
@@ -1206,11 +1207,29 @@ const SidebarRight = {
                 return `<div class="st-step st-step-${isConfirmed ? 'done' : (isKnown ? 'active' : 'pending')}">
                     <span class="st-step-idx">${isConfirmed ? '✓' : '?'}</span>
                     <span class="st-step-text">${Renderer.escapeHtml(text)}</span>
-                    <span class="st-step-status">${isKnown ? Renderer.escapeHtml(state) : Renderer.escapeHtml(unlock)}</span>
+                    <span class="st-step-status">${isKnown ? Renderer.escapeHtml(discoveryStateLabels[state] || state) : Renderer.escapeHtml(unlock)}</span>
                 </div>`;
             }).join('')
             : '<p class="placeholder">暂无可解锁档案槽</p>';
         const canShowDebugSpoilers = typeof State.canShowDebugSpoilers === 'function' && State.canShowDebugSpoilers();
+        const privateHooks = [
+            Array.isArray(char.motives) && char.motives.length ? ['动机', char.motives] : null,
+            Array.isArray(char.fears) && char.fears.length ? ['恐惧', char.fears] : null,
+            Array.isArray(char.secrets) && char.secrets.length ? ['秘密', char.secrets] : null,
+            Array.isArray(char.leverage) && char.leverage.length ? ['筹码', char.leverage] : null
+        ].filter(Boolean);
+        const privateHooksHtml = privateHooks.length > 0 ? `
+                    <div class="detail-section">
+                        <h4>私密钩子</h4>
+                        ${privateHooks.map(([label, list]) => `<p><strong>${Renderer.escapeHtml(label)}：</strong>${list.map(item => Renderer.escapeHtml(item)).join('；')}</p>`).join('')}
+                    </div>
+        ` : '';
+        const hiddenTruthHtml = hiddenFacts.length > 0 ? `
+                    <div class="detail-section">
+                        <h4>隐藏档案真相</h4>
+                        ${hiddenFacts.map(fact => `<p><strong>${Renderer.escapeHtml(fact.title || fact.type || '档案')}：</strong>${Renderer.escapeHtml(fact.truth || fact.hint || '')}</p>`).join('')}
+                    </div>
+        ` : '';
         const debugSpoilerHtml = canShowDebugSpoilers ? `
             <details class="detail-spoiler">
                 <summary>作者/调试：完整角色卡 <span class="spoiler-warn">(剧透)</span></summary>
@@ -1233,6 +1252,8 @@ const SidebarRight = {
                         <h4>场景</h4>
                         <p>${Renderer.escapeHtml(char.scenario || '无')}</p>
                     </div>
+                    ${privateHooksHtml}
+                    ${hiddenTruthHtml}
                 </div>
             </details>
             <div style="margin-top:16px;text-align:center;">

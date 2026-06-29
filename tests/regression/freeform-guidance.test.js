@@ -20,6 +20,7 @@ function loadWorldEngine() {
     };
     const code = fs.readFileSync(path.join(root, 'js/features/world-engine.js'), 'utf8') + '\nthis.WorldEngine = WorldEngine;';
     vm.runInNewContext(code, context, { filename: 'js/features/world-engine.js' });
+    context.WorldEngine._testState = context.State;
     return context.WorldEngine;
 }
 
@@ -218,6 +219,44 @@ function testFreeformLocationObservationDedupesKnowledge(WorldEngine) {
     assert.strictEqual(locationDiscoveries[0].title, '下层货舱可利用细节');
 }
 
+function testFreeformHiddenFactOnlyUnlocksHint(WorldEngine) {
+    WorldEngine._testState.currentCharacterId = 'silas';
+    WorldEngine._testState.characters = [{
+        id: 'silas',
+        name: '审判官塞拉斯',
+        firstImpression: '机械义眼总在审讯记录前停顿。',
+        profile: {
+            public: { title: '审判官', firstImpression: '冷酷、权威、正在审视你。' },
+            hiddenFacts: [{
+                id: 'eye_record',
+                type: 'secret',
+                title: '机械义眼记录',
+                hint: '他的机械义眼在提到前任助手时有异常延迟。',
+                truth: 'SECRET_EYE_RECORDING'
+            }]
+        }
+    }];
+    const scene = makeScene({
+        characters: ['silas'],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        clueGraph: []
+    });
+
+    const result = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我观察塞拉斯的机械义眼记录有没有异常。',
+        { actionType: 'observe' }
+    );
+
+    assert.strictEqual(result.changed, true);
+    assert.strictEqual(scene.discoveries.characters.silas.eye_record.state, 'hinted');
+    assert.ok(scene.knowledge.discoveries.some(item =>
+        item.id === 'disc_free_hidden_silas_eye_record' &&
+        item.text.includes('异常延迟')
+    ));
+    assert.ok(!scene.knowledge.discoveries.some(item => String(item.text || '').includes('SECRET_EYE_RECORDING')));
+}
+
 function testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine) {
     const early = makeScene({ turnCount: 3 });
     assert.strictEqual(WorldEngine._maybeEmitStalledSoftMove(early), null);
@@ -253,6 +292,7 @@ testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine);
 testFreedomActionsUseSceneContext(WorldEngine);
 testFreeformClueActionCreatesKnowledge(WorldEngine);
 testFreeformLocationObservationDedupesKnowledge(WorldEngine);
+testFreeformHiddenFactOnlyUnlocksHint(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);
 testFlowGuideFallbackUsesNeutralWording(WorldEngine);
 console.log('freeform-guidance regression tests passed');

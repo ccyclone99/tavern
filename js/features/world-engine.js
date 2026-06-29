@@ -7038,6 +7038,22 @@ const WorldEngine = {
                     tags: ['character', focus.id, actionType].filter(Boolean)
                 });
             }
+            if (focus && ['observe', 'ask', 'probe', 'investigate'].includes(actionType)) {
+                const hiddenFact = this._hintCharacterFactFromFreeform(scene, focus, sourceText, actionType);
+                if (hiddenFact) {
+                    addDiscovery({
+                        id: `disc_free_hidden_${focus.id}_${hiddenFact.id}`,
+                        subjectType: 'character',
+                        subjectId: focus.id,
+                        level: 'hint',
+                        title: hiddenFact.title || '未解锁档案',
+                        text: hiddenFact.hint || hiddenFact.title || '这个角色似乎还有未公开的信息。',
+                        source: focus.name || '角色观察',
+                        reliability: 'unverified',
+                        tags: ['character', focus.id, hiddenFact.type, actionType].filter(Boolean)
+                    });
+                }
+            }
         }
 
         const tool = this._findMentionedTool(scene, sourceText);
@@ -7194,6 +7210,45 @@ const WorldEngine = {
         const chars = this._sceneCharacters(scene);
         const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
         return chars.find(char => char.id === currentId) || chars[0] || null;
+    },
+
+    _hintCharacterFactFromFreeform(scene, character, text = '', actionType = '') {
+        if (!scene || !character) return null;
+        const facts = Array.isArray(character.profile?.hiddenFacts)
+            ? character.profile.hiddenFacts.filter(Boolean)
+            : [];
+        if (facts.length === 0) return null;
+        const source = this._normalizeQuestText(text);
+        if (!source) return null;
+        const action = String(actionType || '');
+        const aliases = {
+            motive: ['动机', '目的', '想要', '目标'],
+            fear: ['恐惧', '害怕', '担心', '顾虑'],
+            secret: ['秘密', '隐瞒', '藏着', '不说'],
+            leverage: ['筹码', '把柄', '资源', '弱点']
+        };
+        const matched = facts.find(fact => {
+            const fields = [fact.id, fact.title, fact.hint, fact.type]
+                .map(value => this._normalizeQuestText(value || ''))
+                .filter(value => value.length >= 2);
+            if (fields.some(value => source.includes(value) || value.includes(source))) return true;
+            const type = String(fact.type || '');
+            const typeAliases = aliases[type] || [];
+            return ['ask', 'probe', 'investigate', 'observe'].includes(action) &&
+                typeAliases.some(alias => source.includes(this._normalizeQuestText(alias)));
+        });
+        if (!matched?.id) return null;
+        if (!scene.discoveries || typeof scene.discoveries !== 'object') scene.discoveries = { characters: {} };
+        if (!scene.discoveries.characters || typeof scene.discoveries.characters !== 'object') scene.discoveries.characters = {};
+        if (!scene.discoveries.characters[character.id]) scene.discoveries.characters[character.id] = {};
+        const current = scene.discoveries.characters[character.id][matched.id] || {};
+        const currentState = String(current.state || 'locked');
+        scene.discoveries.characters[character.id][matched.id] = {
+            state: ['suspected', 'confirmed'].includes(currentState) ? currentState : 'hinted',
+            evidence: [...new Set([...(current.evidence || []), text].map(String).filter(Boolean))].slice(0, 10),
+            discoveredAt: current.discoveredAt || Date.now()
+        };
+        return matched;
     },
 
     _findContextualTool(scene) {
