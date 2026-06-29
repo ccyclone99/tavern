@@ -932,6 +932,12 @@ const ChatUI = {
         if (!isOoc && !isStrategy && typeof WorldEngine !== 'undefined' && WorldEngine.markFlowMoveCompleted) {
             WorldEngine.markFlowMoveCompleted(scene, text);
         }
+        if (!isOoc && !isStrategy && typeof WorldEngine !== 'undefined' && WorldEngine.applyFreeformActionOutcome) {
+            const outcome = WorldEngine.applyFreeformActionOutcome(scene, text, route.meta || {}, { messageId: msg.id });
+            if (outcome?.changed && msg.intentMeta) {
+                msg.intentMeta.freeformOutcomeIds = (outcome.discoveries || []).map(item => item.id).filter(Boolean).slice(0, 6);
+            }
+        }
         this.onMessageAdded(msg);
         await State.saveCurrentSceneDebounced();
         this.inputEl.value = '';

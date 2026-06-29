@@ -6980,6 +6980,149 @@ const WorldEngine = {
         return actions.slice(0, 8);
     },
 
+    applyFreeformActionOutcome(scene, text, meta = {}, options = {}) {
+        if (!scene || !this.isScenePlaying(scene)) return { changed: false, reason: 'scene_not_playing' };
+        const actionType = String(meta.actionType || meta.type || meta.kind || '').trim();
+        const eligibleTypes = new Set(['observe', 'ask', 'probe', 'investigate', 'use_item']);
+        if (!eligibleTypes.has(actionType)) return { changed: false, reason: 'unsupported_action_type' };
+        this.normalizeScene(scene);
+
+        const sourceText = String(text || '').trim();
+        const discoveries = [];
+        const addDiscovery = data => {
+            const entry = this._addKnowledgeDiscovery(scene, data);
+            if (entry && !discoveries.some(item => item.id === entry.id)) discoveries.push(entry);
+            return entry;
+        };
+
+        const clue = this._matchFreeformClueStage(scene, sourceText, actionType);
+        if (clue) {
+            addDiscovery({
+                id: `disc_free_${clue.clue.id}_${clue.stage.id || clue.stageIndex}`,
+                subjectType: clue.clue.subjectType || 'mystery',
+                subjectId: clue.clue.id,
+                level: clue.stage.level || 'hint',
+                title: clue.stage.title || clue.clue.title,
+                text: clue.stage.text || clue.clue.title,
+                source: clue.stage.source || clue.clue.subjectName || '自由行动',
+                reliability: ['evidence', 'inference', 'truth'].includes(clue.stage.level) ? 'confirmed' : 'unverified',
+                tags: [clue.clue.id, clue.clue.subjectType, clue.clue.subjectName, actionType].filter(Boolean)
+            });
+        } else {
+            const loc = (scene.locations || []).find(item => item.id === scene.currentLocation);
+            if (loc && ['observe', 'investigate', 'use_item'].includes(actionType)) {
+                addDiscovery({
+                    id: `disc_free_loc_${loc.id}`,
+                    subjectType: 'location',
+                    subjectId: loc.id,
+                    level: 'hint',
+                    title: `${loc.name || '当前地点'}可利用细节`,
+                    text: loc.description || `你开始留意${loc.name || '当前地点'}里可利用的细节。`,
+                    source: loc.name || '当前地点',
+                    reliability: 'unverified',
+                    tags: ['location', loc.id, actionType].filter(Boolean)
+                });
+            }
+            const focus = this._focusCharacterForFreeform(scene);
+            if (focus && ['ask', 'probe'].includes(actionType)) {
+                const hint = this._publicCharacterHint(focus) || focus.description || `${focus.name}的公开态度和反应。`;
+                addDiscovery({
+                    id: `disc_free_char_${focus.id}`,
+                    subjectType: 'character',
+                    subjectId: focus.id,
+                    level: 'hint',
+                    title: `${focus.name}的公开反应`,
+                    text: hint,
+                    source: focus.name,
+                    reliability: 'unverified',
+                    tags: ['character', focus.id, actionType].filter(Boolean)
+                });
+            }
+        }
+
+        const tool = this._findMentionedTool(scene, sourceText);
+        if (tool) {
+            addDiscovery({
+                id: `disc_free_tool_${tool.id || this._normalizeQuestText(tool.name)}`,
+                subjectType: 'item',
+                subjectId: tool.id || tool.name,
+                level: 'hint',
+                title: `${tool.name}可用于当前调查`,
+                text: this._itemEffectSummary?.(tool) || tool.description || `${tool.name}可以作为后续行动资源。`,
+                source: '背包工具',
+                reliability: 'unverified',
+                tags: ['item', ...(tool.tags || []), actionType].filter(Boolean)
+            });
+        }
+
+        if (discoveries.length === 0) return { changed: false, reason: 'no_contextual_outcome' };
+        const title = discoveries[0].title || '自由行动收获';
+        this.recordEvent(scene, {
+            category: actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration',
+            title: '自由行动收获',
+            text: `${sourceText || '自由行动'} -> ${title}`,
+            messageId: options.messageId || '',
+            refId: discoveries[0].id || '',
+            turn: scene.turnCount || 0
+        });
+        if (scene.currentSituation) {
+            scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+        }
+        return { changed: true, discoveries };
+    },
+
+    _matchFreeformClueStage(scene, text, actionType = '') {
+        const source = this._normalizeFlowText(text);
+        if (!source || !Array.isArray(scene?.clueGraph)) return null;
+        const currentLocation = String(scene.currentLocation || '');
+        const action = String(actionType || '');
+        const actionMatchesStage = stage => {
+            const actions = Array.isArray(stage.actions) ? stage.actions : [];
+            if (actions.some(item => {
+                const needle = this._normalizeFlowText(item);
+                return needle.length >= 4 && (source.includes(needle) || needle.includes(source));
+            })) return true;
+            const terms = [stage.title, stage.text, stage.source].map(item => this._normalizeFlowText(item)).filter(item => item.length >= 4);
+            return ['observe', 'investigate', 'probe', 'ask'].includes(action) && terms.some(term => source.includes(term) || term.includes(source));
+        };
+        for (const clue of scene.clueGraph) {
+            if (!clue || clue.status === 'hidden') continue;
+            const stages = Array.isArray(clue.stages) ? clue.stages : [];
+            const idx = this._clamp(Number(clue.currentStage || 0), 0, Math.max(0, stages.length - 1));
+            const stage = stages[idx];
+            if (!stage) continue;
+            if (stage.locationId && currentLocation && stage.locationId !== currentLocation) continue;
+            if (actionMatchesStage(stage)) return { clue, stage, stageIndex: idx };
+        }
+        return null;
+    },
+
+    _addKnowledgeDiscovery(scene, data = {}) {
+        if (typeof State !== 'undefined' && State.addKnowledgeDiscovery) {
+            return State.addKnowledgeDiscovery(scene, data);
+        }
+        if (!scene.knowledge || typeof scene.knowledge !== 'object') scene.knowledge = {};
+        if (!Array.isArray(scene.knowledge.discoveries)) scene.knowledge.discoveries = [];
+        const id = String(data.id || `disc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+        const existing = scene.knowledge.discoveries.find(item => item?.id === id);
+        if (existing) return existing;
+        const entry = {
+            id,
+            subjectType: String(data.subjectType || 'event'),
+            subjectId: String(data.subjectId || ''),
+            level: String(data.level || 'hint'),
+            title: String(data.title || data.text || '未命名线索').slice(0, 120),
+            text: String(data.text || data.title || '').slice(0, 1000),
+            source: String(data.source || '自由行动').slice(0, 120),
+            reliability: String(data.reliability || 'unverified'),
+            tags: Array.isArray(data.tags) ? data.tags.map(String).slice(0, 12) : [],
+            evidenceIds: Array.isArray(data.evidenceIds) ? data.evidenceIds.map(String).slice(0, 20) : [],
+            discoveredAt: Date.now()
+        };
+        scene.knowledge.discoveries.push(entry);
+        return entry;
+    },
+
     _buildFreedomActions(scene, situation = {}) {
         const actions = [];
         const add = action => {
@@ -7047,6 +7190,12 @@ const WorldEngine = {
         return actions;
     },
 
+    _focusCharacterForFreeform(scene) {
+        const chars = this._sceneCharacters(scene);
+        const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
+        return chars.find(char => char.id === currentId) || chars[0] || null;
+    },
+
     _findContextualTool(scene) {
         const items = Array.isArray(scene?.inventory) ? scene.inventory : [];
         const usefulTypes = new Set(['observe', 'investigate', 'probe', 'use_item']);
@@ -7061,6 +7210,15 @@ const WorldEngine = {
             );
             return tagUseful || effectUseful;
         }) || null;
+    },
+
+    _findMentionedTool(scene, text = '') {
+        const normalized = this._normalizeQuestText(text);
+        const tool = this._findContextualTool(scene);
+        if (!tool) return null;
+        const name = this._normalizeQuestText(tool.name || '');
+        if (!normalized || !name || normalized.includes(name) || name.includes(normalized)) return tool;
+        return /扫描|探测|检查|检测|工具|记录|地图|修复/.test(normalized) ? tool : null;
     },
 
     _publicCharacterHint(char) {

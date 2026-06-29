@@ -152,6 +152,72 @@ function testFreedomActionsUseSceneContext(WorldEngine) {
     assert.ok(actions.includes('用便携扫描仪检查当前环境'));
 }
 
+function testFreeformClueActionCreatesKnowledge(WorldEngine) {
+    const scene = makeScene({
+        messages: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        clueGraph: [{
+            id: 'clue_cargo',
+            title: '货舱残响',
+            subjectType: 'mystery',
+            subjectName: '下层货舱',
+            status: 'hinted',
+            currentStage: 0,
+            stages: [{
+                id: 'stage_cargo_log',
+                level: 'hint',
+                title: '货舱残响记录',
+                text: '货舱看守调离时间和低语记录能互相印证。',
+                source: '机械仆从日志',
+                locationId: 'cargo',
+                actions: ['核对货舱看守调离记录']
+            }]
+        }]
+    });
+
+    const result = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我核对货舱看守调离记录。',
+        { actionType: 'investigate' },
+        { messageId: 'msg_user_1' }
+    );
+
+    assert.strictEqual(result.changed, true);
+    assert.ok(scene.knowledge.discoveries.some(item =>
+        item.id === 'disc_free_clue_cargo_stage_cargo_log' &&
+        item.title === '货舱残响记录' &&
+        item.subjectId === 'clue_cargo'
+    ));
+    assert.ok(scene.eventLog.some(event =>
+        event.category === 'exploration' &&
+        event.title === '自由行动收获' &&
+        event.messageId === 'msg_user_1'
+    ));
+}
+
+function testFreeformLocationObservationDedupesKnowledge(WorldEngine) {
+    const scene = makeScene({
+        messages: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        clueGraph: [],
+        locations: [{
+            id: 'cargo',
+            name: '下层货舱',
+            description: '昏暗的货舱堆满被封存的异形文物和混沌遗物',
+            connections: []
+        }]
+    });
+
+    const first = WorldEngine.applyFreeformActionOutcome(scene, '我观察四周。', { actionType: 'observe' });
+    const second = WorldEngine.applyFreeformActionOutcome(scene, '我再观察一下四周。', { actionType: 'observe' });
+    const locationDiscoveries = scene.knowledge.discoveries.filter(item => item.id === 'disc_free_loc_cargo');
+
+    assert.strictEqual(first.changed, true);
+    assert.strictEqual(second.changed, true);
+    assert.strictEqual(locationDiscoveries.length, 1);
+    assert.strictEqual(locationDiscoveries[0].title, '下层货舱可利用细节');
+}
+
 function testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine) {
     const early = makeScene({ turnCount: 3 });
     assert.strictEqual(WorldEngine._maybeEmitStalledSoftMove(early), null);
@@ -185,6 +251,8 @@ const WorldEngine = loadWorldEngine();
 testStalledSoftMoveStartsFromPlayerFreedom(WorldEngine);
 testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine);
 testFreedomActionsUseSceneContext(WorldEngine);
+testFreeformClueActionCreatesKnowledge(WorldEngine);
+testFreeformLocationObservationDedupesKnowledge(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);
 testFlowGuideFallbackUsesNeutralWording(WorldEngine);
 console.log('freeform-guidance regression tests passed');
