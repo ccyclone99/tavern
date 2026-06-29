@@ -693,14 +693,8 @@ const GroupChat = {
         scene.pendingCheck = null;
         scene.messages.push(msg);
         ChatUI.onMessageAdded(msg);
+        let challengeResult = null;
         if (typeof WorldEngine !== 'undefined') {
-            if (WorldEngine.recordEvent) WorldEngine.recordEvent(scene, {
-                category: 'check',
-                title: `${check.statName || '属性'}检定：${outcomeInfo.label}`,
-                text: resultText,
-                messageId: msg.id,
-                timestamp: msg.timestamp
-            });
             if (WorldEngine.recordConsequence && ['partial', 'fail', 'critical_fail'].includes(outcomeInfo.outcome)) {
                 const severity = outcomeInfo.outcome === 'critical_fail'
                     ? 'critical'
@@ -725,7 +719,20 @@ const GroupChat = {
                 WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             }
             if (scene.gameState === 'playing') {
-                const challengeResult = WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+                challengeResult = WorldEngine.resolveChallengeCheck?.(scene, check, outcomeInfo);
+                if (challengeResult?.challenge) {
+                    msg.checkData.challengeProgress = {
+                        challengeId: challengeResult.challenge.id || '',
+                        challengeTitle: challengeResult.challenge.title || challengeResult.challenge.goal || '挑战',
+                        progressDelta: Number(challengeResult.progressDelta || 0),
+                        strainDelta: Number(challengeResult.strainDelta || 0),
+                        progress: Number(challengeResult.challenge.progress || 0),
+                        targetProgress: Number(challengeResult.challenge.targetProgress || 0),
+                        strain: Number(challengeResult.challenge.strain || 0),
+                        maxStrain: Number(challengeResult.challenge.maxStrain || 0),
+                        status: challengeResult.challenge.status || ''
+                    };
+                }
                 if (challengeResult?.secondaryResults?.length > 0) {
                     msg.checkData.secondaryResults = challengeResult.secondaryResults.map(item => ({
                         approachId: item.approachId || '',
@@ -787,6 +794,21 @@ const GroupChat = {
                 WorldEngine._retryPendingQuestRewardsAfterInventoryChange?.(scene);
                 WorldEngine._retryPendingExplorationRewardsAfterInventoryChange?.(scene);
             }
+        }
+        if (typeof WorldEngine !== 'undefined' && WorldEngine.recordEvent) {
+            WorldEngine.recordEvent(scene, {
+                category: 'check',
+                title: `${check.statName || '属性'}检定：${outcomeInfo.label}`,
+                text: this._buildCheckEventText(resultText, msg.checkData),
+                messageId: msg.id,
+                timestamp: msg.timestamp
+            });
+        }
+        if (typeof ChatUI !== 'undefined' && ChatUI.refreshMessage) {
+            ChatUI.refreshMessage(msg.id, { scroll: true });
+        }
+        if (typeof showToast !== 'undefined') {
+            showToast(`${check.statName || '属性'}检定：${outcomeInfo.label}`);
         }
         ActionBar.renderPendingCheck();
         ChatUI._syncInputMode?.();
@@ -883,6 +905,28 @@ const GroupChat = {
             : ['暴露风险、时间推进、资源损失或得到不完整线索'];
     },
 
+    _buildCheckEventText(resultText, data = {}) {
+        const parts = [String(resultText || '').replace(/\n+/g, ' ')];
+        const progress = data.challengeProgress;
+        if (progress) {
+            const deltas = [
+                progress.progressDelta ? `进展 ${progress.progressDelta >= 0 ? '+' : ''}${progress.progressDelta}` : '',
+                progress.strainDelta ? `压力 ${progress.strainDelta >= 0 ? '+' : ''}${progress.strainDelta}` : ''
+            ].filter(Boolean).join('，') || '进展不变';
+            parts.push(`挑战「${progress.challengeTitle || '挑战'}」${deltas}（${progress.progress}/${progress.targetProgress}，压力 ${progress.strain}/${progress.maxStrain}）`);
+        }
+        if (Array.isArray(data.secondaryResults) && data.secondaryResults.length > 0) {
+            parts.push(`复合行动：${data.secondaryResults.map(item => item.label || item.approachId || '次级方法').join('、')}`);
+        }
+        if (Array.isArray(data.counterplayResults) && data.counterplayResults.length > 0) {
+            parts.push(`反制变化：${data.counterplayResults.map(item => item.title || item.id || '反制').join('、')}`);
+        }
+        if (Array.isArray(data.resolvedConsequences) && data.resolvedConsequences.length > 0) {
+            parts.push(`解除后果：${data.resolvedConsequences.map(item => item.title || item.id || '后果').join('、')}`);
+        }
+        return parts.filter(Boolean).join('；').slice(0, 360);
+    },
+
     _buildCheckNarrationFocus(data) {
         const consequences = (data.consequenceOptions || []).join('；') || data.consequenceHint || '';
         const resources = Array.isArray(data.resourceModifiers) && data.resourceModifiers.length > 0
@@ -897,7 +941,10 @@ const GroupChat = {
                 return `${item.label}（${delta}）`;
             }).join('；')}。`
             : '';
-        return `检定结果：${data.resultLabel || '未知'}。${resources}${counters}${secondary}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+        const challenge = data.challengeProgress
+            ? ` 挑战变化：${data.challengeProgress.challengeTitle || '挑战'}，进展 ${data.challengeProgress.progress}/${data.challengeProgress.targetProgress}，压力 ${data.challengeProgress.strain}/${data.challengeProgress.maxStrain}。`
+            : '';
+        return `检定结果：${data.resultLabel || '未知'}。${resources}${challenge}${counters}${secondary}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
     },
 
     async cancelPendingCheck() {

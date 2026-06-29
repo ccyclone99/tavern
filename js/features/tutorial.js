@@ -435,6 +435,33 @@ const Tutorial = {
         if (!q || !q.objectives[stepIdx]) return;
         if (!q.objectives[stepIdx].completed) {
             q.objectives[stepIdx].completed = true;
+            const objectiveText = q.objectives[stepIdx].text || `步骤 ${stepIdx + 1}`;
+            if (typeof WorldEngine !== 'undefined' && WorldEngine.addSystemMessage) {
+                WorldEngine.addSystemMessage(scene, `【任务进展：${q.name}】${objectiveText}`, 'system');
+            } else {
+                scene.messages.push({
+                    id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    role: 'assistant',
+                    content: `【任务进展：${q.name}】${objectiveText}`,
+                    type: 'system',
+                    timestamp: Date.now()
+                });
+            }
+            if (q.objectives.every(objective => objective.completed) && q.status !== 'completed') {
+                q.status = 'completed';
+                q.completedAt = q.completedAt || Date.now();
+                if (typeof WorldEngine !== 'undefined' && WorldEngine.addSystemMessage) {
+                    WorldEngine.addSystemMessage(scene, `【任务完成：${q.name}】`, 'system');
+                } else {
+                    scene.messages.push({
+                        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                        role: 'assistant',
+                        content: `【任务完成：${q.name}】`,
+                        type: 'system',
+                        timestamp: Date.now()
+                    });
+                }
+            }
             State.saveCurrentSceneDebounced();
             if (typeof QuestTracker !== 'undefined' && QuestTracker.render) QuestTracker.render();
             if (typeof SidebarRight !== 'undefined' && SidebarRight.renderQuests) SidebarRight.renderQuests();

@@ -71,6 +71,10 @@ const ChatUI = {
         const resourceModsHtml = resourceMods.length > 0
             ? `<div class="check-modifiers check-used-modifiers">${resourceMods.slice(0, 4).map(m => `<span>${Renderer.escapeHtml(m.source)} ${Renderer.escapeHtml(m.label)}</span>`).join('')}</div>`
             : '';
+        const challengeProgress = d.challengeProgress || null;
+        const challengeProgressHtml = challengeProgress
+            ? `<div class="check-modifiers check-challenge-progress"><span>${Renderer.escapeHtml(challengeProgress.challengeTitle || '挑战')}：${challengeProgress.progressDelta ? `进展 ${challengeProgress.progressDelta >= 0 ? '+' : ''}${challengeProgress.progressDelta}` : '进展不变'}${challengeProgress.strainDelta ? `，压力 ${challengeProgress.strainDelta >= 0 ? '+' : ''}${challengeProgress.strainDelta}` : ''}${challengeProgress.status ? `，状态 ${challengeProgress.status}` : ''}</span></div>`
+            : '';
         const resolvedConsequences = Array.isArray(d.resolvedConsequences) ? d.resolvedConsequences : [];
         const resolvedConsequencesHtml = resolvedConsequences.length > 0
             ? `<div class="check-modifiers check-resolved-consequences">${resolvedConsequences.slice(0, 3).map(item => `<span>解除后果：${Renderer.escapeHtml(item.title || item.id || '后果')}</span>`).join('')}</div>`
@@ -90,6 +94,7 @@ const ChatUI = {
             ${breakdown}
             ${itemMods}
             ${resourceModsHtml}
+            ${challengeProgressHtml}
             ${resolvedConsequencesHtml}
             <div class="check-outcome">
                 <div class="check-result-badge">${Renderer.escapeHtml(resultText)}</div>
@@ -695,6 +700,7 @@ const ChatUI = {
         const div = document.createElement('div');
         div.className = `rp-message ${msg.role}${parsed.emotion ? ' emotion-' + parsed.emotion : ''}`;
         div.dataset.index = idx;
+        if (msg.id) div.dataset.messageId = String(msg.id);
 
         if (parsed.type === 'divider') {
             div.className = 'rp-message rp-divider';
@@ -851,6 +857,24 @@ const ChatUI = {
             if (this.messagesEl) {
                 this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
             }
+        });
+    },
+
+    refreshMessage(messageId, options = {}) {
+        if (!messageId || !State.scene || !this.messagesEl) return false;
+        const idx = State.scene.messages.findIndex(msg => String(msg.id || '') === String(messageId));
+        if (idx < 0) return false;
+        this.render();
+        if (options.scroll === true) this.scrollMessageIntoView(messageId);
+        return true;
+    },
+
+    scrollMessageIntoView(messageId) {
+        if (!messageId || !this.messagesEl) return;
+        requestAnimationFrame(() => {
+            const target = [...this.messagesEl.querySelectorAll('.rp-message')]
+                .find(el => el.dataset.messageId === String(messageId));
+            if (target?.scrollIntoView) target.scrollIntoView({ block: 'nearest' });
         });
     },
 
