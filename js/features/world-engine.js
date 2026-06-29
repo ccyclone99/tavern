@@ -6304,6 +6304,197 @@ const WorldEngine = {
             .filter(Boolean);
     },
 
+    getCompanionActionLeads(scene, options = {}) {
+        if (!scene || !Array.isArray(scene.companionResources)) return [];
+        this.normalizeScene(scene);
+        const limit = this._clamp(Number(options.limit || 4), 1, 8);
+        const activeChallenge = options.activeChallenge || this.getActiveChallenge(scene);
+        const leads = [];
+        this.getUnlockedCompanionResources(scene).forEach((resource, resourceIndex) => {
+            if (!resource?.name || Number(resource.uses || 0) <= 0) return;
+            const challengeLead = this._companionActionLeadForChallenge(scene, resource, activeChallenge);
+            const fallbackLead = this._fallbackCompanionActionLead(scene, resource);
+            const lead = challengeLead || fallbackLead;
+            if (!lead?.action) return;
+            leads.push({
+                resourceId: String(resource.id || resource.name || `companion_${resourceIndex}`).slice(0, 120),
+                name: String(resource.name || '同伴协助').slice(0, 80),
+                characterId: String(resource.characterId || '').slice(0, 100),
+                actionType: String(lead.actionType || '').slice(0, 40),
+                action: String(lead.action || '').slice(0, 120),
+                detail: String(lead.detail || '').slice(0, 180),
+                costText: this._companionCostText(resource),
+                risk: String(resource.risk || '').slice(0, 160),
+                uses: Number(resource.uses || 0),
+                challengeId: String(lead.challengeId || '').slice(0, 120),
+                approachId: String(lead.approachId || '').slice(0, 120),
+                score: Number(lead.score || 0)
+            });
+        });
+        return leads
+            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-CN'))
+            .slice(0, limit);
+    },
+
+    _companionActionLeadForChallenge(scene, resource, challenge) {
+        if (!resource || !challenge || this._isTerminalProgressStatus(challenge.status)) return null;
+        const approaches = this.getChallengeVisibleApproaches(challenge);
+        const ranked = approaches
+            .map(approach => ({
+                approach,
+                score: this._scoreCompanionForApproach(resource, approach)
+            }))
+            .filter(entry => entry.score > 0)
+            .sort((a, b) => b.score - a.score);
+        if (ranked.length === 0) return null;
+        const { approach, score } = ranked[0];
+        return {
+            actionType: approach.actionType || resource.effect?.actionType || '',
+            action: this._formatCompanionApproachAction(resource, approach),
+            detail: `${resource.name} 与当前挑战「${challenge.title || challenge.goal || '挑战'}」相关；${this._companionEffectSummary(resource) || '可提供叙事协助'}。`,
+            challengeId: challenge.id || '',
+            approachId: approach.id || '',
+            score: 76 + score
+        };
+    },
+
+    _scoreCompanionForApproach(resource, approach) {
+        if (!resource || !approach) return 0;
+        const norm = value => this._normalizeQuestText(value || '');
+        const effect = resource.effect || {};
+        const resourceTokens = this._companionActionTokens(resource).map(norm).filter(token => token.length >= 2);
+        const resourceTokenSet = new Set(resourceTokens);
+        const approachTokens = [
+            approach.actionType,
+            approach.stat,
+            approach.label,
+            ...(approach.tags || []),
+            ...(approach.keywords || [])
+        ].map(norm).filter(token => token.length >= 2);
+        let score = 0;
+        if (effect.actionType && approach.actionType && effect.actionType === approach.actionType) score += 14;
+        if (effect.stat && approach.stat && effect.stat === approach.stat) score += 5;
+        approachTokens.forEach(token => {
+            if (resourceTokenSet.has(token)) score += 5;
+            else if (resourceTokens.some(resourceToken => resourceToken.includes(token) || token.includes(resourceToken))) score += 2;
+        });
+        const aliases = this._actionTypeMatchTerms(approach.actionType || '').map(norm).filter(Boolean);
+        if (aliases.some(alias => resourceTokens.some(token => token.includes(alias) || alias.includes(token)))) score += 4;
+        if (effect.evidenceReliability && approachTokens.some(token => ['证据', '线索', '背书', 'evidence'].includes(token))) score += 5;
+        if ((effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) &&
+            approachTokens.some(token => ['后果', '风险', '危机', 'consequence'].includes(token))) {
+            score += 4;
+        }
+        if (effect.clockDelta && approachTokens.some(token => ['时钟', '压力', '局势', 'clock'].includes(token))) score += 3;
+        return Math.min(28, score);
+    },
+
+    _companionActionTokens(resource) {
+        const effect = resource?.effect || {};
+        return [
+            resource?.name,
+            resource?.risk,
+            resource?.characterId,
+            ...(resource?.tags || []),
+            effect.actionType,
+            effect.stat,
+            effect.when,
+            effect.clockTag,
+            ...(effect.evidenceTags || []),
+            ...(effect.resolveConsequenceTags || []),
+            ...(effect.consequenceTags || [])
+        ].map(value => String(value || '').trim()).filter(Boolean);
+    },
+
+    _formatCompanionApproachAction(resource, approach) {
+        const rawLabel = String(approach?.label || '处理当前挑战').trim();
+        const label = rawLabel.replace(/^(用|使用|投入|借助|利用|协助|尝试|进行|完成|请)/, '') || rawLabel;
+        return `请${resource.name}协助${label}`;
+    },
+
+    _fallbackCompanionActionLead(scene, resource) {
+        if (!resource) return null;
+        const effect = resource.effect || {};
+        const actionType = effect.actionType || this._primaryCompanionActionType(resource);
+        const summary = this._companionEffectSummary(resource) || '这项协助可以改变后续行动的风险或信息质量。';
+        let action = '';
+        let score = 46;
+        if (effect.evidenceReliability) {
+            action = `请${resource.name}帮忙确认关键证据`;
+            score += 10;
+        } else if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) {
+            action = `请${resource.name}帮忙处理后果`;
+            score += 8;
+        } else if (Number(effect.clockDelta || 0) < 0) {
+            action = `请${resource.name}帮忙压低局势时钟`;
+            score += 7;
+        } else if (actionType === 'persuade') {
+            action = `请${resource.name}出面争取支持`;
+        } else if (actionType === 'investigate') {
+            action = `请${resource.name}帮忙分析线索`;
+        } else if (actionType === 'observe') {
+            action = `请${resource.name}帮忙观察现场`;
+        } else if (actionType === 'ask') {
+            action = `请${resource.name}帮忙打听消息`;
+        } else if (actionType === 'probe') {
+            action = `请${resource.name}帮忙试探对方`;
+        } else if (actionType === 'use_item') {
+            action = `请${resource.name}协助处理设备或道具`;
+        } else if (actionType === 'sneak') {
+            action = `请${resource.name}掩护低调行动`;
+        } else if (actionType === 'combat') {
+            action = `请${resource.name}协助应对冲突`;
+        } else if (actionType === 'force') {
+            action = `请${resource.name}协助突破障碍`;
+        }
+        if (!action) return null;
+        return {
+            actionType,
+            action,
+            detail: summary,
+            score
+        };
+    },
+
+    _primaryCompanionActionType(resource) {
+        const effect = resource?.effect || {};
+        if (effect.actionType) return effect.actionType;
+        const text = this._normalizeQuestText([
+            resource?.name,
+            resource?.risk,
+            ...(resource?.tags || []),
+            ...(effect.evidenceTags || []),
+            ...(effect.resolveConsequenceTags || []),
+            ...(effect.consequenceTags || [])
+        ].join(' '));
+        const typeOrder = ['persuade', 'investigate', 'observe', 'ask', 'probe', 'use_item', 'sneak', 'combat', 'force'];
+        return typeOrder.find(type =>
+            this._actionTypeMatchTerms(type)
+                .map(term => this._normalizeQuestText(term))
+                .some(term => term && text.includes(term))
+        ) || '';
+    },
+
+    _companionEffectSummary(resource) {
+        const effect = resource?.effect || {};
+        const parts = [];
+        if (effect.checkBonus) parts.push(`检定 ${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
+        if (effect.dcDelta) parts.push(`DC ${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
+        if (effect.riskDelta) parts.push(`风险 ${effect.riskDelta >= 0 ? '+' : ''}${effect.riskDelta}`);
+        if (effect.clockDelta) parts.push(`时钟 ${effect.clockDelta >= 0 ? '+' : ''}${effect.clockDelta}`);
+        if (effect.evidenceReliability) parts.push(`证据→${effect.evidenceReliability}`);
+        if (effect.resolveConsequence || (effect.resolveConsequenceTags || []).length || (effect.consequenceTags || []).length) parts.push('解除后果');
+        return parts.join('，');
+    },
+
+    _companionCostText(resource) {
+        const cost = resource?.cost || {};
+        return [
+            Number(cost.time || 0) > 0 ? `耗时 ${Number(cost.time)}分` : '',
+            Number(cost.trust || 0) > 0 ? `信任 -${Number(cost.trust)}` : ''
+        ].filter(Boolean).join('，');
+    },
+
     getCompanionResourceAvailability(scene, resource) {
         if (!scene || !resource) return { ok: false, reason: '缺少场景或协助资源' };
         const unlock = resource.unlock && typeof resource.unlock === 'object' ? resource.unlock : {};
@@ -6871,6 +7062,26 @@ const WorldEngine = {
             });
         }
 
+        const companionLead = this.getCompanionActionLeads(scene, {
+            activeChallenge: this.getActiveChallenge(scene),
+            limit: 1
+        })[0];
+        if (companionLead) {
+            const details = [
+                companionLead.detail,
+                companionLead.costText ? `代价：${companionLead.costText}` : '',
+                companionLead.risk ? `风险：${companionLead.risk}` : ''
+            ].filter(Boolean);
+            add({
+                kind: 'companion',
+                title: `可请求协助：${companionLead.name}`,
+                detail: details.join('；'),
+                command: companionLead.action,
+                label: `协助：${companionLead.name}`,
+                priority: 68
+            });
+        }
+
         const pendingRewards = (scene.pendingExplorationRewards || []).filter(Boolean);
         if (pendingRewards.length > 0) {
             const first = pendingRewards[0];
@@ -7161,12 +7372,13 @@ const WorldEngine = {
         this.refreshFlowNodeAvailability(scene);
         const flowNodes = this.getVisibleFlowNodes(scene);
         const itemActionLeads = this.getItemActionLeads(scene, { activeChallenge, limit: 4 });
+        const companionActionLeads = this.getCompanionActionLeads(scene, { activeChallenge, limit: 4 });
         const storyTexture = scene.storyTexture || null;
         const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
         const optionalQuests = this.getOptionalQuestLeads(scene, { limit: 4 });
-        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, itemActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
+        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, itemActionLeads, companionActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, optionalQuests, itemActionLeads, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
+        return { location, activeQuest, optionalQuests, itemActionLeads, companionActionLeads, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
     },
 
     buildSoftMove(scene, options = {}) {
@@ -7194,6 +7406,7 @@ const WorldEngine = {
         this._buildFreedomActions(scene, situation).slice(0, 6).forEach(addAction);
         (situation.optionalQuests || []).slice(0, 2).forEach(lead => addAction(lead.action));
         (situation.itemActionLeads || []).slice(0, 2).forEach(lead => addAction(lead.action));
+        (situation.companionActionLeads || []).slice(0, 2).forEach(lead => addAction(lead.action));
         if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         if (challenge) {
             this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
@@ -7564,6 +7777,7 @@ const WorldEngine = {
         };
         const optionalActions = this._buildOptionalQuestActions(scene, data.optionalQuests);
         const itemActions = this._buildItemActionSuggestions(scene, data.itemActionLeads);
+        const companionActions = this._buildCompanionActionSuggestions(scene, data.companionActionLeads);
         this._buildFreedomActions(scene, data).slice(0, optionalActions.length > 0 ? 5 : 6).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
         if (failureWarning) {
@@ -7571,6 +7785,7 @@ const WorldEngine = {
         }
         optionalActions.slice(0, 2).forEach(add);
         itemActions.slice(0, 2).forEach(add);
+        companionActions.slice(0, 2).forEach(add);
         const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
         if (unknown) add(unknown.actions[0]);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
@@ -7606,6 +7821,11 @@ const WorldEngine = {
 
     _buildItemActionSuggestions(scene, leads = null) {
         const items = Array.isArray(leads) ? leads : this.getItemActionLeads(scene, { limit: 4 });
+        return items.map(item => item?.action).filter(Boolean);
+    },
+
+    _buildCompanionActionSuggestions(scene, leads = null) {
+        const items = Array.isArray(leads) ? leads : this.getCompanionActionLeads(scene, { limit: 4 });
         return items.map(item => item?.action).filter(Boolean);
     },
 
@@ -8654,7 +8874,8 @@ const WorldEngine = {
         const flowNodes = this.getVisibleFlowNodes(scene);
         const optionalQuests = this.getOptionalQuestLeads(scene, { limit: 4 });
         const itemActionLeads = this.getItemActionLeads(scene, { activeChallenge, limit: 4 });
-        return { activeQuest, optionalQuests, itemActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes };
+        const companionActionLeads = this.getCompanionActionLeads(scene, { activeChallenge, limit: 4 });
+        return { activeQuest, optionalQuests, itemActionLeads, companionActionLeads, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes };
     },
 
     _normalizeFlowText(text) {
