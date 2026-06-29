@@ -3476,6 +3476,10 @@ const WorldEngine = {
         if (changed) {
             if (scene.questProgressGuards) scene.questProgressGuards.autoAdvanceStreak = 0;
             this._refreshRevelationsFromEvidence(scene);
+            this.refreshFlowNodeAvailability(scene);
+            if (scene.currentSituation) {
+                scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+            }
         }
         return changed;
     },
@@ -4098,6 +4102,12 @@ const WorldEngine = {
         }
         if (Array.isArray(update.revelations)) {
             changed = this.applyRevelationUpdate(scene, update.revelations) || changed;
+        }
+        if (changed) {
+            this.refreshFlowNodeAvailability(scene);
+            if (scene.currentSituation) {
+                scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+            }
         }
         return changed;
     },
@@ -6862,11 +6872,13 @@ const WorldEngine = {
         const challengeEvidence = activeChallenge ? this.getEvidenceForChallenge(scene, activeChallenge).slice(0, 4) : [];
         const visibleEvidence = (scene.evidenceLedger || []).filter(e => e.visible !== false).slice(-8);
         const revelations = this.getVisibleRevelations(scene);
+        this.refreshFlowNodeAvailability(scene);
+        const flowNodes = this.getVisibleFlowNodes(scene);
         const storyTexture = scene.storyTexture || null;
         const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
-        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge });
+        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, storyTexture };
+        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
     },
 
     buildSoftMove(scene, options = {}) {
@@ -6957,6 +6969,7 @@ const WorldEngine = {
         if (unknown) add(unknown.actions[0]);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
         if (urgentClock) add(`处理时钟：${urgentClock.name}`);
+        this._buildFlowNodeActions(scene, data.flowNodes).slice(0, 3).forEach(add);
         if (data.activeChallenge) {
             this.getChallengeVisibleApproaches(data.activeChallenge)
                 .slice(0, 2)
@@ -6978,6 +6991,150 @@ const WorldEngine = {
         if (clue) add(`利用线索：${clue.title || clue.text}`);
         if (actions.length === 0) ['观察当前地点', '询问在场 NPC', '提出一个具体行动'].forEach(add);
         return actions.slice(0, 8);
+    },
+
+    getVisibleFlowNodes(scene, options = {}) {
+        const nodes = Array.isArray(scene?.flowGraph?.nodes) ? scene.flowGraph.nodes : [];
+        const includeResolved = options.includeResolved === true;
+        return nodes
+            .filter(node => node && node.status !== 'hidden')
+            .filter(node => includeResolved || node.status !== 'resolved')
+            .map(node => ({
+                id: node.id,
+                phaseId: node.phaseId,
+                type: node.type,
+                title: node.title,
+                status: node.status,
+                visibleText: node.visibleText,
+                npcs: Array.isArray(node.npcs) ? node.npcs.slice(0, 8) : [],
+                challengeIds: Array.isArray(node.challengeIds) ? node.challengeIds.slice(0, 8) : [],
+                clueIds: Array.isArray(node.clueIds) ? node.clueIds.slice(0, 8) : [],
+                exits: Array.isArray(node.exits) ? node.exits.slice(0, 10) : []
+            }))
+            .slice(0, 12);
+    },
+
+    refreshFlowNodeAvailability(scene) {
+        const nodes = Array.isArray(scene?.flowGraph?.nodes) ? scene.flowGraph.nodes : [];
+        if (nodes.length === 0) return false;
+        const tokens = this._flowDiscoveryTokens(scene);
+        const currentNode = this._currentFlowNode(scene);
+        let changed = false;
+        nodes.forEach(node => {
+            if (!node || !['hidden', 'hinted'].includes(node.status)) return;
+            if (currentNode && node.id === currentNode.id) {
+                node.status = 'available';
+                node.updatedAt = Date.now();
+                changed = true;
+                return;
+            }
+            const refs = [
+                node.id,
+                node.title,
+                ...(node.clueIds || []),
+                ...(node.challengeIds || []),
+                ...(node.npcs || [])
+            ].map(item => this._normalizeQuestText(item)).filter(Boolean);
+            const matched = refs.some(ref => tokens.has(ref));
+            if (!matched) return;
+            node.status = 'available';
+            node.updatedAt = Date.now();
+            changed = true;
+        });
+        return changed;
+    },
+
+    _flowDiscoveryTokens(scene) {
+        const tokens = new Set();
+        const add = value => {
+            const text = this._normalizeQuestText(value || '');
+            if (text) tokens.add(text);
+        };
+        (scene?.knowledge?.discoveries || []).forEach(item => {
+            add(item.id);
+            add(item.title);
+            add(item.text);
+            add(item.subjectId);
+            (item.tags || []).forEach(add);
+            (item.evidenceIds || []).forEach(add);
+        });
+        (scene?.evidenceLedger || []).filter(item => item.visible !== false).forEach(item => {
+            add(item.id);
+            add(item.title);
+            (item.tags || []).forEach(add);
+            (item.supports || []).forEach(add);
+        });
+        (scene?.clueGraph || []).filter(item => ['suspected', 'confirmed', 'resolved'].includes(item.status)).forEach(item => {
+            add(item.id);
+            add(item.title);
+            add(item.subjectName);
+            (item.evidence || []).forEach(add);
+        });
+        (scene?.flowGraph?.revelations || []).filter(item => ['suspected', 'confirmed'].includes(item.status)).forEach(item => {
+            add(item.id);
+            add(item.conclusion);
+            (item.clueIds || []).forEach(add);
+            (item.evidenceIds || []).forEach(add);
+        });
+        return tokens;
+    },
+
+    _buildFlowNodeActions(scene, nodes = null) {
+        const visibleNodes = Array.isArray(nodes) ? nodes : this.getVisibleFlowNodes(scene);
+        if (visibleNodes.length === 0) return [];
+        const currentNode = this._currentFlowNode(scene);
+        const currentId = currentNode?.id || '';
+        const currentLocationId = String(scene?.currentLocation || '');
+        const actions = [];
+        const add = text => {
+            const clean = String(text || '').trim();
+            if (clean && !actions.includes(clean)) actions.push(clean);
+        };
+        const sorted = visibleNodes
+            .filter(node => node && node.id !== currentId && node.status !== 'resolved')
+            .sort((a, b) => {
+                const aExit = currentNode?.exits?.includes(a.id) ? 0 : 1;
+                const bExit = currentNode?.exits?.includes(b.id) ? 0 : 1;
+                if (aExit !== bExit) return aExit - bExit;
+                const order = { available: 0, hinted: 1, hidden: 2, resolved: 3 };
+                return (order[a.status] ?? 2) - (order[b.status] ?? 2);
+            });
+        sorted.slice(0, 4).forEach(node => {
+            const loc = this._locationForFlowNode(scene, node);
+            const target = node.title || loc?.name || node.id;
+            const detail = node.visibleText ? `：${this._shortChoiceText(node.visibleText, 28)}` : '';
+            if (loc && loc.id !== currentLocationId && node.status === 'available') {
+                add(`前往${loc.name || target}调查${detail}`);
+            } else if (node.status === 'available') {
+                add(`深入节点「${target}」${detail}`);
+            } else {
+                add(`打听节点「${target}」的入口${detail}`);
+            }
+        });
+        return actions;
+    },
+
+    _currentFlowNode(scene) {
+        const nodes = Array.isArray(scene?.flowGraph?.nodes) ? scene.flowGraph.nodes : [];
+        const currentLocation = (scene?.locations || []).find(loc => loc.id === scene.currentLocation);
+        const candidates = [
+            `node_${scene?.currentLocation || ''}`,
+            scene?.currentLocation || '',
+            currentLocation?.name || ''
+        ].map(item => this._normalizeQuestText(item)).filter(Boolean);
+        return nodes.find(node => candidates.includes(this._normalizeQuestText(node.id))) ||
+            nodes.find(node => candidates.includes(this._normalizeQuestText(node.title))) ||
+            null;
+    },
+
+    _locationForFlowNode(scene, node) {
+        if (!node) return null;
+        const locations = Array.isArray(scene?.locations) ? scene.locations : [];
+        const normalizedId = this._normalizeQuestText(node.id || '').replace(/^node/, '');
+        return locations.find(loc => this._normalizeQuestText(`node_${loc.id}`) === this._normalizeQuestText(node.id || '')) ||
+            locations.find(loc => this._normalizeQuestText(loc.id || '') === normalizedId) ||
+            locations.find(loc => this._normalizeQuestText(loc.name || '') === this._normalizeQuestText(node.title || '')) ||
+            null;
     },
 
     applyFreeformActionOutcome(scene, text, meta = {}, options = {}) {
@@ -7082,6 +7239,7 @@ const WorldEngine = {
             turn: scene.turnCount || 0
         });
         if (scene.currentSituation) {
+            this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
         return { changed: true, discoveries };
@@ -7517,7 +7675,10 @@ const WorldEngine = {
         const storyPhase = this.getActiveStoryPhase(scene);
         const knownUnknowns = this.getKnownUnknowns(scene);
         const activeChallenge = this.getActiveChallenge(scene);
-        return { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, activeChallenge };
+        const failureWarnings = this.getFailureWarnings(scene);
+        this.refreshFlowNodeAvailability(scene);
+        const flowNodes = this.getVisibleFlowNodes(scene);
+        return { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes };
     },
 
     _normalizeFlowText(text) {
