@@ -114,6 +114,44 @@ function testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine) {
     assert.ok(actions.indexOf('提交污染星球经历') > actions.indexOf('提出一个自己的计划：我想...'), 'challenge approaches should appear after freeform choices');
 }
 
+function testFreedomActionsUseSceneContext(WorldEngine) {
+    const scene = makeScene({
+        messages: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        locations: [
+            { id: 'cargo', name: '下层货舱', description: '昏暗的货舱堆满被封存的异形文物和混沌遗物', connections: ['engine'] },
+            { id: 'engine', name: '引擎室', description: '巨大的亚空间引擎发出低沉的轰鸣', connections: ['cargo'] }
+        ],
+        inventory: [{
+            id: 'scanner_1',
+            name: '便携扫描仪',
+            type: 'misc',
+            quantity: 1,
+            tags: ['扫描', '观察'],
+            effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false }]
+        }],
+        clueGraph: [{
+            id: 'clue_cargo',
+            title: '货舱残响',
+            status: 'hinted',
+            currentStage: 0,
+            stages: [{
+                level: 'hint',
+                text: '货舱里有不属于机械的低语。',
+                locationId: 'cargo',
+                actions: ['核对货舱看守调离记录']
+            }]
+        }]
+    });
+
+    const actions = WorldEngine.getCurrentSituation(scene).recommendedActions;
+
+    assert.ok(actions.includes('细查下层货舱：昏暗的货舱堆满被封存的异形文物和混沌遗物'));
+    assert.ok(actions.includes('前往引擎室看看能发现什么'));
+    assert.ok(actions.includes('核对货舱看守调离记录'));
+    assert.ok(actions.includes('用便携扫描仪检查当前环境'));
+}
+
 function testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine) {
     const early = makeScene({ turnCount: 3 });
     assert.strictEqual(WorldEngine._maybeEmitStalledSoftMove(early), null);
@@ -146,6 +184,7 @@ function testFlowGuideFallbackUsesNeutralWording(WorldEngine) {
 const WorldEngine = loadWorldEngine();
 testStalledSoftMoveStartsFromPlayerFreedom(WorldEngine);
 testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine);
+testFreedomActionsUseSceneContext(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);
 testFlowGuideFallbackUsesNeutralWording(WorldEngine);
 console.log('freeform-guidance regression tests passed');

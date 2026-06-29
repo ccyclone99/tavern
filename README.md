@@ -12,6 +12,7 @@
 - [docs/MULTI_AGENT.md](docs/MULTI_AGENT.md)：多 agent 模拟场景和游玩报告格式
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：架构、文件职责、数据流、安全约束
 - [docs/SPEC.md](docs/SPEC.md)：下一阶段叙事 RPG 系统规格（知识边界、信息解锁、时钟、检定、计策闭环）
+- [docs/FUTURE_SYSTEM_ROADMAP_SPEC.md](docs/FUTURE_SYSTEM_ROADMAP_SPEC.md)：未来整体路线图（自由行动、NPC 信息分层、网状剧本、成长资源、验收门禁）
 - [docs/UIUX_SPEC.md](docs/UIUX_SPEC.md)：下一阶段前端 UI/UX 优化规格（信息架构、自然输入、响应式、可访问性）
 - [docs/INPUT_FLOW_SPEC.md](docs/INPUT_FLOW_SPEC.md)：下一阶段单输入框自然输入规格（自动意图识别、被动检定、pending 状态）
 - [docs/SCENARIO_FLOW_SPEC.md](docs/SCENARIO_FLOW_SPEC.md)：下一阶段剧本与游戏流程强化规格（开局引导、阶段目标、卡住提示、失败推进）

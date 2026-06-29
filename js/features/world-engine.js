@@ -6890,7 +6890,7 @@ const WorldEngine = {
             if (!text || actions.includes(text)) return;
             actions.push(text);
         };
-        this._buildFreedomActions(scene, situation).slice(0, 4).forEach(addAction);
+        this._buildFreedomActions(scene, situation).slice(0, 6).forEach(addAction);
         if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         if (challenge) {
             this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
@@ -6927,7 +6927,7 @@ const WorldEngine = {
         return {
             title,
             text,
-            actions: actions.slice(0, 4),
+            actions: actions.slice(0, 5),
             reason: options.reason || 'help'
         };
     },
@@ -6936,7 +6936,7 @@ const WorldEngine = {
         const move = this.buildSoftMove(scene, options);
         if (!move) return '';
         const header = options.reason === 'stalled' ? '【可选方向】' : '【当前可以做什么】';
-        const actions = (move.actions || []).slice(0, 4);
+        const actions = (move.actions || []).slice(0, 5);
         const actionLabel = options.reason === 'stalled' ? '可选方向' : '可以尝试';
         const actionText = actions.length > 0
             ? `\n${actionLabel}：\n${actions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')}`
@@ -6950,7 +6950,7 @@ const WorldEngine = {
             const text = String(action || '').trim();
             if (text && !actions.includes(text)) actions.push(text);
         };
-        this._buildFreedomActions(scene, data).slice(0, 4).forEach(add);
+        this._buildFreedomActions(scene, data).slice(0, 6).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
         if (failureWarning) add(`处理失败风险：${failureWarning.title}`);
         const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
@@ -6977,7 +6977,7 @@ const WorldEngine = {
         const clue = (scene.knowledge?.discoveries || []).slice(-1)[0];
         if (clue) add(`利用线索：${clue.title || clue.text}`);
         if (actions.length === 0) ['观察当前地点', '询问在场 NPC', '提出一个具体行动'].forEach(add);
-        return actions.slice(0, 6);
+        return actions.slice(0, 8);
     },
 
     _buildFreedomActions(scene, situation = {}) {
@@ -6993,6 +6993,7 @@ const WorldEngine = {
         const loc = (scene?.locations || []).find(l => l.id === scene.currentLocation);
         add(loc?.name ? `观察${loc.name}里被忽略的细节` : '观察当前地点有没有被忽略的细节');
         add('提出一个自己的计划：我想...');
+        this._buildContextualFreedomActions(scene).slice(0, 4).forEach(add);
         const chars = this._sceneCharacters(scene);
         const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
         const focus = chars.find(char => char.id === currentId) || chars[0];
@@ -7003,6 +7004,76 @@ const WorldEngine = {
             add('和在场的人聊聊他们真正想要什么');
         }
         return actions;
+    },
+
+    _buildContextualFreedomActions(scene) {
+        const actions = [];
+        const add = action => {
+            const text = String(action || '').trim();
+            if (text && !actions.includes(text)) actions.push(text);
+        };
+        const loc = (scene?.locations || []).find(l => l.id === scene.currentLocation);
+        if (loc?.description) {
+            add(`细查${loc.name || '当前地点'}：${this._shortChoiceText(loc.description, 30)}`);
+        }
+        (loc?.connections || [])
+            .map(id => (scene.locations || []).find(item => String(item.id || '') === String(id)))
+            .filter(Boolean)
+            .slice(0, 2)
+            .forEach(next => add(`前往${next.name || next.id}看看能发现什么`));
+
+        const currentClueActions = this.getKnownUnknowns(scene)
+            .filter(item => !item.locationId || !loc?.id || item.locationId === loc.id)
+            .flatMap(item => item.actions || [])
+            .slice(0, 2);
+        currentClueActions.forEach(add);
+
+        const tool = this._findContextualTool(scene);
+        if (tool?.name) add(`用${tool.name}检查当前环境`);
+
+        const chars = this._sceneCharacters(scene);
+        const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
+        const focus = chars.find(char => char.id === currentId) || chars[0];
+        if (focus?.name) {
+            const hint = this._publicCharacterHint(focus);
+            add(hint
+                ? `观察${focus.name}的反应：${this._shortChoiceText(hint, 26)}`
+                : `观察${focus.name}现在的反应`);
+        }
+        chars
+            .filter(char => char?.name && char.id !== focus?.id)
+            .slice(0, 1)
+            .forEach(char => add(`换个对象，和${char.name}聊聊`));
+        return actions;
+    },
+
+    _findContextualTool(scene) {
+        const items = Array.isArray(scene?.inventory) ? scene.inventory : [];
+        const usefulTypes = new Set(['observe', 'investigate', 'probe', 'use_item']);
+        return items.find(item => {
+            if (!item || !item.name) return false;
+            const tags = (item.tags || []).map(tag => String(tag || '').toLowerCase());
+            const tagUseful = tags.some(tag => /扫描|探测|观察|工具|侦查|调查|记录|地图|路线|修复/.test(tag));
+            const effectUseful = (item.effects || []).some(effect =>
+                usefulTypes.has(String(effect.actionType || '')) ||
+                ['wisdom', 'intelligence'].includes(String(effect.stat || '')) ||
+                ['check_bonus', 'dc_delta', 'risk_delta'].includes(String(effect.type || ''))
+            );
+            return tagUseful || effectUseful;
+        }) || null;
+    },
+
+    _publicCharacterHint(char) {
+        if (!char || typeof char !== 'object') return '';
+        const profile = char.profile && typeof char.profile === 'object' ? char.profile : {};
+        const publicProfile = profile.public && typeof profile.public === 'object' ? profile.public : {};
+        const candidates = [
+            char.firstImpression,
+            publicProfile.firstImpression,
+            publicProfile.title,
+            Array.isArray(char.tags) ? char.tags.slice(0, 2).join('、') : ''
+        ];
+        return candidates.map(value => String(value || '').trim()).find(Boolean) || '';
     },
 
     _latestRelationshipEvent(scene) {
