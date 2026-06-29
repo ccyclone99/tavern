@@ -7024,9 +7024,10 @@ const WorldEngine = {
         const flowNodes = this.getVisibleFlowNodes(scene);
         const storyTexture = scene.storyTexture || null;
         const stakes = storyPhase?.stakes || scene.currentSituation?.stakes || '';
-        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
+        const optionalQuests = this.getOptionalQuestLeads(scene, { limit: 4 });
+        const recommendedActions = this._buildRecommendedActions(scene, { activeQuest, optionalQuests, clocks, counterStrategies, hiddenPressure, storyPhase, knownUnknowns, failureWarnings, activeChallenge, flowNodes });
         scene.currentSituation.recommendedActions = recommendedActions;
-        return { location, activeQuest, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
+        return { location, activeQuest, optionalQuests, clocks, hiddenPressure, counterStrategies, recentRisks, availableClues, recommendedActions, storyPhase, stakes, knownUnknowns, failureWarnings, activeChallenge, challengeEvidence, visibleEvidence, revelations, flowNodes, storyTexture };
     },
 
     buildSoftMove(scene, options = {}) {
@@ -7037,6 +7038,7 @@ const WorldEngine = {
         const challenge = situation.activeChallenge;
         const quest = situation.activeQuest;
         const objective = quest ? (quest.objectives || []).find(o => !o.completed) : null;
+        const optionalLead = (situation.optionalQuests || [])[0] || null;
         const unknown = (situation.knownUnknowns || []).find(item => item.actions?.length) || (situation.knownUnknowns || [])[0];
         const urgentClock = (situation.clocks || [])
             .filter(clock => Number(clock.value || 0) >= Math.max(1, Number(clock.max || 1) - 2))
@@ -7051,6 +7053,7 @@ const WorldEngine = {
             actions.push(text);
         };
         this._buildFreedomActions(scene, situation).slice(0, 6).forEach(addAction);
+        (situation.optionalQuests || []).slice(0, 2).forEach(lead => addAction(lead.action));
         if (unknown?.actions?.length) unknown.actions.slice(0, 2).forEach(addAction);
         if (challenge) {
             this.getChallengeVisibleApproaches(challenge).slice(0, 2).forEach(a => addAction(a.label));
@@ -7074,6 +7077,9 @@ const WorldEngine = {
         } else if (unknown) {
             title = unknown.title || '关键未知';
             text = `${unknown.text || '还有未确认的线索，可以先追查来源或验证证据。'} 也可以暂时不追线索，先和 NPC 互动或探索当前地点。`;
+        } else if (optionalLead) {
+            title = '可先追一条支线';
+            text = `支线「${optionalLead.questName || '可选目标'}」可以先处理：${optionalLead.objectiveText || optionalLead.action}。你也可以继续探索、闲聊、准备资源，或提出自己的计划。`;
         } else if (objective?.text) {
             title = quest?.name ? `${quest.name}（可选目标）` : '当前目标（可选）';
             text = `主线目标是「${objective.text}」，但你可以按自己的节奏行动：探索、交易、休息、闲聊、追支线或制定计划都可以。`;
@@ -7104,15 +7110,143 @@ const WorldEngine = {
         return `${header}${move.title}\n${move.text}${actionText}`;
     },
 
+    getOptionalQuestLeads(scene, options = {}) {
+        if (!scene || !Array.isArray(scene.quests)) return [];
+        const limit = this._clamp(Number(options.limit || 3), 1, 6);
+        const leads = [];
+        const quests = scene.quests
+            .filter(quest => quest && quest.status === 'active' && (quest.type || 'side') !== 'main');
+        quests.forEach((quest, questIndex) => {
+            const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
+            objectives.forEach((objective, objectiveIndex) => {
+                if (!objective || objective.completed) return;
+                const objectiveText = String(objective.text || objective.title || objective || '').trim();
+                if (!objectiveText) return;
+                const score = this._scoreOptionalQuestLead(scene, quest, objective, objectiveIndex);
+                const lead = {
+                    questId: String(quest.id || quest.name || `side_${questIndex}`).slice(0, 120),
+                    questName: String(quest.name || '支线任务').slice(0, 80),
+                    giver: String(quest.giver || '').slice(0, 60),
+                    objectiveIndex,
+                    objectiveText: objectiveText.slice(0, 140),
+                    score: score.value,
+                    reason: score.reason,
+                    action: ''
+                };
+                lead.action = this._formatOptionalQuestAction(lead);
+                leads.push(lead);
+            });
+        });
+        return leads
+            .sort((a, b) => b.score - a.score || a.objectiveIndex - b.objectiveIndex || a.questName.localeCompare(b.questName))
+            .slice(0, limit);
+    },
+
+    _scoreOptionalQuestLead(scene, quest, objective, objectiveIndex) {
+        const norm = value => this._normalizeQuestText(value || '');
+        const objectiveText = String(objective?.text || objective?.title || objective || '');
+        const questText = norm(`${quest?.id || ''} ${quest?.name || ''} ${quest?.description || ''} ${quest?.giver || ''} ${objectiveText}`);
+        const tags = new Set(this._deriveObjectiveTags(quest, objective).map(norm).filter(Boolean));
+        const currentLocation = (scene?.locations || []).find(loc => loc.id === scene.currentLocation) || null;
+        const currentTokens = [
+            scene?.currentLocation,
+            currentLocation?.id,
+            currentLocation?.name,
+            ...(currentLocation?.tags || [])
+        ].map(norm).filter(token => token.length >= 2);
+        const connectedTokens = (currentLocation?.connections || [])
+            .map(id => (scene.locations || []).find(loc => String(loc.id || '') === String(id)))
+            .filter(Boolean)
+            .flatMap(loc => [loc.id, loc.name])
+            .map(norm)
+            .filter(token => token.length >= 2);
+        const sceneChars = this._sceneCharacters(scene);
+        const activeCharTokens = sceneChars.flatMap(char => [char.id, char.name]).map(norm).filter(token => token.length >= 2);
+        const selectedId = typeof State !== 'undefined' ? String(State.currentCharacterId || '') : '';
+        const selectedChar = sceneChars.find(char => String(char.id || '') === selectedId) || null;
+        const targetSet = this._objectiveExactSupportTargets(quest, objective, objectiveIndex);
+
+        let value = 20 - objectiveIndex;
+        let reason = 'side';
+
+        if (quest?.giver && activeCharTokens.includes(norm(quest.giver))) {
+            value += 10;
+            reason = 'giver';
+        }
+        if (selectedChar && questText.includes(norm(selectedChar.name || selectedChar.id))) {
+            value += 4;
+            reason = 'focus';
+        }
+        if (currentTokens.some(token => questText.includes(token))) {
+            value += 8;
+            reason = 'location';
+        } else if (connectedTokens.some(token => questText.includes(token))) {
+            value += 4;
+            reason = 'nearby';
+        }
+
+        (scene?.evidenceLedger || [])
+            .filter(item => item && item.visible !== false)
+            .slice(-20)
+            .forEach(item => {
+                const supports = item.supports || [];
+                if (this._supportsAnyExactTarget(supports, targetSet)) {
+                    value += item.reliability === 'confirmed' ? 18 : 12;
+                    reason = 'evidence';
+                    return;
+                }
+                const itemTags = (item.tags || []).map(norm).filter(Boolean);
+                if (itemTags.some(tag => tags.has(tag) || questText.includes(tag))) {
+                    value += item.reliability === 'confirmed' ? 8 : 5;
+                    reason = 'evidence';
+                    return;
+                }
+                const evidenceText = norm(`${item.title || ''} ${item.text || ''}`);
+                if (evidenceText && tags.size > 0 && [...tags].some(tag => evidenceText.includes(tag))) {
+                    value += 3;
+                    reason = 'evidence';
+                }
+            });
+
+        (scene?.knowledge?.discoveries || [])
+            .slice(-20)
+            .forEach(item => {
+                const discoveryText = norm(`${item.title || ''} ${item.text || ''} ${item.subjectId || ''} ${(item.tags || []).join(' ')}`);
+                if (!discoveryText) return;
+                if ([...targetSet].some(target => target && discoveryText.includes(norm(target)))) {
+                    value += 6;
+                    reason = 'knowledge';
+                    return;
+                }
+                if ([...tags].some(tag => discoveryText.includes(tag))) {
+                    value += 4;
+                    reason = 'knowledge';
+                }
+            });
+
+        return { value, reason };
+    },
+
+    _formatOptionalQuestAction(lead) {
+        const questName = this._shortChoiceText(lead.questName || '支线任务', 22);
+        const objectiveText = this._shortChoiceText(lead.objectiveText || '', 40);
+        if (lead.reason === 'evidence' || lead.reason === 'knowledge') {
+            return `支线可选：用已知线索处理「${questName}」`;
+        }
+        return `支线可选：${questName} - ${objectiveText}`;
+    },
+
     _buildRecommendedActions(scene, data) {
         const actions = [];
         const add = action => {
             const text = String(action || '').trim();
             if (text && !actions.includes(text)) actions.push(text);
         };
-        this._buildFreedomActions(scene, data).slice(0, 6).forEach(add);
+        const optionalActions = this._buildOptionalQuestActions(scene, data.optionalQuests);
+        this._buildFreedomActions(scene, data).slice(0, optionalActions.length > 0 ? 5 : 6).forEach(add);
         const failureWarning = (data.failureWarnings || [])[0];
         if (failureWarning) add(`处理失败风险：${failureWarning.title}`);
+        optionalActions.slice(0, 2).forEach(add);
         const unknown = (data.knownUnknowns || []).find(item => item.actions?.length);
         if (unknown) add(unknown.actions[0]);
         const urgentClock = data.clocks.find(c => c.value >= Math.max(1, c.max - 2));
@@ -7139,6 +7273,11 @@ const WorldEngine = {
         if (clue) add(`利用线索：${clue.title || clue.text}`);
         if (actions.length === 0) ['观察当前地点', '询问在场 NPC', '提出一个具体行动'].forEach(add);
         return actions.slice(0, 8);
+    },
+
+    _buildOptionalQuestActions(scene, leads = null) {
+        const items = Array.isArray(leads) ? leads : this.getOptionalQuestLeads(scene, { limit: 3 });
+        return items.map(item => item?.action).filter(Boolean);
     },
 
     getVisibleFlowNodes(scene, options = {}) {

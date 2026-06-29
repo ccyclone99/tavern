@@ -259,7 +259,7 @@ System prompt 注入 `storyArcs`，AI 必须按节拍推进：
 
 规则：
 - 玩家行为满足当前 beat 的 `condition` 时，AI 必须在回复触发对应 `action`
-- 玩家跑题时，用 NPC/事件引导回主线
+- 玩家偏离当前节拍时，用 NPC/事件提供主线、支线、探索或代价方向；不要强制拉回单一路线
 - 一个 beat 消化完再推进下一个
 - 非 `resolution` 结局阶段不得一次跳过多个 beat；系统会把 `advanceBy` 或 `currentBeat` 跳跃夹到下一步
 - 推进必须写 `reason`，否则系统会记录“剧情推进待确认”并保持原 beat
