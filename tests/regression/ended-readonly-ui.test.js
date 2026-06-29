@@ -158,6 +158,12 @@ function createSidebarContext(scene) {
                 }],
                 failureWarnings: [],
                 challengeEvidence: [],
+                visibleEvidence: [{
+                    title: '终局证据',
+                    text: '这条证据只用于回顾展示',
+                    reliability: 'confirmed',
+                    tags: ['结局', '证据']
+                }],
                 activeChallenge: {
                     title: '终局挑战',
                     goal: '已经结束',
@@ -186,6 +192,9 @@ function testEndedSituationActionsRenderReadonly() {
     assert.ok(situationEl.innerHTML.includes('aria-disabled="true"'));
     assert.ok(situationEl.innerHTML.includes('situation-action readonly'));
     assert.ok(!situationEl.innerHTML.includes('<button class="situation-action'));
+    assert.ok(situationEl.innerHTML.includes('最近证据'));
+    assert.ok(situationEl.innerHTML.includes('终局证据'));
+    assert.ok(situationEl.innerHTML.includes('已确认'));
     assert.deepStrictEqual(bindSelectors, ['button.situation-action']);
 }
 

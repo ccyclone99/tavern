@@ -3547,14 +3547,16 @@ const WorldEngine = {
             ? this._queuePendingExplorationReward(scene, evidence, item)
             : false;
         const expText = expResult.ok ? `经验 +${exp}` : '经验未变化';
+        const reliabilityText = this._evidenceReliabilityLabel(evidence.reliability);
+        const itemHint = itemAdded && item ? this._rewardItemUseHint(item) : '';
         const itemText = item
             ? (itemAdded
-                ? `，获得 ${item.name}`
+                ? `，获得 ${item.name}${itemHint ? `（${itemHint}）` : ''}`
                 : `，${itemResult.message || '背包已满'}，${itemQueued ? `已记录待领取 ${item.name}` : `未获得 ${item.name}`}`)
             : '';
         this.addSystemMessage(
             scene,
-            `【探索收获：${evidence.title}】${expText}${itemText}`,
+            `【探索收获：${evidence.title}】记录证据：${reliabilityText}；${expText}${itemText}。可在右侧「局势/线索」查看。`,
             'system'
         );
         if (typeof ActionBar !== 'undefined' && ActionBar.renderStatsDisplay) ActionBar.renderStatsDisplay();
@@ -3564,6 +3566,39 @@ const WorldEngine = {
         }
         if (typeof SidebarRight !== 'undefined') SidebarRight.markTabNew?.('knowledge');
         return true;
+    },
+
+    _evidenceReliabilityLabel(reliability) {
+        const labels = {
+            rumor: '传闻',
+            partial: '待验证',
+            confirmed: '已确认',
+            contested: '有争议'
+        };
+        return labels[reliability] || reliability || '待验证';
+    },
+
+    _rewardItemUseHint(item) {
+        const effects = Array.isArray(item?.effects) ? item.effects : [];
+        const actionLabels = {
+            observe: '观察',
+            investigate: '调查',
+            use_item: '设备操作',
+            sneak: '潜行',
+            force: '突破',
+            combat: '战斗',
+            persuade: '说服',
+            ask: '询问',
+            probe: '试探'
+        };
+        const actions = effects
+            .filter(effect => effect && effect.type === 'check_bonus')
+            .map(effect => actionLabels[effect.actionType] || '')
+            .filter(Boolean);
+        const unique = [...new Set(actions)].slice(0, 3);
+        if (unique.length > 0) return `可在${unique.join('/')}检定中投入`;
+        if (effects.some(effect => effect?.type === 'heal')) return '可直接使用恢复生命';
+        return '可作为后续行动资源';
     },
 
     _queuePendingExplorationReward(scene, evidence, item) {

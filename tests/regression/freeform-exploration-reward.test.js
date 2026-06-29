@@ -89,7 +89,11 @@ function testFreeformExplorationCreatesEvidenceRewardAndLinksKnowledge(WorldEngi
     ));
     assert.strictEqual(scene.exp, 4);
     assert.ok(scene.inventory.some(item => item.name === '现场线索便签'));
-    assert.ok(scene.messages.some(msg => msg.content.includes('【探索收获：下层货舱可利用细节】')));
+    const rewardMessage = scene.messages.find(msg => msg.content.includes('【探索收获：下层货舱可利用细节】'));
+    assert.ok(rewardMessage);
+    assert.ok(rewardMessage.content.includes('记录证据：待验证'));
+    assert.ok(rewardMessage.content.includes('现场线索便签（可在观察/调查检定中投入）'));
+    assert.ok(rewardMessage.content.includes('右侧「局势/线索」'));
 }
 
 function testRepeatedFreeformExplorationDoesNotFarmReward(WorldEngine) {

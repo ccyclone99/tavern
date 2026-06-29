@@ -1960,6 +1960,7 @@
 .situation-resource,
 .situation-consequence,
 .situation-failure,
+.situation-evidence,
 .situation-unknown {
     border: 1px solid var(--border);
     background: var(--bg-input);

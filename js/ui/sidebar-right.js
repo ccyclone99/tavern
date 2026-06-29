@@ -374,6 +374,22 @@ const SidebarRight = {
         const cluesHtml = situation.availableClues.length > 0
             ? situation.availableClues.map(c => `<span>${Renderer.escapeHtml(c.title || c.text || '线索')}</span>`).join('')
             : '<span>暂无可用线索</span>';
+        const evidenceLabels = { rumor: '传闻', partial: '待验证', confirmed: '已确认', contested: '有争议' };
+        const evidenceHtml = (situation.visibleEvidence || []).length > 0
+            ? (situation.visibleEvidence || []).slice(-5).reverse().map(evidence => {
+                const tags = (evidence.tags || []).slice(0, 4)
+                    .map(tag => `<span>${Renderer.escapeHtml(tag)}</span>`)
+                    .join('');
+                return `<div class="situation-evidence">
+                    <div class="situation-row">
+                        <span>${Renderer.escapeHtml(evidence.title || '证据')}</span>
+                        <strong>${Renderer.escapeHtml(evidenceLabels[evidence.reliability] || evidence.reliability || '待验证')}</strong>
+                    </div>
+                    ${evidence.text ? `<p>${Renderer.escapeHtml(evidence.text)}</p>` : ''}
+                    ${tags ? `<div class="situation-tags situation-evidence-tags">${tags}</div>` : ''}
+                </div>`;
+            }).join('')
+            : '<p class="placeholder">暂无可见证据</p>';
         const unknownsHtml = (situation.knownUnknowns || []).length > 0
             ? situation.knownUnknowns.slice(0, 3).map(item => {
                 const actions = (item.actions || []).slice(0, 2)
@@ -436,6 +452,10 @@ const SidebarRight = {
             <div class="situation-section">
                 <h4>可用线索</h4>
                 <div class="situation-tags">${cluesHtml}</div>
+            </div>
+            <div class="situation-section">
+                <h4>最近证据</h4>
+                ${evidenceHtml}
             </div>
             <div class="situation-section">
                 <h4>关键未知</h4>
