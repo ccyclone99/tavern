@@ -5266,6 +5266,99 @@ const WorldEngine = {
         return out;
     },
 
+    getEvidenceActionModifier(scene, context = {}) {
+        if (!scene || !Array.isArray(scene.evidenceLedger)) return null;
+        const actionType = String(context.actionType || context.type || '');
+        const usefulTypes = new Set(['observe', 'investigate', 'use_item', 'ask', 'probe', 'persuade', 'lie', 'threaten']);
+        if (!usefulTypes.has(actionType)) return null;
+        const scored = scene.evidenceLedger
+            .filter(evidence => evidence && evidence.visible !== false)
+            .map(evidence => ({
+                evidence,
+                score: this._scoreEvidenceForAction(scene, evidence, context)
+            }))
+            .filter(item => item.score >= 3)
+            .sort((a, b) => b.score - a.score || this._evidenceReliabilityWeight(b.evidence) - this._evidenceReliabilityWeight(a.evidence))
+            .slice(0, 4);
+        if (scored.length === 0) return null;
+
+        const selected = scored.map(item => item.evidence);
+        const riskValue = selected.reduce((sum, evidence) => sum + this._evidenceRiskReduction(evidence), 0);
+        const riskDelta = -Math.min(14, riskValue);
+        const confirmed = selected.filter(evidence => evidence.reliability === 'confirmed').length;
+        const dcDelta = confirmed >= 2 ? -2 : (confirmed >= 1 ? -1 : 0);
+        const titles = selected
+            .map(evidence => evidence.title || evidence.id || '证据')
+            .filter(Boolean)
+            .slice(0, 3);
+        return {
+            source: '相关证据',
+            label: `${titles.join('、')} · 风险 ${this._formatSigned(riskDelta)}${dcDelta ? `，DC ${this._formatSigned(dcDelta)}` : ''}`,
+            riskDelta,
+            dcDelta,
+            evidenceIds: selected.map(evidence => evidence.id).filter(Boolean),
+            titles
+        };
+    },
+
+    _scoreEvidenceForAction(scene, evidence, context = {}) {
+        const actionType = String(context.actionType || context.type || '');
+        const intent = this._normalizeFlowText(context.intent || '');
+        const currentLocation = this._normalizeFlowText(scene?.currentLocation || '');
+        const challengeId = this._normalizeFlowText(context.challengeId || context.challengeContext?.challengeId || '');
+        const challengeTitle = this._normalizeFlowText(context.challengeTitle || context.challengeContext?.challengeTitle || '');
+        const approachTerms = this._asStringList(context.approachTags || context.approachKeywords || [], 20)
+            .map(item => this._normalizeFlowText(item))
+            .filter(Boolean);
+        const rawTags = [
+            evidence.id,
+            evidence.sourceNodeId,
+            ...(evidence.tags || []),
+            ...(evidence.supports || [])
+        ].map(String).filter(Boolean);
+        const tags = rawTags.map(item => this._normalizeFlowText(item)).filter(Boolean);
+        const haystack = this._normalizeFlowText([
+            evidence.title,
+            evidence.text,
+            evidence.obtainedBy,
+            ...rawTags
+        ].join(' '));
+        let score = 0;
+
+        if (actionType) {
+            const action = this._normalizeFlowText(actionType);
+            const aliases = this._actionTypeMatchTerms(actionType).map(item => this._normalizeFlowText(item)).filter(Boolean);
+            if (tags.includes(action)) score += 4;
+            if (aliases.some(alias => tags.includes(alias))) score += 3;
+            if (aliases.some(alias => alias.length >= 2 && haystack.includes(alias))) score += 2;
+        }
+        if (currentLocation && (this._normalizeFlowText(evidence.sourceNodeId || '') === currentLocation || tags.includes(currentLocation))) score += 3;
+        if (challengeId && (tags.includes(challengeId) || haystack.includes(challengeId))) score += 8;
+        if (challengeTitle && haystack.includes(challengeTitle)) score += 4;
+        approachTerms.forEach(term => {
+            if (term.length >= 2 && (tags.includes(term) || haystack.includes(term))) score += 2;
+        });
+        if (intent) {
+            tags.forEach(tag => {
+                if (tag.length >= 2 && intent.includes(tag)) score += 2;
+            });
+            const title = this._normalizeFlowText(evidence.title || '');
+            if (title.length >= 3 && (intent.includes(title) || title.includes(intent))) score += 2;
+        }
+        if (evidence.reliability === 'contested') score -= 1;
+        return score;
+    },
+
+    _evidenceRiskReduction(evidence) {
+        const map = { confirmed: 5, partial: 3, rumor: 2, contested: 1 };
+        return map[evidence?.reliability] || 2;
+    },
+
+    _evidenceReliabilityWeight(evidence) {
+        const map = { confirmed: 4, partial: 3, rumor: 2, contested: 1 };
+        return map[evidence?.reliability] || 0;
+    },
+
     getCheckItemBonus(scene, check) {
         const matches = this.collectApplicableItemEffects(scene, {
             stat: check?.key || check?.stat,

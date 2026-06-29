@@ -65,7 +65,7 @@ const ActionPlanner = {
                 keywords: [...(baseProfile.keywords || []), challengeApproach.label, ...(challengeApproach.tags || []), ...(challengeApproach.keywords || [])]
             }
             : baseProfile;
-        const modifiers = this._buildModifiers(scene, profile, text);
+        const modifiers = this._buildModifiers(scene, profile, text, { challengeMatch, challengeApproach });
         const riskDelta = modifiers.reduce((sum, m) => sum + (m.riskDelta || 0), 0);
         const dcDelta = modifiers.reduce((sum, m) => sum + (m.dcDelta || 0), 0);
         const risk = this._clamp(profile.baseRisk + riskDelta, 5, 95);
@@ -147,7 +147,7 @@ ${risks}
         };
     },
 
-    _buildModifiers(scene, profile, intent = '') {
+    _buildModifiers(scene, profile, intent = '', options = {}) {
         const modifiers = [];
         if (this._isCautious(intent)) {
             modifiers.push({
@@ -252,6 +252,29 @@ ${risks}
                     });
                 }
             });
+
+            if (WorldEngine.getEvidenceActionModifier) {
+                const evidenceModifier = WorldEngine.getEvidenceActionModifier(scene, {
+                    actionType: profile.type,
+                    stat: profile.stat,
+                    intent,
+                    challengeId: options.challengeMatch?.challenge?.id || '',
+                    challengeTitle: options.challengeMatch?.challenge?.title || '',
+                    approachTags: [
+                        ...(options.challengeApproach?.tags || []),
+                        ...(options.challengeApproach?.keywords || [])
+                    ]
+                });
+                if (evidenceModifier) {
+                    modifiers.push({
+                        source: evidenceModifier.source || '相关证据',
+                        label: evidenceModifier.label,
+                        riskDelta: evidenceModifier.riskDelta,
+                        dcDelta: evidenceModifier.dcDelta,
+                        evidenceIds: evidenceModifier.evidenceIds || []
+                    });
+                }
+            }
 
             const availableItems = WorldEngine.getAvailableCheckItems(scene, {
                 key: profile.stat,
