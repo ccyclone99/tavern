@@ -60,7 +60,7 @@ scene.flowGuide = {
 - `sessionGoals`：本剧本本次游玩应追踪的阶段目标。
 - `stalledPrompts`：玩家卡住或输入“我该做什么”时可给出的建议。
 - `failForward`：失败、部分成功、拖延时可产生的推进型后果。
-- `completedMoves`：已由系统或后续逻辑标记完成的流程建议，当前阶段可先保留为空。
+- `completedMoves`：已由系统标记完成的流程建议。玩家自然输入、确认行动、检定/探索/挑战等进展事件命中 `openingMoves`、`stalledPrompts`、阶段推荐、挑战方法或线索动作时，会写入这里；后续推荐动作必须过滤已完成建议，避免反复提示同一件事。
 
 ## 3. 推荐行动规则
 

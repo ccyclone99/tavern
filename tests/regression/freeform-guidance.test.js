@@ -286,6 +286,90 @@ function testFlowGuideFallbackUsesNeutralWording(WorldEngine) {
     assert.ok(!actions.some(action => action.startsWith('推进目标：')));
 }
 
+function testFlowMoveCompletionCoversStalledPrompts(WorldEngine) {
+    const scene = makeScene({
+        turnCount: 5,
+        flowGuide: {
+            openingMoves: [],
+            sessionGoals: [],
+            stalledPrompts: ['询问艾拉第三道影子在梦里出现的地点'],
+            failForward: [],
+            completedMoves: []
+        }
+    });
+
+    assert.ok(WorldEngine._buildFlowActions(scene).includes('询问艾拉第三道影子在梦里出现的地点'));
+    assert.strictEqual(WorldEngine.markFlowMoveCompleted(scene, '我询问艾拉第三道影子的地点。'), true);
+    assert.ok(scene.flowGuide.completedMoves.includes('询问艾拉第三道影子在梦里出现的地点'));
+    assert.ok(!WorldEngine._buildFlowActions(scene).includes('询问艾拉第三道影子在梦里出现的地点'));
+}
+
+function testFlowMoveCompletionFiltersStageAndChallengeActions(WorldEngine) {
+    const stageScene = makeScene({
+        messages: [],
+        quests: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        sceneChallenges: [],
+        clueGraph: [],
+        storyPhases: [{
+            id: 'phase_ela',
+            title: '验证梦境',
+            status: 'active',
+            goal: '确认第三道影子的来源',
+            recommendedActions: ['询问艾拉第三道影子在梦里出现的地点']
+        }],
+        flowGuide: {
+            openingMoves: [],
+            sessionGoals: [],
+            stalledPrompts: [],
+            failForward: [],
+            completedMoves: []
+        }
+    });
+    const challengeScene = makeScene({
+        messages: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        flowGuide: {
+            openingMoves: ['提交污染星球经历'],
+            sessionGoals: [],
+            stalledPrompts: [],
+            failForward: [],
+            completedMoves: []
+        }
+    });
+
+    assert.ok(WorldEngine.getCurrentSituation(stageScene).recommendedActions.includes('询问艾拉第三道影子在梦里出现的地点'));
+    assert.ok(WorldEngine.getCurrentSituation(challengeScene).recommendedActions.includes('提交污染星球经历'));
+
+    WorldEngine.markFlowMoveCompleted(stageScene, '我询问艾拉第三道影子的地点。');
+    WorldEngine.markFlowMoveCompleted(challengeScene, '我提交污染星球经历。');
+    const stageActions = WorldEngine.getCurrentSituation(stageScene).recommendedActions;
+    const challengeActions = WorldEngine.getCurrentSituation(challengeScene).recommendedActions;
+
+    assert.ok(!stageActions.includes('询问艾拉第三道影子在梦里出现的地点'));
+    assert.ok(!challengeActions.includes('提交污染星球经历'));
+}
+
+function testProgressEventCanCompleteFlowMove(WorldEngine) {
+    const scene = makeScene({
+        flowGuide: {
+            openingMoves: ['接受血样与装备检测'],
+            sessionGoals: [],
+            stalledPrompts: [],
+            failForward: [],
+            completedMoves: []
+        }
+    });
+
+    WorldEngine.recordEvent(scene, {
+        category: 'check',
+        title: '接受血样检测',
+        text: '玩家配合克拉克斯完成血样与装备检测。'
+    });
+
+    assert.ok(scene.flowGuide.completedMoves.includes('接受血样与装备检测'));
+}
+
 const WorldEngine = loadWorldEngine();
 testStalledSoftMoveStartsFromPlayerFreedom(WorldEngine);
 testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine);
@@ -295,4 +379,7 @@ testFreeformLocationObservationDedupesKnowledge(WorldEngine);
 testFreeformHiddenFactOnlyUnlocksHint(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);
 testFlowGuideFallbackUsesNeutralWording(WorldEngine);
+testFlowMoveCompletionCoversStalledPrompts(WorldEngine);
+testFlowMoveCompletionFiltersStageAndChallengeActions(WorldEngine);
+testProgressEventCanCompleteFlowMove(WorldEngine);
 console.log('freeform-guidance regression tests passed');

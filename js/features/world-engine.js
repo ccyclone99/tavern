@@ -5090,7 +5090,15 @@ const WorldEngine = {
         if (duplicateKey === lastKey) return last;
         scene.eventLog.push(entry);
         scene.eventLog = scene.eventLog.slice(-120);
+        if (this._eventCanCompleteFlowMove(entry)) {
+            this.markFlowMoveCompleted(scene, `${entry.title} ${entry.text}`, { refresh: false });
+        }
         return entry;
+    },
+
+    _eventCanCompleteFlowMove(entry) {
+        const categories = new Set(['quest', 'exploration', 'challenge', 'progress', 'check', 'movement']);
+        return entry && categories.has(entry.category);
     },
 
     recordConsequence(scene, data = {}) {
@@ -8114,6 +8122,7 @@ const WorldEngine = {
         const actions = [];
         const add = action => {
             const text = String(action || '').trim();
+            if (this.isFlowMoveCompleted(scene, text)) return;
             if (text && !actions.includes(text)) actions.push(text);
         };
         const optionalActions = this._buildOptionalQuestActions(scene, data.optionalQuests);
@@ -9151,8 +9160,7 @@ const WorldEngine = {
 
     _buildFlowActions(scene) {
         const guide = this.normalizeFlowGuide(scene?.flowGuide);
-        const completed = new Set(guide.completedMoves);
-        const availableOpenings = guide.openingMoves.filter(a => !completed.has(a));
+        const availableOpenings = guide.openingMoves.filter(a => !this.isFlowMoveCompleted(scene, a, guide));
         const turn = Number(scene?.turnCount || 0);
         const actions = [];
         if (turn <= 3 && availableOpenings.length > 0) {
@@ -9163,8 +9171,9 @@ const WorldEngine = {
         if (actions.length < 2 && guide.sessionGoals.length > 0) {
             actions.push(`选择自己的切入点：${guide.sessionGoals[0]}`);
         }
-        if (actions.length === 0 && guide.stalledPrompts.length > 0) {
-            actions.push(guide.stalledPrompts[turn % guide.stalledPrompts.length]);
+        const availableStalled = guide.stalledPrompts.filter(a => !this.isFlowMoveCompleted(scene, a, guide));
+        if (actions.length === 0 && availableStalled.length > 0) {
+            actions.push(availableStalled[turn % availableStalled.length]);
         }
         return actions;
     },
@@ -9183,22 +9192,83 @@ const WorldEngine = {
         return `追查剧情线索：${condition}`;
     },
 
-    markFlowMoveCompleted(scene, text) {
+    markFlowMoveCompleted(scene, text, options = {}) {
         if (!scene?.flowGuide) return false;
         this.normalizeScene(scene);
         const guide = scene.flowGuide;
-        const haystack = this._normalizeFlowText(text);
-        if (haystack.length < 6) return false;
-        const move = guide.openingMoves.find(item => {
-            const needle = this._normalizeFlowText(item);
-            return needle.length >= 6 && (haystack === needle || haystack.includes(needle) || needle.includes(haystack));
-        });
-        if (!move || guide.completedMoves.includes(move)) return false;
+        const move = this._resolveCompletedFlowMove(scene, text);
+        if (!move || this.isFlowMoveCompleted(scene, move, guide)) return false;
         guide.completedMoves.push(move);
         guide.completedMoves = guide.completedMoves.slice(-20);
         guide.lastProgressTurn = Math.max(Number(guide.lastProgressTurn || 0), Number(scene.turnCount || 0));
-        scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+        if (options.refresh !== false) {
+            scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
+        }
         return true;
+    },
+
+    isFlowMoveCompleted(scene, text, normalizedGuide = null) {
+        const guide = normalizedGuide || this.normalizeFlowGuide(scene?.flowGuide);
+        const target = String(text || '').trim();
+        if (!target) return false;
+        return (guide.completedMoves || []).some(done => this._flowMoveMatches(target, done));
+    },
+
+    _resolveCompletedFlowMove(scene, text) {
+        const input = String(text || '').trim();
+        if (!input || this._normalizeFlowText(input).length < 6) return '';
+        const candidates = this._flowCompletionCandidates(scene);
+        return candidates.find(candidate => this._flowMoveMatches(input, candidate)) || '';
+    },
+
+    _flowCompletionCandidates(scene) {
+        if (!scene) return [];
+        const out = [];
+        const add = value => {
+            const text = String(value || '').trim();
+            if (!text || out.includes(text)) return;
+            out.push(text);
+        };
+        const guide = this.normalizeFlowGuide(scene.flowGuide);
+        guide.openingMoves.forEach(add);
+        guide.stalledPrompts.forEach(add);
+        (scene.storyPhases || []).forEach(phase => {
+            if (!phase || this._isTerminalProgressStatus(phase.status)) return;
+            (phase.recommendedActions || []).forEach(add);
+        });
+        const activeChallenge = this.getActiveChallenge(scene);
+        if (activeChallenge) {
+            this.getChallengeVisibleApproaches(activeChallenge).forEach(approach => add(approach.label));
+        }
+        this.getKnownUnknowns(scene).forEach(item => (item.actions || []).forEach(add));
+        this.getVisibleFlowNodes(scene).forEach(node => (node.exits || []).forEach(add));
+        return out.slice(0, 80);
+    },
+
+    _flowMoveMatches(input, candidate) {
+        const haystack = this._normalizeFlowText(input);
+        const needle = this._normalizeFlowText(candidate);
+        if (haystack.length < 6 || needle.length < 6) return false;
+        if (haystack === needle || haystack.includes(needle) || needle.includes(haystack)) return true;
+
+        const a = this._flowBigrams(haystack);
+        const b = this._flowBigrams(needle);
+        if (a.size === 0 || b.size === 0) return false;
+        let overlap = 0;
+        b.forEach(token => {
+            if (a.has(token)) overlap += 1;
+        });
+        const ratio = overlap / Math.max(1, Math.min(a.size, b.size));
+        return overlap >= 4 && ratio >= 0.55;
+    },
+
+    _flowBigrams(text) {
+        const normalized = this._normalizeFlowText(text);
+        const out = new Set();
+        for (let i = 0; i < normalized.length - 1; i += 1) {
+            out.add(normalized.slice(i, i + 2));
+        }
+        return out;
     },
 
     _currentSituationData(scene) {
