@@ -3,7 +3,7 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 11,
+    version: 12,
 
     ensure(scene) {
         if (!scene) return scene;
@@ -92,7 +92,8 @@ const RunRecorder = {
             strain: Number(c.strain || 0),
             maxStrain: Number(c.maxStrain || 0),
             checkCount: Number(c.checkCount || 0),
-            supports: (c.supports || []).slice(0, 8)
+            supports: (c.supports || []).slice(0, 8),
+            coreRevelations: (c.coreRevelations || []).slice(0, 8)
         })).slice(0, 12);
         const evidence = (scene.evidenceLedger || [])
             .filter(e => e.visible !== false)
@@ -112,6 +113,7 @@ const RunRecorder = {
                 dc: Number(entry.check.dc || 0),
                 outcome: entry.check.outcome || '',
                 intent: entry.check.intent || '',
+                challengeId: entry.check.challengeId || '',
                 challengeTitle: entry.check.challengeTitle || '',
                 secondaryResults: (entry.check.secondaryResults || []).slice(0, 4)
             }))
@@ -192,9 +194,20 @@ const RunRecorder = {
             const phaseChallenges = challenges.filter(c => c.phaseId === phase.id);
             const challengeIds = new Set(phaseChallenges.map(c => c.id).filter(Boolean));
             const challengeTitles = new Set(phaseChallenges.map(c => c.title).filter(Boolean));
-            const phaseChecks = checks.filter(check => challengeTitles.has(check.challengeTitle));
+            const phaseSupportIds = new Set([
+                phase.id,
+                ...phaseChallenges.flatMap(c => [
+                    c.id,
+                    ...(c.supports || []),
+                    ...(c.coreRevelations || [])
+                ])
+            ].filter(Boolean));
+            const phaseChecks = checks.filter(check =>
+                (check.challengeId && challengeIds.has(check.challengeId)) ||
+                (check.challengeTitle && challengeTitles.has(check.challengeTitle))
+            );
             const phaseEvidence = evidence.filter(ev =>
-                (ev.supports || []).some(item => challengeIds.has(item))
+                (ev.supports || []).some(item => phaseSupportIds.has(item))
             );
             const objectiveTargets = new Set(
                 phaseChallenges.flatMap(c => c.supports || []).filter(s => /^q_main:\d+$/.test(String(s)))
@@ -242,7 +255,7 @@ const RunRecorder = {
             phase?.title,
             phase?.goal,
             phase?.stakes,
-            ...(phaseChallenges || []).flatMap(c => [c.title, ...(c.supports || [])]),
+            ...(phaseChallenges || []).flatMap(c => [c.id, c.title, ...(c.supports || []), ...(c.coreRevelations || [])]),
             ...(phaseEvidence || []).map(e => e.title),
             ...(completedObjectives || [])
         ];
@@ -272,6 +285,7 @@ const RunRecorder = {
             entry.speaker,
             entry.text,
             entry.check?.intent,
+            entry.check?.challengeId,
             entry.check?.challengeTitle
         ].filter(Boolean).join(' '));
         if (!text) return false;
@@ -294,6 +308,7 @@ const RunRecorder = {
                 dc: Number(entry.check.dc || 0),
                 outcome: entry.check.outcome || '',
                 intent: entry.check.intent || '',
+                challengeId: entry.check.challengeId || '',
                 challengeTitle: entry.check.challengeTitle || ''
             } : null
         };
@@ -409,7 +424,8 @@ const RunRecorder = {
                 dc: Number(check.dc || 0),
                 outcome: check.resultLabel || check.outcome || '',
                 intent: check.intent || '',
-                challengeTitle: check.challengeContext?.challengeTitle || '',
+                challengeId: check.challengeContext?.challengeId || check.challengeProgress?.challengeId || '',
+                challengeTitle: check.challengeContext?.challengeTitle || check.challengeProgress?.challengeTitle || '',
                 secondaryResults: (check.secondaryResults || []).slice(0, 4).map(item => ({
                     label: item.label || '',
                     outcome: item.outcome || '',

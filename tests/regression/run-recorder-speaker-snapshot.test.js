@@ -90,7 +90,7 @@ function testTranscriptStripsAllProtocolMarkers() {
 
     const record = RunRecorder.build(scene, 'victorious');
 
-    assert.strictEqual(record.version, 11);
+    assert.strictEqual(record.version, 12);
     assert.strictEqual(record.transcript[0].text, '你获得钥匙，又失去旧钥匙。');
 }
 

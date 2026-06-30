@@ -160,6 +160,7 @@
 - 已完成 AI 空回复诊断：API 成功但可见叙事为空时，不再写入空白角色/DM 消息；系统会显示 `【AI空回复】`、写入 `eventLog`，并累积 `scene.aiDiagnostics` 供复盘和排障。
 - 已完成静态资源引用检查：回归测试会验证 `index.html` 的本地 JS/CSS/站内链接存在、不能逃出 GitHub Pages artifact，并要求本地 JS/CSS 缓存版本一致。
 - 已完成 JS 语法发布门禁自动化：`tests/regression/all-js-syntax.test.js` 会在全量回归中统一执行所有项目 JS 和回归测试 JS 的 `node --check`。
+- 已完成阶段回顾证据链强化：通关/失败记录会按挑战 id、任务支持和核心结论把检定、证据与阶段关联，避免关键证据只支持 revelation 时从阶段摘要中丢失。
 
 ## 5. 发布门禁
 
