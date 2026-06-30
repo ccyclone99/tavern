@@ -292,6 +292,7 @@ scene.companionResources = [
 - 同伴不是自动胜利按钮，而是有限资源。
 - 运行态应绑定真实 `characterId`；生成或导入模板可用 `characterName`，应用模板时会按角色名回填真实 id。
 - `scope` 只能是 `present`、`remote` 或 `pledged`。`present` 表示 NPC 必须当前在场；`remote` 表示资料、公开背书、渠道或远程联系；`pledged` 表示已承诺但稍后兑现的帮助。旧资源缺失时按 `remote` 兼容。
+- `remote` 和 `pledged` 资源不能用于 `sneak`、`force`、`combat` 等需要现场参与的行动建议或检定资源；如果 NPC 要掩护、强突或参战，资源必须写成 `scope:"present"` 并通过在场判定。
 - 同伴资源可以通过 `effect.checkBonus/dcDelta/riskDelta` 影响检定，通过 `effect.evidenceReliability` 提高已有证据质量，通过 `effect.resolveConsequence*` 抵消匹配后果，或通过 `effect.clockDelta + clockId/clockTag` 延缓/推进时钟。
 - `unlock` 支持 `trustAtLeast`、`evidenceTags`、`knowledgeTags`、`revelationIds` 等条件；未解锁时不进入 prompt、右侧局势或检定卡，避免提前公开 NPC 底牌。资源未写任何 `unlock` 时，运行时默认要求绑定 NPC 对玩家 `trust >= 10`；需要开局可用时必须显式写 `unlock:{ immediate:true }`、`unlock:{ always:true }` 或 `unlock:{ trustAtLeast:0 }`。`revelationIds` 默认要求结论 `confirmed`，如需怀疑阶段解锁必须显式写 `revelationStatus:"suspected"` 或 `allowSuspectedRevelation:true`。
 - 使用同伴能力会扣除 `uses`，并结算 `cost.trust`、`cost.time`、`risk` 等代价；信任成本会写入 NPC 关系历史，耗时和风险会进入局势记录。

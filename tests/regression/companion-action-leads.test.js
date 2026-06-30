@@ -118,6 +118,20 @@ function susanBacking(overrides = {}) {
     };
 }
 
+function susanCombatCover(overrides = {}) {
+    return susanBacking({
+        id: 'susan_combat_cover',
+        name: '苏珊的火力掩护',
+        effect: {
+            checkBonus: 2,
+            actionType: 'combat'
+        },
+        tags: ['combat', 'cover'],
+        risk: '苏珊会暴露自己的防卫位置。',
+        ...overrides
+    });
+}
+
 function testUnlockedCompanionCreatesActionLead(WorldEngine, State) {
     setSusanTrust(State, 12);
     const scene = makeScene({ companionResources: [susanBacking()] });
@@ -304,6 +318,59 @@ function testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, Sta
     assert.ok(WorldEngine.getCompanionActionLeads(scene).some(lead => lead.resourceId === 'susan_medical_backing'));
 }
 
+function testRemoteCompanionDoesNotAffectPhysicalActions(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = [];
+    const scene = makeScene({
+        characters: [],
+        sceneChallenges: [{
+            id: 'challenge_locked_gate',
+            title: '冲突中的封锁门',
+            status: 'active',
+            approaches: [{
+                id: 'fight_through',
+                label: '冲破封锁门前的守卫',
+                stat: 'strength',
+                dc: 15,
+                actionType: 'combat',
+                tags: ['combat', 'cover'],
+                keywords: ['火力', '掩护', '守卫']
+            }]
+        }],
+        companionResources: [susanCombatCover({ scope: 'remote' })]
+    });
+    const check = { stat: 'strength', actionType: 'combat', intent: '冲破守卫封锁' };
+
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+    assert.strictEqual(WorldEngine.getAvailableCompanionResources(scene, check).length, 0);
+}
+
+function testPresentCompanionCanAffectPhysicalActions(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        sceneChallenges: [{
+            id: 'challenge_locked_gate',
+            title: '冲突中的封锁门',
+            status: 'active',
+            approaches: [{
+                id: 'fight_through',
+                label: '冲破封锁门前的守卫',
+                stat: 'strength',
+                dc: 15,
+                actionType: 'combat',
+                tags: ['combat', 'cover'],
+                keywords: ['火力', '掩护', '守卫']
+            }]
+        }],
+        companionResources: [susanCombatCover({ scope: 'present' })]
+    });
+    const check = { stat: 'strength', actionType: 'combat', intent: '冲破守卫封锁' };
+
+    assert.ok(WorldEngine.getCompanionActionLeads(scene).some(lead => lead.resourceId === 'susan_combat_cover'));
+    assert.ok(WorldEngine.getAvailableCompanionResources(scene, check).some(resource => resource.resourceId === 'susan_combat_cover'));
+}
+
 function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
     const scene = makeScene({
         locations: [
@@ -389,6 +456,14 @@ function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
 {
     const { WorldEngine, State } = loadWorldEngine();
     testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testRemoteCompanionDoesNotAffectPhysicalActions(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testPresentCompanionCanAffectPhysicalActions(WorldEngine, State);
 }
 {
     const { WorldEngine, State } = loadWorldEngine();

@@ -6551,6 +6551,7 @@ const WorldEngine = {
         return (scene.companionResources || [])
             .filter(resource => resource && Number(resource.uses || 0) > 0)
             .filter(resource => this.getCompanionResourceAvailability(scene, resource).ok)
+            .filter(resource => this._companionCanAssistActionByScope(scene, resource, actionType))
             .filter(resource => this._effectMatches(resource.effect, {
                 stat,
                 actionType,
@@ -6660,7 +6661,7 @@ const WorldEngine = {
                 approach,
                 score: this._scoreCompanionForApproach(resource, approach)
             }))
-            .filter(entry => entry.score > 0)
+            .filter(entry => entry.score > 0 && this._companionCanAssistActionByScope(scene, resource, entry.approach.actionType || resource.effect?.actionType || ''))
             .sort((a, b) => b.score - a.score);
         if (ranked.length === 0) return null;
         const { approach, score } = ranked[0];
@@ -6732,6 +6733,7 @@ const WorldEngine = {
         if (!resource) return null;
         const effect = resource.effect || {};
         const actionType = effect.actionType || this._primaryCompanionActionType(resource);
+        if (!this._companionCanAssistActionByScope(scene, resource, actionType)) return null;
         const summary = this._companionEffectSummary(resource) || '这项协助可以改变后续行动的风险或信息质量。';
         let action = '';
         let score = 46;
@@ -6826,6 +6828,12 @@ const WorldEngine = {
             pledged: '承诺'
         };
         return labels[this._companionScope(resource)] || '远程';
+    },
+
+    _companionCanAssistActionByScope(scene, resource, actionType = '') {
+        const type = String(actionType || resource?.effect?.actionType || '').trim();
+        if (!['sneak', 'force', 'combat'].includes(type)) return true;
+        return this._companionScope(resource) === 'present';
     },
 
     getCharacterPresence(scene, characterId) {
