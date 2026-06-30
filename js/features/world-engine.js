@@ -8658,7 +8658,10 @@ const WorldEngine = {
         const socialOutcome = this._applyFreeformSocialOutcome(scene, this._focusCharacterForFreeform(scene), sourceText, actionType, {
             messageId: options.messageId || ''
         });
-        if (discoveries.length === 0 && !socialOutcome) return { changed: false, reason: 'no_contextual_outcome' };
+        const resolvedConsequences = this._resolveFreeformConsequences(scene, sourceText, actionType, {
+            messageId: options.messageId || ''
+        });
+        if (discoveries.length === 0 && !socialOutcome && resolvedConsequences.length === 0) return { changed: false, reason: 'no_contextual_outcome' };
         const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
             actionType,
             sourceText,
@@ -8669,20 +8672,22 @@ const WorldEngine = {
             evidenceIds,
             messageId: options.messageId || ''
         }) : null;
-        const title = discoveries[0].title || '自由行动收获';
+        const title = discoveries[0]?.title || resolvedConsequences[0]?.title || '自由行动收获';
         this.recordEvent(scene, {
-            category: actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration',
+            category: discoveries.length === 0 && resolvedConsequences.length > 0
+                ? 'progress'
+                : (actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration'),
             title: '自由行动收获',
             text: `${sourceText || '自由行动'} -> ${title}`,
             messageId: options.messageId || '',
-            refId: discoveries[0].id || '',
+            refId: discoveries[0]?.id || resolvedConsequences[0]?.id || '',
             turn: scene.turnCount || 0
         });
         if (scene.currentSituation) {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress };
+        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress, resolvedConsequences };
     },
 
     _advanceFreeformClueStage(scene, match, options = {}) {
@@ -8736,6 +8741,86 @@ const WorldEngine = {
             currentStage: Number(clue.currentStage || 0),
             status: clue.status || ''
         };
+    },
+
+    _resolveFreeformConsequences(scene, text = '', actionType = '', options = {}) {
+        if (!scene || !Array.isArray(scene.consequenceLedger)) return [];
+        const active = (scene.consequenceLedger || [])
+            .map((item, index) => ({ item, index }))
+            .filter(entry => entry.item && entry.item.status === 'active')
+            .filter(entry => ['low', 'medium'].includes(entry.item.severity || 'low'));
+        if (active.length === 0) return [];
+
+        const sourceText = String(text || '').trim();
+        const normalized = this._normalizeQuestText(sourceText);
+        const repairTerms = ['处理', '解决', '解除', '补救', '弥补', '解释', '道歉', '安抚', '稳定', '清理', '澄清', '修复', '补偿', '降低', '压低', '缓和'];
+        const hasRepairIntent = repairTerms.some(term => normalized.includes(this._normalizeQuestText(term)));
+        if (!hasRepairIntent) return [];
+
+        const scored = active
+            .map(entry => ({
+                ...entry,
+                score: this._freeformConsequenceResolutionScore(entry.item, sourceText, actionType)
+            }))
+            .filter(entry => entry.score >= 5)
+            .sort((a, b) => b.score - a.score || Number(b.item.createdAt || 0) - Number(a.item.createdAt || 0));
+        if (scored.length === 0) return [];
+
+        const target = scored[0];
+        const now = Date.now();
+        const consequence = scene.consequenceLedger[target.index];
+        if (!consequence || consequence.status !== 'active') return [];
+        consequence.status = 'resolved';
+        consequence.resolvedAt = now;
+        consequence.resolvedBy = String(options.messageId || 'freeform').slice(0, 120);
+        consequence.resolution = `自由行动：${sourceText || '处理后果'}`.slice(0, 260);
+
+        const resolved = [{
+            id: consequence.id,
+            title: consequence.title,
+            severity: consequence.severity,
+            score: target.score
+        }];
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '后果解除',
+            text: `解除：${consequence.title}`,
+            refId: consequence.id,
+            messageId: options.messageId || '',
+            timestamp: now
+        });
+        this.addSystemMessage(scene, `【后果解除】${consequence.title}。${consequence.resolution}`, 'system', { record: false });
+        if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push(`后果解除：${consequence.title}`);
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
+        return resolved;
+    },
+
+    _freeformConsequenceResolutionScore(consequence, text = '', actionType = '') {
+        if (!consequence) return 0;
+        const intent = String(text || '');
+        let score = this._consequenceMatchScore(consequence, { intent, actionType });
+        const category = String(consequence.category || '').toLowerCase();
+        const type = String(actionType || '').toLowerCase();
+        if (category === 'social' && ['ask', 'probe'].includes(type)) score += 3;
+        if (category === 'exploration' && ['observe', 'investigate', 'use_item'].includes(type)) score += 3;
+        if (category === 'resource' && ['investigate', 'use_item'].includes(type)) score += 2;
+        if (category === 'survival' && ['use_item', 'observe', 'investigate'].includes(type)) score += 2;
+
+        const targetText = [
+            consequence.title,
+            consequence.cause,
+            consequence.effect,
+            ...(consequence.tags || [])
+        ].filter(Boolean).join(' ');
+        const overlap = this._textOverlapScore(intent, targetText);
+        score += Math.min(4, overlap);
+        return score;
     },
 
     _applyFreeformSocialOutcome(scene, character, text = '', actionType = '', options = {}) {
