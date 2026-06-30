@@ -201,6 +201,49 @@ function testEvidenceUnlockSurfacesCompanion(WorldEngine, State) {
     assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing'));
 }
 
+function testSuspectedRevelationDoesNotUnlockCompanionByDefault(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({
+        companionResources: [susanBacking({ unlock: { revelationIds: ['rev_medical_truth'] } })],
+        flowGraph: {
+            nodes: [],
+            revelations: [{
+                id: 'rev_medical_truth',
+                conclusion: '苏珊确认玩家不是传染源。',
+                status: 'suspected',
+                core: true,
+                clueIds: []
+            }]
+        }
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(availability.ok, false);
+    assert.strictEqual(availability.requiredRevelationStatus, 'confirmed');
+    assert.ok(availability.reason.includes('缺少确认关键结论'));
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+}
+
+function testExplicitSuspectedRevelationCanUnlockCompanion(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({
+        companionResources: [susanBacking({ unlock: { revelationIds: ['rev_medical_truth'], revelationStatus: 'suspected' } })],
+        flowGraph: {
+            nodes: [],
+            revelations: [{
+                id: 'rev_medical_truth',
+                conclusion: '苏珊确认玩家不是传染源。',
+                status: 'suspected',
+                core: true,
+                clueIds: []
+            }]
+        }
+    });
+    const leads = WorldEngine.getCompanionActionLeads(scene);
+
+    assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing'));
+}
+
 function testSpentCompanionDoesNotCreateLead(WorldEngine, State) {
     setSusanTrust(State, 12);
     const scene = makeScene({
@@ -424,6 +467,14 @@ function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
 {
     const { WorldEngine, State } = loadWorldEngine();
     testEvidenceUnlockSurfacesCompanion(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testSuspectedRevelationDoesNotUnlockCompanionByDefault(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testExplicitSuspectedRevelationCanUnlockCompanion(WorldEngine, State);
 }
 {
     const { WorldEngine, State } = loadWorldEngine();
