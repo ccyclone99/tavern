@@ -96,6 +96,63 @@ function testFreeformExplorationCreatesEvidenceRewardAndLinksKnowledge(WorldEngi
     assert.ok(rewardMessage.content.includes('右侧「局势/线索」'));
 }
 
+function testFreeformExplorationEvidenceBindsToActiveChallenge(WorldEngine) {
+    const scene = makeScene({
+        storyPhases: [{ id: 'phase_route', title: '路线勘查', status: 'active' }],
+        sceneChallenges: [{
+            id: 'challenge_cargo_route',
+            phaseId: 'phase_route',
+            title: '货舱路线勘查',
+            status: 'active',
+            goal: '确认下层货舱旧航线是否还能使用。',
+            tags: ['route', 'cargo'],
+            supports: ['q_main:1'],
+            coreRevelations: ['rev_route_safe'],
+            progress: 0,
+            targetProgress: 3,
+            strain: 0,
+            maxStrain: 3,
+            approaches: [{
+                id: 'inspect_markers',
+                label: '调查旧航线标记',
+                stat: 'intelligence',
+                dc: 14,
+                actionType: 'investigate',
+                tags: ['route', 'marker'],
+                keywords: ['航线', '标记']
+            }]
+        }]
+    });
+
+    const result = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我先调查墙上的旧航线标记，看看有没有能用的路线。',
+        { actionType: 'investigate' }
+    );
+
+    assert.strictEqual(result.changed, true);
+    const evidence = scene.evidenceLedger.find(item => item.id === 'ev_free_loc_cargo');
+    assert.ok(evidence, 'freeform exploration should create evidence');
+    assert.ok(evidence.supports.includes('challenge_cargo_route'), 'evidence should support the active challenge');
+    assert.ok(evidence.supports.includes('rev_route_safe'), 'evidence should carry challenge revelation support');
+    assert.ok(evidence.supports.includes('q_main:1'), 'evidence should carry challenge quest support');
+    assert.ok(evidence.tags.includes('inspect_markers'), 'evidence should keep matched approach context');
+
+    const challengeEvidence = WorldEngine.getEvidenceForChallenge(scene, scene.sceneChallenges[0]);
+    assert.ok(challengeEvidence.some(item => item.id === evidence.id), 'challenge panel should be able to show the evidence');
+
+    const modifier = WorldEngine.getEvidenceActionModifier(scene, {
+        actionType: 'investigate',
+        intent: '继续调查旧航线标记',
+        challengeId: 'challenge_cargo_route',
+        challengeTitle: '货舱路线勘查',
+        approachTags: ['route', 'marker']
+    });
+    assert.ok(modifier, 'bound exploration evidence should modify later challenge actions');
+    assert.ok(modifier.evidenceIds.includes(evidence.id));
+    assert.ok(modifier.riskDelta < 0);
+}
+
 function testRepeatedFreeformExplorationDoesNotFarmReward(WorldEngine) {
     const scene = makeScene();
     WorldEngine.applyFreeformActionOutcome(scene, '我观察四周。', { actionType: 'observe' });
@@ -128,6 +185,7 @@ function testSocialFreeformDoesNotCreateExplorationReward(WorldEngine) {
 
 const WorldEngine = loadWorldEngine();
 testFreeformExplorationCreatesEvidenceRewardAndLinksKnowledge(WorldEngine);
+testFreeformExplorationEvidenceBindsToActiveChallenge(WorldEngine);
 testRepeatedFreeformExplorationDoesNotFarmReward(WorldEngine);
 testSocialFreeformDoesNotCreateExplorationReward(WorldEngine);
 console.log('freeform-exploration-reward regression tests passed');

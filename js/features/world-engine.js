@@ -8579,6 +8579,9 @@ const WorldEngine = {
             return entry;
         };
 
+        const challengeMatch = ['observe', 'investigate', 'use_item'].includes(actionType)
+            ? this.matchChallengeApproach(scene, sourceText, actionType)
+            : null;
         const clue = this._matchFreeformClueStage(scene, sourceText, actionType);
         if (clue) {
             addDiscovery({
@@ -8665,6 +8668,7 @@ const WorldEngine = {
         const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
             actionType,
             sourceText,
+            challengeMatch,
             messageId: options.messageId || ''
         });
         const clueProgress = clue ? this._advanceFreeformClueStage(scene, clue, {
@@ -8936,29 +8940,35 @@ const WorldEngine = {
         const discovery = discoveries.find(item => this._canCreateFreeformEvidence(item));
         if (!discovery) return [];
         const evidenceId = this._freeformEvidenceId(discovery);
+        const challenge = options.challengeMatch?.challenge || null;
+        const approach = options.challengeMatch?.approach || null;
         const tags = [
             'freeform',
             actionType,
             discovery.subjectType,
             discovery.subjectId,
-            ...(discovery.tags || [])
+            ...(discovery.tags || []),
+            ...(challenge ? ['challenge', challenge.id, challenge.phaseId, ...(challenge.tags || [])] : []),
+            ...(approach ? [approach.id, approach.actionType, ...(approach.tags || []), ...(approach.keywords || [])] : [])
         ].map(String).filter(Boolean);
         const supports = [
             discovery.subjectId,
-            ...(discovery.tags || []).filter(tag => /^clue_|^rev_|^ch_|^challenge_/i.test(String(tag)))
+            ...(discovery.tags || []).filter(tag => /^clue_|^rev_|^ch_|^challenge_/i.test(String(tag))),
+            ...(challenge ? [challenge.id, ...(challenge.supports || []), ...(challenge.coreRevelations || [])] : []),
+            ...(challenge && approach?.id ? [`${challenge.id}:${approach.id}`] : [])
         ].map(String).filter(Boolean);
         const evidence = {
             id: evidenceId,
             title: discovery.title || '自由探索发现',
             text: discovery.text || discovery.title || '玩家通过自由探索取得了可继续利用的发现。',
-            tags,
+            tags: [...new Set(tags)].slice(0, 24),
             sourceNodeId: scene.currentLocation || '',
             reliability: discovery.reliability === 'confirmed' || ['evidence', 'inference', 'truth'].includes(discovery.level)
                 ? 'confirmed'
                 : 'partial',
             visible: true,
             obtainedBy: `自由行动：${this._shortChoiceText(options.sourceText || discovery.source || '', 80)}`,
-            supports
+            supports: [...new Set(supports)].slice(0, 16)
         };
         this.applyEvidenceAdd(scene, [evidence]);
         this._linkKnowledgeDiscoveryEvidence(scene, discovery.id, evidenceId);
