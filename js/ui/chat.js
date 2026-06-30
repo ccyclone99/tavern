@@ -992,7 +992,7 @@ const ChatUI = {
             ? IntentRouter.route(text, scene)
             : { kind: State.isOOC ? 'ooc' : 'talk', text };
 
-        if (!State.isOOC && route.kind !== 'ooc' && typeof PromptGuard !== 'undefined' && PromptGuard.inspectUserInput) {
+        if (typeof PromptGuard !== 'undefined' && PromptGuard.inspectUserInput) {
             const guard = PromptGuard.inspectUserInput(text);
             if (guard.blocked) {
                 this._clearInput();
