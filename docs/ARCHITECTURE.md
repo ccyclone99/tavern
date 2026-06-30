@@ -322,7 +322,13 @@ el.innerHTML = `<div>${Renderer.escapeHtml(userOrAiText)}</div>`;
 
 ## 七、测试与验收
 
-当前项目没有自动化测试框架，最小验收：
+当前项目的轻量自动化回归位于 `tests/regression/*.test.js`，可用以下命令全量运行：
+
+```powershell
+Get-ChildItem tests\regression\*.test.js | Sort-Object Name | ForEach-Object { Write-Host "[test] $($_.Name)"; node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+```
+
+其中 `tests/regression/all-js-syntax.test.js` 会统一执行所有 `js/` 和 `tests/regression/` 下的 JS 语法检查。若只想快速检查语法，可单独运行：
 
 ```powershell
 node --check js/core/*.js
