@@ -26,6 +26,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!Array.isArray(scene.socialActionLog)) scene.socialActionLog = [];
         if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
+        scene.aiDiagnostics = this.normalizeAiDiagnostics(scene.aiDiagnostics);
         this.normalizeCharacterPresence(scene);
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         if (!Array.isArray(scene.inventory)) scene.inventory = [];
@@ -90,6 +91,37 @@ const WorldEngine = {
         }
         this._sceneCharacters(scene).forEach(char => this.normalizeAgenda(char));
         return scene;
+    },
+
+    normalizeAiDiagnostics(data = {}) {
+        const source = data && typeof data === 'object' ? data : {};
+        const recent = Array.isArray(source.recentEmptyResponses)
+            ? source.recentEmptyResponses
+                .map(item => ({
+                    source: String(item?.source || '').slice(0, 80),
+                    trigger: String(item?.trigger || '').slice(0, 80),
+                    characterId: String(item?.characterId || '').slice(0, 100),
+                    speaker: String(item?.speaker || '').slice(0, 80),
+                    turn: Number.isFinite(Number(item?.turn)) ? Number(item.turn) : 0,
+                    timestamp: Number.isFinite(Number(item?.timestamp)) ? Number(item.timestamp) : Date.now()
+                }))
+                .slice(-20)
+            : [];
+        const last = source.lastEmptyResponse && typeof source.lastEmptyResponse === 'object'
+            ? {
+                source: String(source.lastEmptyResponse.source || '').slice(0, 80),
+                trigger: String(source.lastEmptyResponse.trigger || '').slice(0, 80),
+                characterId: String(source.lastEmptyResponse.characterId || '').slice(0, 100),
+                speaker: String(source.lastEmptyResponse.speaker || '').slice(0, 80),
+                turn: Number.isFinite(Number(source.lastEmptyResponse.turn)) ? Number(source.lastEmptyResponse.turn) : 0,
+                timestamp: Number.isFinite(Number(source.lastEmptyResponse.timestamp)) ? Number(source.lastEmptyResponse.timestamp) : Date.now()
+            }
+            : (recent[recent.length - 1] || null);
+        return {
+            emptyResponses: this._clamp(Number(source.emptyResponses || recent.length || 0), 0, 9999),
+            lastEmptyResponse: last,
+            recentEmptyResponses: recent
+        };
     },
 
     ensureGameplayScaffold(scene) {

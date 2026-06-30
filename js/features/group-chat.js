@@ -108,6 +108,32 @@ const GroupChat = {
             const safeMarkers = typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeMarkers
                 ? PromptGuard.sanitizeMarkers(markers, scene)
                 : markers;
+            const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
+            const checkMarkers = safeMarkers.filter(m => m.type === 'check');
+            if (!cleanedContent.trim()) {
+                const notice = this._recordEmptyAssistantResponse(scene, {
+                    source: '角色回复',
+                    trigger: 'reply',
+                    characterId: char.id,
+                    speaker: char.name || ''
+                });
+                if (this._isScenePlaying(scene)) await this._processMarkers(nonCheckMarkers);
+                let createdCheck = false;
+                if (this._isScenePlaying(scene)) {
+                    for (const cm of checkMarkers) {
+                        if (!this._isScenePlaying(scene)) break;
+                        if (this._createPendingCheck(cm.raw, notice?.id || '')) createdCheck = true;
+                    }
+                }
+                const waitingForCheck = this._isScenePlaying(scene) && (createdCheck || checkMarkers.length > 0 || !!scene.pendingCheck);
+                if (waitingForCheck) {
+                    ActionBar.renderPendingCheck();
+                    ChatUI._syncInputMode?.();
+                    showToast('需要检定：点击或输入“掷骰”继续');
+                }
+                await State.saveCurrentSceneDebounced();
+                return { ok: false, pendingCheck: waitingForCheck, empty: true };
+            }
 
             // 提取情绪标签
             const parsed = Renderer.parseMessageType(cleanedContent);
@@ -134,8 +160,6 @@ const GroupChat = {
             ChatUI.finalizeStreamingMessage(cleanedContent, emotion);
 
             // 处理非检定标记（检定标记在检查后统一处理）
-            const nonCheckMarkers = safeMarkers.filter(m => m.type !== 'check');
-            const checkMarkers = safeMarkers.filter(m => m.type === 'check');
             await this._processMarkers(nonCheckMarkers);
             if (this._isScenePlaying(scene)) this._reconcileQuestProgressFromNarrative(msg);
 
@@ -188,6 +212,62 @@ const GroupChat = {
             }
             return { ok: false, pendingCheck: false };
         }
+    },
+
+    _recordEmptyAssistantResponse(scene, context = {}) {
+        if (!scene) {
+            if (typeof ChatUI !== 'undefined') ChatUI.removeStreamingMessage?.();
+            return null;
+        }
+        if (typeof ChatUI !== 'undefined') ChatUI.removeStreamingMessage?.();
+        const now = Date.now();
+        if (!scene.aiDiagnostics || typeof scene.aiDiagnostics !== 'object') {
+            scene.aiDiagnostics = { emptyResponses: 0, lastEmptyResponse: null, recentEmptyResponses: [] };
+        }
+        if (!Array.isArray(scene.aiDiagnostics.recentEmptyResponses)) scene.aiDiagnostics.recentEmptyResponses = [];
+        const entry = {
+            source: String(context.source || 'AI回复').slice(0, 80),
+            trigger: String(context.trigger || '').slice(0, 80),
+            characterId: String(context.characterId || '').slice(0, 100),
+            speaker: String(context.speaker || '').slice(0, 80),
+            turn: Number(scene.turnCount || 0),
+            timestamp: now
+        };
+        scene.aiDiagnostics.emptyResponses = Math.min(9999, Number(scene.aiDiagnostics.emptyResponses || 0) + 1);
+        scene.aiDiagnostics.lastEmptyResponse = entry;
+        scene.aiDiagnostics.recentEmptyResponses.push(entry);
+        scene.aiDiagnostics.recentEmptyResponses = scene.aiDiagnostics.recentEmptyResponses.slice(-20);
+
+        const label = entry.speaker ? `${entry.source}（${entry.speaker}）` : entry.source;
+        const content = `【AI空回复】${label}没有返回可见叙事，系统已跳过空消息并记录诊断。可以重试、查看回顾，或直接继续输入下一步。`;
+        let msg = null;
+        if (typeof WorldEngine !== 'undefined') {
+            if (WorldEngine.recordEvent) {
+                WorldEngine.recordEvent(scene, {
+                    category: 'system',
+                    title: 'AI空回复',
+                    text: `${label}返回空内容`,
+                    refId: entry.trigger || 'ai_empty_response',
+                    timestamp: now
+                });
+            }
+            if (WorldEngine.addSystemMessage) {
+                msg = WorldEngine.addSystemMessage(scene, content, 'system', { record: false });
+            }
+        }
+        if (!msg) {
+            msg = {
+                id: 'msg_' + now + '_' + Math.random().toString(36).slice(2, 6),
+                role: 'assistant',
+                content,
+                type: 'system',
+                timestamp: now
+            };
+            scene.messages.push(msg);
+            if (typeof ChatUI !== 'undefined' && ChatUI.onMessageAdded) ChatUI.onMessageAdded(msg);
+        }
+        if (typeof ChatUI !== 'undefined') ChatUI._renderedCount = scene.messages.length;
+        return msg;
     },
 
     /**
@@ -1249,7 +1329,11 @@ const GroupChat = {
             }
 
             if (!cleanedDescription.trim()) {
-                ChatUI.removeStreamingMessage();
+                this._recordEmptyAssistantResponse(scene, {
+                    source: '地点旁白',
+                    trigger: 'location_arrival',
+                    speaker: dm?.name || 'DM'
+                });
                 await State.saveCurrentSceneDebounced();
                 return;
             }
@@ -1331,10 +1415,14 @@ const GroupChat = {
                 console.warn('[GroupChat] DM 续写中忽略 check 标记，避免同一次检定后再次要求掷骰', ignoredCheckMarkers.map(m => m.raw));
             }
             if (!cleanedContent.trim()) {
-                ChatUI.removeStreamingMessage();
                 if (this._isScenePlaying(scene)) {
                     await this._processMarkers(nonCheckMarkers);
                 }
+                this._recordEmptyAssistantResponse(scene, {
+                    source: 'DM续写',
+                    trigger: context.trigger || 'dm_narration',
+                    speaker: dm?.name || 'DM'
+                });
                 await State.saveCurrentSceneDebounced();
                 return;
             }
