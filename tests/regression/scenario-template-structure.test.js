@@ -26,6 +26,80 @@ function getTemplateRuntime(WorldEngine, WorldGenerator, template) {
     };
 }
 
+function assertLocationGraphIsPlayable(template, locations) {
+    const label = `${template.id} ${template.name}`;
+    const locationIds = new Set();
+    locations.forEach((location, idx) => {
+        assert.ok(location && location.id, `${label} location ${idx} should have an id`);
+        assert.ok(!locationIds.has(location.id), `${label} location ${location.id} should be unique`);
+        locationIds.add(location.id);
+    });
+
+    locations.forEach(location => {
+        const connections = Array.isArray(location.connections) ? location.connections : [];
+        connections.forEach(targetId => {
+            assert.ok(locationIds.has(targetId), `${label} location ${location.id} connects to missing location ${targetId}`);
+            const target = locations.find(item => item.id === targetId);
+            const back = Array.isArray(target?.connections) ? target.connections : [];
+            assert.ok(back.includes(location.id), `${label} connection ${location.id} -> ${targetId} should be bidirectional`);
+        });
+    });
+
+    const startId = locations[0]?.id;
+    const seen = new Set();
+    const queue = startId ? [startId] : [];
+    while (queue.length > 0) {
+        const id = queue.shift();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const location = locations.find(item => item.id === id);
+        (location?.connections || []).forEach(nextId => {
+            if (!seen.has(nextId)) queue.push(nextId);
+        });
+    }
+    assert.strictEqual(seen.size, locations.length, `${label} location map should be fully reachable from the starting location`);
+}
+
+function assertFlowGraphRoutesResolve(WorldEngine, template, runtime) {
+    const label = `${template.id} ${template.name}`;
+    const scene = {
+        locations: runtime.locations,
+        currentLocation: runtime.locations[0]?.id || '',
+        flowGraph: runtime.flowGraph
+    };
+    const nodeIds = new Set();
+    runtime.flowGraph.nodes.forEach(node => {
+        assert.ok(node && node.id, `${label} flow node should have an id`);
+        assert.ok(!nodeIds.has(node.id), `${label} flow node ${node.id} should be unique`);
+        nodeIds.add(node.id);
+    });
+
+    const locationNodeIds = new Set();
+    runtime.flowGraph.nodes.forEach(node => {
+        const location = WorldEngine._locationForFlowNode(scene, node);
+        if (location?.id) locationNodeIds.add(location.id);
+    });
+    runtime.locations.forEach(location => {
+        assert.ok(locationNodeIds.has(location.id), `${label} location ${location.id} should resolve from a flow node`);
+    });
+
+    const normalize = value => WorldEngine._normalizeQuestText(value || '');
+    const nodeByRef = new Map();
+    runtime.flowGraph.nodes.forEach(node => {
+        [node.id, node.title].map(normalize).filter(Boolean).forEach(key => nodeByRef.set(key, node));
+    });
+
+    runtime.flowGraph.nodes.forEach(node => {
+        (node.exits || []).forEach(exitRef => {
+            const targetNode = nodeByRef.get(normalize(exitRef));
+            const targetLocation = targetNode
+                ? WorldEngine._locationForFlowNode(scene, targetNode)
+                : WorldEngine.resolveLocationReference(scene, { id: exitRef, name: exitRef }, { withStatus: true })?.location;
+            assert.ok(targetNode || targetLocation, `${label} flow node ${node.id} exit ${exitRef} should resolve to a node or location`);
+        });
+    });
+}
+
 function testTemplatesMeetScenarioStructureSpec(WorldEngine, WorldGenerator) {
     assert.ok(WorldGenerator.templates.length >= 3, 'expected multiple playable scenario templates');
 
@@ -39,6 +113,8 @@ function testTemplatesMeetScenarioStructureSpec(WorldEngine, WorldGenerator) {
         assert.ok(runtime.phases.some(phase => phase.status === 'active'), `${label} should start with an active phase`);
         assert.ok(runtime.flowGraph.revelations.length >= 3, `${label} should have at least 3 revelations`);
         assert.ok(runtime.challenges.length >= runtime.phases.length, `${label} should have enough challenges for phases`);
+        assertLocationGraphIsPlayable(template, runtime.locations);
+        assertFlowGraphRoutesResolve(WorldEngine, template, runtime);
 
         const clueIds = new Set(runtime.clues.map(clue => clue.id).filter(Boolean));
         runtime.flowGraph.revelations
