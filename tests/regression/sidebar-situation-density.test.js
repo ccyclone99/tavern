@@ -29,12 +29,30 @@ function testSituationPrioritizesLiveDecisionSurface() {
         gameState: 'playing',
         turnCount: 7,
         runRecord: {
+            id: 'current_record',
             outcome: 'neutral',
             title: '旧回顾',
             summary: '这段记录不能压在当前行动前面。',
             events: [{ category: 'resource', title: '消耗补给', text: '应急医疗包已使用', turn: 6 }],
             transcript: [{ speaker: '玩家', text: '旧对话' }]
-        }
+        },
+        runHistory: [{
+            id: 'old_record',
+            outcome: 'defeated',
+            title: '上一次尝试',
+            summary: '玩家曾经失败，但记录应保留。',
+            turns: 11,
+            completedAt: 100,
+            events: [{ category: 'failure', title: '失败', text: '局势失控' }],
+            checks: [{ statName: '魅力' }],
+            evidence: [{ title: '旧证据' }],
+            transcriptCount: 20
+        }, {
+            id: 'current_record',
+            outcome: 'neutral',
+            title: '当前记录',
+            summary: '当前记录不应在历史尝试里重复。'
+        }]
     };
     const summaryEl = { innerHTML: '', onclick: null, classList: createClassList() };
     const roomStatus = { textContent: '' };
@@ -106,6 +124,9 @@ function testSituationPrioritizesLiveDecisionSurface() {
     assert.ok(html.indexOf('现在可尝试') < html.indexOf('记录与回顾'), 'actions should come before record fold');
     assert.ok(html.indexOf('冒险回顾') > html.indexOf('记录与回顾'), 'run record should live inside the record fold');
     assert.ok(html.indexOf('关键状态变化') > html.indexOf('记录与回顾'), 'run record event snapshot should live inside the record fold');
+    assert.ok(html.indexOf('历史尝试') > html.indexOf('记录与回顾'), 'run history should live inside the record fold');
+    assert.ok(html.includes('上一次尝试'), 'previous run history should render');
+    assert.ok(!html.includes('当前记录不应在历史尝试里重复。'), 'current run record should not duplicate in history list');
     assert.ok(html.indexOf('玩家掷骰') > html.indexOf('记录与回顾'), 'event log should live inside the record fold');
 }
 

@@ -513,14 +513,17 @@ const SidebarRight = {
         });
 
         const runRecordHtml = this._buildRunRecordHtml(scene.runRecord, { embedded: true });
+        const runHistoryHtml = this._buildRunHistoryHtml(scene.runHistory, scene.runRecord);
         const eventLogHtml = this._buildEventLogHtml(
             typeof WorldEngine !== 'undefined' && WorldEngine.getEventLog
                 ? WorldEngine.getEventLog(scene, 8)
                 : (scene.eventLog || []).slice(-8).reverse(),
             { embedded: true }
         );
-        const recordsHtml = this._buildSituationFold('记录与回顾', `${runRecordHtml}${eventLogHtml}`, {
-            meta: scene.runRecord ? '通关记录' : (eventLogHtml ? '最近事件' : ''),
+        const recordsHtml = this._buildSituationFold('记录与回顾', `${runRecordHtml}${runHistoryHtml}${eventLogHtml}`, {
+            meta: scene.runRecord
+                ? (runHistoryHtml ? '通关记录+历史' : '通关记录')
+                : (runHistoryHtml ? '历史记录' : (eventLogHtml ? '最近事件' : '')),
             open: !canMutateSituation && !!runRecordHtml,
             className: 'situation-record-fold'
         });
@@ -687,6 +690,46 @@ const SidebarRight = {
                 ${transcript}
             </div>
         `;
+    },
+
+    _buildRunHistoryHtml(history, currentRecord = null) {
+        const records = (Array.isArray(history) ? history : [])
+            .filter(record => record && typeof record === 'object')
+            .filter(record => !currentRecord?.id || record.id !== currentRecord.id)
+            .slice(-5)
+            .reverse();
+        if (records.length === 0) return '';
+        const items = records.map(record => {
+            const outcomeLabel = record.outcome === 'victorious'
+                ? '通关'
+                : (record.outcome === 'defeated' ? '失败' : '记录');
+            const outcomeCls = record.outcome === 'victorious'
+                ? 'victory'
+                : (record.outcome === 'defeated' ? 'defeat' : 'neutral');
+            const eventCount = Array.isArray(record.events) ? record.events.length : 0;
+            const checkCount = Array.isArray(record.checks) ? record.checks.length : 0;
+            const evidenceCount = Array.isArray(record.evidence) ? record.evidence.length : 0;
+            const transcriptCount = Number(record.transcriptCount || (record.transcript || []).length || 0);
+            return `<li class="run-history-item run-history-${Renderer.escapeAttr(outcomeCls)}">
+                <div class="run-history-head">
+                    <strong>${Renderer.escapeHtml(record.title || record.sceneName || '历史记录')}</strong>
+                    <span>${Renderer.escapeHtml(outcomeLabel)}</span>
+                </div>
+                <p>${Renderer.escapeHtml(record.summary || record.ending || '暂无摘要')}</p>
+                <div class="run-history-meta">
+                    <span>${Renderer.escapeHtml(this._eventTimeText(record.completedAt || record.createdAt))}</span>
+                    <span>回合 ${Number(record.turns || 0)}</span>
+                    <span>检定 ${checkCount}</span>
+                    <span>证据 ${evidenceCount}</span>
+                    <span>事件 ${eventCount}</span>
+                    <span>对话 ${transcriptCount}</span>
+                </div>
+            </li>`;
+        }).join('');
+        return `<details class="run-history">
+            <summary>历史尝试（${records.length}次）</summary>
+            <ol>${items}</ol>
+        </details>`;
     },
 
     _eventTimeText(timestamp) {
