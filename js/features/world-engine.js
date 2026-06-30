@@ -9243,11 +9243,11 @@ const WorldEngine = {
 
     _findContextualTool(scene) {
         const items = Array.isArray(scene?.inventory) ? scene.inventory : [];
-        const usefulTypes = new Set(['observe', 'investigate', 'probe', 'use_item']);
+        const usefulTypes = new Set(['observe', 'investigate', 'probe', 'use_item', 'sneak', 'lie']);
         return items.find(item => {
             if (!item || !item.name) return false;
             const tags = (item.tags || []).map(tag => String(tag || '').toLowerCase());
-            const tagUseful = tags.some(tag => /扫描|探测|观察|工具|侦查|调查|记录|地图|路线|修复/.test(tag));
+            const tagUseful = tags.some(tag => /扫描|探测|观察|工具|侦查|调查|记录|地图|路线|修复|追踪|跟踪|痕迹|足迹|开锁|伪装/.test(tag));
             const effectUseful = (item.effects || []).some(effect =>
                 usefulTypes.has(String(effect.actionType || '')) ||
                 ['wisdom', 'intelligence'].includes(String(effect.stat || '')) ||
@@ -9259,11 +9259,20 @@ const WorldEngine = {
 
     _findMentionedTool(scene, text = '') {
         const normalized = this._normalizeQuestText(text);
+        const items = Array.isArray(scene?.inventory) ? scene.inventory : [];
+        const named = items
+            .filter(item => item?.name)
+            .find(item => {
+                const name = this._normalizeQuestText(item.name || '');
+                return name && normalized && (normalized.includes(name) || name.includes(normalized));
+            });
+        if (named) return this._itemCanUnlockAction(named) ? named : null;
+
         const tool = this._findContextualTool(scene);
         if (!tool) return null;
         const name = this._normalizeQuestText(tool.name || '');
         if (!normalized || !name || normalized.includes(name) || name.includes(normalized)) return tool;
-        return /扫描|探测|检查|检测|工具|记录|地图|修复/.test(normalized) ? tool : null;
+        return /扫描|探测|检查|检测|工具|记录|地图|修复|追踪|跟踪|痕迹|足迹|开锁|伪装/.test(normalized) ? tool : null;
     },
 
     _publicCharacterHint(char) {
@@ -10298,7 +10307,7 @@ const WorldEngine = {
             persuade: ['persuade', '说服', '谈判', '请求', '拉拢', '安抚'],
             probe: ['probe', '试探', '套话', '旁敲侧击', '观察反应'],
             investigate: ['investigate', '调查', '研究', '分析', '破解', '解读', '搜索', '检索', '排查', '线索'],
-            observe: ['observe', '观察', '察看', '查看', '留意', '扫描', '探测', '侦测', '检测', '感知'],
+            observe: ['observe', '观察', '察看', '查看', '留意', '扫描', '探测', '侦测', '检测', '感知', '追踪', '痕迹', '足迹', '路线辨识'],
             ask: ['ask', '询问', '问问', '打听', '请教'],
             trade: ['trade', '交易', '购买', '出售', '交换'],
             use_item: ['use_item', '使用', '道具', '工具', '设备', '修复', '维修', '修理', '破解', '拆解', '调试', '校准', '接线', '启动', '操作', '控制台', '终端', '净化', '封印', '仪式', '污染'],
