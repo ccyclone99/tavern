@@ -6,6 +6,7 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..', '..');
 
 function loadGroupChat(scene, warnings = []) {
+    const calls = [];
     const context = {
         console: {
             ...console,
@@ -21,19 +22,32 @@ function loadGroupChat(scene, warnings = []) {
         },
         WorldEngine: {
             isScenePlaying: value => !!value && (!value.gameState || value.gameState === 'playing'),
-            getCheckItemBonus() {
+            getCheckItemBonus(targetScene, checkContext) {
+                calls.push({ fn: 'getCheckItemBonus', checkContext });
+                if (checkContext?.actionType === 'observe') {
+                    return {
+                        bonus: 1,
+                        modifiers: [{ source: '便携扫描仪', label: '+1 检定', value: 1, consume: false }]
+                    };
+                }
                 return { bonus: 0, modifiers: [] };
             },
-            getAvailableCheckItems() {
+            getAvailableCheckItems(targetScene, checkContext) {
+                calls.push({ fn: 'getAvailableCheckItems', checkContext });
+                if (checkContext?.actionType === 'observe') {
+                    return [{ id: 'item:scan_pack', source: '探测电池', value: 2 }];
+                }
                 return [];
             },
-            getAvailableCompanionResources() {
+            getAvailableCompanionResources(targetScene, checkContext) {
+                calls.push({ fn: 'getAvailableCompanionResources', checkContext });
                 return [];
             }
         }
     };
     const code = fs.readFileSync(path.join(root, 'js/features/group-chat.js'), 'utf8') + '\nthis.GroupChat = GroupChat;';
     vm.runInNewContext(code, context, { filename: 'js/features/group-chat.js' });
+    context.GroupChat._testCalls = calls;
     return context.GroupChat;
 }
 
@@ -121,6 +135,38 @@ function testAiCheckIsUsedWhenNoLocalAdjudicationExists() {
     assert.strictEqual(scene.pendingCheck.adjudicationSource, 'ai');
 }
 
+function testOrdinaryTalkCheckUsesSavedIntentMetaForItems() {
+    const scene = makeScene([{
+        id: 'msg_talk_scan',
+        role: 'user',
+        type: 'talk',
+        content: '我用扫描仪扫描墙壁。',
+        timestamp: 100,
+        intentMeta: {
+            kind: 'talk',
+            actionType: 'observe',
+            confidence: 0.65
+        }
+    }]);
+    const GroupChat = loadGroupChat(scene);
+
+    const pending = GroupChat._createPendingCheck('感知|DC13', 'assistant_reply');
+
+    assert.ok(pending, 'AI check from ordinary talk should create a pending check');
+    assert.strictEqual(scene.pendingCheck.key, 'wisdom');
+    assert.strictEqual(scene.pendingCheck.actionType, 'observe');
+    assert.strictEqual(scene.pendingCheck.intent, '我用扫描仪扫描墙壁。');
+    assert.strictEqual(scene.pendingCheck.itemBonus, 1);
+    assert.ok(scene.pendingCheck.itemModifiers.some(item => item.source === '便携扫描仪'));
+    assert.ok(scene.pendingCheck.availableItemModifiers.some(item => item.source === '探测电池'));
+    assert.ok(GroupChat._testCalls.some(call =>
+        call.fn === 'getCheckItemBonus' &&
+        call.checkContext.actionType === 'observe' &&
+        call.checkContext.intent === '我用扫描仪扫描墙壁。'
+    ));
+}
+
 testLocalAdjudicationOverridesConflictingAiCheck();
 testAiCheckIsUsedWhenNoLocalAdjudicationExists();
+testOrdinaryTalkCheckUsesSavedIntentMetaForItems();
 console.log('check-adjudication-dc regression tests passed');

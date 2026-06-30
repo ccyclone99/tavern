@@ -579,6 +579,9 @@ const GroupChat = {
         }
 
         const intent = String(sourceMessage?.content || '').trim().slice(0, 800);
+        const intentMeta = sourceMessage?.intentMeta && typeof sourceMessage.intentMeta === 'object'
+            ? sourceMessage.intentMeta
+            : {};
         let planned = null;
         if (intent && typeof ActionPlanner !== 'undefined' && ActionPlanner.create) {
             try {
@@ -588,7 +591,7 @@ const GroupChat = {
             }
         }
         return {
-            actionType: planned?.type || '',
+            actionType: planned?.type || intentMeta.actionType || '',
             intent,
             stakes: planned?.stakes || '',
             challengeContext: planned?.challengeContext || null,
