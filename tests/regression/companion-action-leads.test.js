@@ -170,6 +170,65 @@ function testImmediateCompanionCanBeExplicitlyUnlocked(WorldEngine, State) {
     assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing'));
 }
 
+function testInvalidCompanionCharacterIdCannotUnlock(WorldEngine, State) {
+    State.characters[0]._relations = {};
+    const scene = makeScene({
+        companionResources: [susanBacking({
+            characterId: 'ghost_helper',
+            name: '匿名医学背书',
+            unlock: { immediate: true }
+        })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+    const check = { stat: 'charisma', actionType: 'persuade', intent: '公开证据链' };
+
+    assert.strictEqual(availability.ok, false);
+    assert.strictEqual(availability.reason, '协助角色不存在');
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+    assert.strictEqual(WorldEngine.getAvailableCompanionResources(scene, check).length, 0);
+}
+
+function testUnboundCompanionResourceCannotUnlockWhenAmbiguous(WorldEngine, State) {
+    State.characters = [
+        { id: 'susan', name: '苏珊', _relations: {} },
+        { id: 'wang', name: '老王', _relations: {} }
+    ];
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        characters: ['susan', 'wang'],
+        companionResources: [susanBacking({
+            characterId: '',
+            name: '匿名协助',
+            unlock: { immediate: true }
+        })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(availability.ok, false);
+    assert.strictEqual(availability.reason, '协助资源未绑定角色');
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+}
+
+function testExplicitCharacterNameRepairsCompanionBinding(WorldEngine, State) {
+    State.characters = [
+        { id: 'susan', name: '苏珊', _relations: {} },
+        { id: 'wang', name: '老王', _relations: {} }
+    ];
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        characters: ['susan', 'wang'],
+        companionResources: [susanBacking({
+            characterId: '',
+            characterName: '苏珊',
+            name: '医学背书',
+            unlock: { immediate: true }
+        })]
+    });
+    const leads = WorldEngine.getCompanionActionLeads(scene);
+
+    assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing' && lead.characterId === 'susan'));
+}
+
 function testInvalidUnlockFallsBackToRelationshipGate(WorldEngine, State) {
     State.characters[0]._relations = {};
     const scene = makeScene({ companionResources: [susanBacking({ unlock: { immediate: false, note: '占位字段' } })] });
@@ -455,6 +514,18 @@ function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
 {
     const { WorldEngine, State } = loadWorldEngine();
     testImmediateCompanionCanBeExplicitlyUnlocked(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testInvalidCompanionCharacterIdCannotUnlock(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testUnboundCompanionResourceCannotUnlockWhenAmbiguous(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testExplicitCharacterNameRepairsCompanionBinding(WorldEngine, State);
 }
 {
     const { WorldEngine, State } = loadWorldEngine();

@@ -6934,11 +6934,24 @@ const WorldEngine = {
         return this.getCharacterPresence(scene, characterId).isPresent;
     },
 
+    _validateCompanionCharacterBinding(scene, resource) {
+        const characterId = String(resource?.characterId || '').trim();
+        if (!characterId) return { ok: false, reason: '协助资源未绑定角色' };
+        if (typeof State !== 'undefined' && Array.isArray(State.characters)) {
+            const character = State.characters.find(char => char && String(char.id || '') === characterId);
+            if (!character) return { ok: false, reason: '协助角色不存在' };
+            return { ok: true, character };
+        }
+        return { ok: true, character: null };
+    },
+
     getCompanionResourceAvailability(scene, resource) {
         if (!scene || !resource) return { ok: false, reason: '缺少场景或协助资源' };
         const scope = this._companionScope(resource);
         const scopeLabel = this._companionScopeLabel(resource);
         const unlock = resource.unlock && typeof resource.unlock === 'object' ? resource.unlock : {};
+        const binding = this._validateCompanionCharacterBinding(scene, resource);
+        if (!binding.ok) return { ok: false, reason: binding.reason, trust: 0, scope, scopeLabel };
         const relationInfo = this._getCompanionRelation(scene, resource.characterId, false);
         const trust = Number(relationInfo?.relation?.trust || 0);
         const presence = this.getCharacterPresence(scene, resource.characterId);
