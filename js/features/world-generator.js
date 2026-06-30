@@ -1123,22 +1123,25 @@ const WorldGenerator = {
         }));
         let revelations = [];
         if (id === 'template_post_apocalypse') {
+            const shelterClues = ['clue_shelter_susan_mutant', 'clue_shelter_aj_coordinate', 'clue_shelter_missing_team'];
             revelations = [
-                { id: 'rev_player_is_not_contagious', conclusion: '玩家的地表适应不是传染性污染，可以作为有限背书进入探索队。', status: 'unknown', core: true, clueIds: ['clue_shelter_susan_mutant'], requiredFor: ['q_side2', 'q_main:1'] },
-                { id: 'rev_new_eden_is_home', conclusion: '阿杰坐标指向可容纳第7区的新家园，而不只是临时补给点。', status: 'unknown', core: true, clueIds: ['clue_shelter_aj_coordinate'], requiredFor: ['q_main', 'q_main:2', 'q_main:3'] },
-                { id: 'rev_vote_needs_evidence', conclusion: '委员会投票取决于证据质量和迁徙代价，不会因一句承诺全票通过。', status: 'unknown', core: true, clueIds: ['clue_shelter_missing_team'], requiredFor: ['q_main:4'] }
+                { id: 'rev_player_is_not_contagious', conclusion: '玩家的地表适应不是传染性污染，可以作为有限背书进入探索队。', status: 'unknown', core: true, clueIds: shelterClues, requiredFor: ['q_side2', 'q_main:1'] },
+                { id: 'rev_new_eden_is_home', conclusion: '阿杰坐标指向可容纳第7区的新家园，而不只是临时补给点。', status: 'unknown', core: true, clueIds: shelterClues, requiredFor: ['q_main', 'q_main:2', 'q_main:3'] },
+                { id: 'rev_vote_needs_evidence', conclusion: '委员会投票取决于证据质量和迁徙代价，不会因一句承诺全票通过。', status: 'unknown', core: true, clueIds: shelterClues, requiredFor: ['q_main:4'] }
             ];
         } else if (id === 'template_warhammer40k') {
+            const blackshipClues = ['clue_blackship_third_shadow', 'clue_blackship_clax_fragment', 'clue_blackship_silas_oculus'];
             revelations = [
-                { id: 'rev_player_has_investigation_value', conclusion: '玩家不是可立即处决的污染源，至少拥有调查价值。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:1'] },
-                { id: 'rev_relic_not_only_source', conclusion: '货舱遗物不是唯一问题，船员死亡和引擎异常也指向同一腐蚀源。', status: 'unknown', core: true, clueIds: ['clue_blackship_third_shadow'], requiredFor: ['q_main:2', 'q_main:3'] },
-                { id: 'rev_shadow_entity_exposed', conclusion: '第三道影子是不属于活人的灵能实体，必须封印或净化。', status: 'unknown', core: true, clueIds: ['clue_blackship_third_shadow'], requiredFor: ['q_main:4'] }
+                { id: 'rev_player_has_investigation_value', conclusion: '玩家不是可立即处决的污染源，至少拥有调查价值。', status: 'unknown', core: true, clueIds: blackshipClues, requiredFor: ['q_main:1'] },
+                { id: 'rev_relic_not_only_source', conclusion: '货舱遗物不是唯一问题，船员死亡和引擎异常也指向同一腐蚀源。', status: 'unknown', core: true, clueIds: blackshipClues, requiredFor: ['q_main:2', 'q_main:3'] },
+                { id: 'rev_shadow_entity_exposed', conclusion: '第三道影子是不属于活人的灵能实体，必须封印或净化。', status: 'unknown', core: true, clueIds: blackshipClues, requiredFor: ['q_main:4'] }
             ];
         } else if (id === 'template_cyber_xianxia') {
+            const templeClues = ['clue_xianxia_heart_memory', 'clue_xianxia_dragon_rune', 'clue_xianxia_lengning_master'];
             revelations = [
-                { id: 'rev_trial_score_is_not_enough', conclusion: '试炼评分只能证明合格，无法解释小七的异常人格。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:1'] },
-                { id: 'rev_xiaoqi_not_simple_bug', conclusion: '小七不是普通器灵故障，heart.exe 是可被保护或重写的人格核心。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:2'] },
-                { id: 'rev_protocol_choice', conclusion: '飞升协议的最终选择会改变玩家、小七和机械寺的关系。', status: 'unknown', core: true, clueIds: [], requiredFor: ['q_main:3'] }
+                { id: 'rev_trial_score_is_not_enough', conclusion: '试炼评分只能证明合格，无法解释小七的异常人格。', status: 'unknown', core: true, clueIds: templeClues, requiredFor: ['q_main:1'] },
+                { id: 'rev_xiaoqi_not_simple_bug', conclusion: '小七不是普通器灵故障，heart.exe 是可被保护或重写的人格核心。', status: 'unknown', core: true, clueIds: templeClues, requiredFor: ['q_main:2'] },
+                { id: 'rev_protocol_choice', conclusion: '飞升协议的最终选择会改变玩家、小七和机械寺的关系。', status: 'unknown', core: true, clueIds: templeClues, requiredFor: ['q_main:3'] }
             ];
         } else {
             const main = (data.quests || []).find(q => q.type === 'main') || (data.quests || [])[0];
