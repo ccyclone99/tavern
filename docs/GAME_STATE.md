@@ -268,7 +268,7 @@
 
 `WorldEngine.getFailureWarnings()` 会把可见的临界失败转成玩家可行动预警：公开/暗示时钟、可见反制和世界紧张度达到一半以上时，局势推荐优先展示具体缓解动作，而不是只显示失败标题。缓解动作来源优先级为 `failure.counterplay`、匹配反制的 `counterplay`、当前挑战方法和通用语义建议。隐藏时钟或隐藏反制不会泄露失败名称、满格条件或私密真相。
 
-结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。长对话自动摘要前会先把被压缩的原始消息写入 `scene.transcriptLog`，因此结局回顾不会只剩最近 300 条或摘要文本。角色发言消息会保存当时的 `characterName`，回顾 transcript 优先使用这份快照并保留 `characterId`，不应依赖当前全局角色表仍完整。阶段回顾会按阶段挑战、证据、主线目标和检定匹配 transcript，保留可展开的关键原文摘录；右侧“局势”面板展示这份冒险回顾时，完整对话默认折叠，阶段原文也默认折叠，供玩家需要时展开复盘。
+结局出现后，`RunRecorder.complete()` 会生成 `scene.runRecord`，整理玩家、回合数、结局消息、关键事件、`eventLog` 快照、任务完成度、已知线索、挑战、证据、检定、公开时钟和完整对话 transcript。长对话自动摘要前会先把被压缩的原始消息写入 `scene.transcriptLog`，因此结局回顾不会只剩最近 300 条或摘要文本。角色发言消息会保存当时的 `characterName`，回顾 transcript 优先使用这份快照并保留 `characterId`，不应依赖当前全局角色表仍完整。阶段回顾会按阶段挑战、证据、主线目标和检定匹配 transcript，保留可展开的关键原文摘录；右侧“局势”面板展示这份冒险回顾时，完整对话、关键状态变化和阶段原文默认折叠，供玩家需要时展开复盘。
 
 如果 API 返回成功但可见叙事为空，`GroupChat` 不会把空白角色/DM 消息写入 transcript；系统会移除流式占位、追加 `【AI空回复】` 系统提示、写入 `eventLog`，并更新 `scene.aiDiagnostics.emptyResponses / lastEmptyResponse / recentEmptyResponses`，方便复盘时判断是否需要重试、切换模型或检查 prompt。
 

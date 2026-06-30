@@ -90,7 +90,7 @@ function testPhaseSummaryLinksEvidenceAndChecksThroughSupports() {
     const phase = record.phaseSummaries.find(item => item.id === 'phase_vote');
 
     assert.ok(phase, 'phase summary should be generated');
-    assert.strictEqual(record.version, 12);
+    assert.strictEqual(record.version, 13);
     assert.strictEqual(record.checks[0].challengeId, 'challenge_vote');
     assert.strictEqual(phase.checkCount, 1, 'phase should count check by challenge id even without challenge title');
     assert.ok(phase.evidence.includes('新伊甸容量记录'), 'phase should include evidence linked through core revelation support');

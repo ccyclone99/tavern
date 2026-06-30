@@ -3,7 +3,7 @@
  * 在胜利或失败结局出现时，把当前场景整理成玩家可回看的结构化记录。
  */
 const RunRecorder = {
-    version: 12,
+    version: 13,
 
     ensure(scene) {
         if (!scene) return scene;
@@ -55,6 +55,7 @@ const RunRecorder = {
         const completedAt = Date.now();
         const startedAt = scene.createdAt || scene.messages?.[0]?.timestamp || completedAt;
         const keyMoments = this._buildKeyMoments(scene);
+        const events = this._buildEventHistory(scene);
         const transcript = this._buildTranscript(scene);
         const quests = (scene.quests || []).map(q => ({
             id: q.id || '',
@@ -142,6 +143,7 @@ const RunRecorder = {
             summary: this._summary(scene, endingMessage, keyMoments, phaseSummaries),
             phaseSummaries,
             keyMoments,
+            events,
             transcript,
             transcriptCount: transcript.length,
             quests,
@@ -359,6 +361,36 @@ const RunRecorder = {
                 return true;
             })
             .slice(-14);
+    },
+
+    _buildEventHistory(scene) {
+        const seen = new Set();
+        return (Array.isArray(scene?.eventLog) ? scene.eventLog : [])
+            .map(event => this._eventToRecordEntry(event))
+            .filter(Boolean)
+            .filter(event => {
+                if (this._isLowSignalMoment(event.text)) return false;
+                const key = `${event.category}|${event.title}|${event.text}`.slice(0, 260);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(-24);
+    },
+
+    _eventToRecordEntry(event) {
+        if (!event || typeof event !== 'object') return null;
+        const text = this._clean(event.text || event.content || event.title || '');
+        const title = this._clean(event.title || text || '事件');
+        if (!text && !title) return null;
+        return {
+            category: String(event.category || 'system').slice(0, 40),
+            title: this._clipText(title || text, 80),
+            text: this._clipText(text || title, 220),
+            turn: Number(event.turn || 0),
+            timestamp: Number(event.timestamp || event.createdAt || 0),
+            refId: String(event.refId || event.id || '').slice(0, 100)
+        };
     },
 
     _buildTranscript(scene) {

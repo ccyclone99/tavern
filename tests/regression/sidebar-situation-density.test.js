@@ -32,6 +32,7 @@ function testSituationPrioritizesLiveDecisionSurface() {
             outcome: 'neutral',
             title: '旧回顾',
             summary: '这段记录不能压在当前行动前面。',
+            events: [{ category: 'resource', title: '消耗补给', text: '应急医疗包已使用', turn: 6 }],
             transcript: [{ speaker: '玩家', text: '旧对话' }]
         }
     };
@@ -104,6 +105,7 @@ function testSituationPrioritizesLiveDecisionSurface() {
     assert.ok(html.includes('situation-knowledge-fold'), 'knowledge details should be folded');
     assert.ok(html.indexOf('现在可尝试') < html.indexOf('记录与回顾'), 'actions should come before record fold');
     assert.ok(html.indexOf('冒险回顾') > html.indexOf('记录与回顾'), 'run record should live inside the record fold');
+    assert.ok(html.indexOf('关键状态变化') > html.indexOf('记录与回顾'), 'run record event snapshot should live inside the record fold');
     assert.ok(html.indexOf('玩家掷骰') > html.indexOf('记录与回顾'), 'event log should live inside the record fold');
 }
 

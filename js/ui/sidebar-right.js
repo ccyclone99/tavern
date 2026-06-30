@@ -564,6 +564,39 @@ const SidebarRight = {
                 <span>${Renderer.escapeHtml(m.text || '')}</span>
             </li>
         `).join('');
+        const eventLabels = {
+            check: '检定',
+            quest: '任务',
+            inventory: '物品',
+            resource: '资源',
+            exploration: '探索',
+            social: '社交',
+            challenge: '挑战',
+            progress: '进展',
+            survival: '生存',
+            economy: '经济',
+            level: '成长',
+            movement: '移动',
+            failure: '失败',
+            victory: '通关',
+            system: '系统'
+        };
+        const eventEntries = (record.events || []).slice(-10).map(event => `
+            <li class="run-record-event run-record-event-${Renderer.escapeAttr(event.category || 'system')}">
+                <span>${Renderer.escapeHtml(eventLabels[event.category] || '事件')}</span>
+                <div>
+                    <strong>${Renderer.escapeHtml(event.title || '事件')}</strong>
+                    <p>${Renderer.escapeHtml(event.text || '')}</p>
+                    ${Number(event.turn || 0) > 0 ? `<small>回合 ${Number(event.turn || 0)}</small>` : ''}
+                </div>
+            </li>
+        `).join('');
+        const events = eventEntries
+            ? `<details class="run-record-events">
+                <summary>关键状态变化（${(record.events || []).length}条）</summary>
+                <ol>${eventEntries}</ol>
+            </details>`
+            : '';
         const phases = (record.phaseSummaries || []).slice(0, 5).map(p => {
             const excerpts = (p.excerpts || []).slice(0, 6).map(entry => {
                 const secondary = this._formatCheckSecondaryResults(entry.check);
@@ -644,6 +677,7 @@ const SidebarRight = {
                 </div>
                 ${phases ? `<ol class="run-record-phases">${phases}</ol>` : ''}
                 ${moments ? `<ol class="run-record-moments">${moments}</ol>` : ''}
+                ${events}
                 ${quests ? `<div class="situation-tags run-record-tags">${quests}</div>` : ''}
                 ${challenges ? `<div class="situation-tags run-record-tags">${challenges}</div>` : ''}
                 ${evidence ? `<div class="situation-tags run-record-tags">${evidence}</div>` : ''}
