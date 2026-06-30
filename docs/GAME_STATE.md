@@ -498,6 +498,8 @@ scene.equipmentRefs = {
 
 检定进入部分成功、失败推进或大失败时，本地后果选项优先使用当前挑战的 `failForward`、命中的线索阶段 `onFailure`，再使用 `flowGuide.failForward`，最后才回退到通用风险文案。该后果会进入检定结果、最近风险、后果账本和 DM 续写上下文，保证剧本写好的失败推进不是只存在于 prompt。
 
+自由行动命中当前线索阶段的 `actions` 时，`WorldEngine.applyFreeformActionOutcome()` 会写入玩家知识、生成可见证据，并在首次命中该阶段时推进 `clue.currentStage`。推进后会记录“线索推进”事件、追加系统反馈并刷新右侧局势推荐，让下一阶段的追查动作替代旧动作；重复同一自由行动只会复用既有发现，不会继续刷阶段。
+
 ### Strategy
 
 ```js

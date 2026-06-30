@@ -196,6 +196,65 @@ function testFreeformClueActionCreatesKnowledge(WorldEngine) {
     ));
 }
 
+function testFreeformClueActionAdvancesStageOnce(WorldEngine) {
+    const scene = makeScene({
+        messages: [],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        clueGraph: [{
+            id: 'clue_door',
+            title: '门后的响动',
+            subjectType: 'mystery',
+            subjectName: '封锁门',
+            status: 'hinted',
+            currentStage: 0,
+            stages: [
+                {
+                    id: 'dust',
+                    level: 'hint',
+                    title: '门缝灰痕',
+                    text: '门缝下的灰尘被人从里面拨开过。',
+                    source: '封锁门',
+                    locationId: 'cargo',
+                    actions: ['检查门缝灰痕']
+                },
+                {
+                    id: 'listen',
+                    level: 'hint',
+                    title: '门后呼吸声',
+                    text: '门后有很轻的呼吸声，可以继续确认里面是谁。',
+                    source: '封锁门',
+                    locationId: 'cargo',
+                    actions: ['贴门听里面动静']
+                }
+            ]
+        }]
+    });
+
+    const first = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我检查门缝灰痕。',
+        { actionType: 'investigate' },
+        { messageId: 'msg_user_stage_1' }
+    );
+    const clue = scene.clueGraph[0];
+
+    assert.ok(first.clueProgress);
+    assert.strictEqual(first.clueProgress.advanced, true);
+    assert.strictEqual(clue.currentStage, 1);
+    assert.strictEqual(clue.status, 'suspected');
+    assert.ok(scene.eventLog.some(event => event.title === '线索推进' && event.refId === 'clue_door'));
+    assert.ok(scene.messages.some(msg => String(msg.content || '').includes('【线索推进：门后的响动】')));
+    assert.ok(WorldEngine.getCurrentSituation(scene).knownUnknowns[0].actions.includes('贴门听里面动静'));
+
+    WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我检查门缝灰痕。',
+        { actionType: 'investigate' },
+        { messageId: 'msg_user_stage_repeat' }
+    );
+    assert.strictEqual(clue.currentStage, 1, 'repeating the same freeform clue action should not farm stages');
+}
+
 function testFreeformLocationObservationDedupesKnowledge(WorldEngine) {
     const scene = makeScene({
         messages: [],
@@ -375,6 +434,7 @@ testStalledSoftMoveStartsFromPlayerFreedom(WorldEngine);
 testRecommendedActionsAreNotOnlyChallengeApproaches(WorldEngine);
 testFreedomActionsUseSceneContext(WorldEngine);
 testFreeformClueActionCreatesKnowledge(WorldEngine);
+testFreeformClueActionAdvancesStageOnce(WorldEngine);
 testFreeformLocationObservationDedupesKnowledge(WorldEngine);
 testFreeformHiddenFactOnlyUnlocksHint(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);

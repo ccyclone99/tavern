@@ -8567,8 +8567,14 @@ const WorldEngine = {
 
         const sourceText = String(text || '').trim();
         const discoveries = [];
+        const newDiscoveryIds = new Set();
         const addDiscovery = data => {
+            const id = String(data?.id || '');
+            const existed = id
+                ? (scene.knowledge?.discoveries || []).some(item => item?.id === id)
+                : false;
             const entry = this._addKnowledgeDiscovery(scene, data);
+            if (entry?.id && !existed) newDiscoveryIds.add(entry.id);
             if (entry && !discoveries.some(item => item.id === entry.id)) discoveries.push(entry);
             return entry;
         };
@@ -8658,6 +8664,11 @@ const WorldEngine = {
             sourceText,
             messageId: options.messageId || ''
         });
+        const clueProgress = clue ? this._advanceFreeformClueStage(scene, clue, {
+            isNewDiscovery: newDiscoveryIds.has(`disc_free_${clue.clue.id}_${clue.stage.id || clue.stageIndex}`),
+            evidenceIds,
+            messageId: options.messageId || ''
+        }) : null;
         const title = discoveries[0].title || '自由行动收获';
         this.recordEvent(scene, {
             category: actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration',
@@ -8671,7 +8682,60 @@ const WorldEngine = {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries, evidenceIds, socialOutcome };
+        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress };
+    },
+
+    _advanceFreeformClueStage(scene, match, options = {}) {
+        if (!scene || !match?.clue || !match?.stage || options.isNewDiscovery !== true) return null;
+        const clueId = String(match.clue.id || '');
+        const clue = (scene.clueGraph || []).find(item => String(item?.id || '') === clueId) || match.clue;
+        const stages = Array.isArray(clue.stages) ? clue.stages : [];
+        if (stages.length === 0) return null;
+        const stageId = String(match.stage.id || '');
+        const resolvedStageIndex = stageId
+            ? stages.findIndex(stage => String(stage?.id || '') === stageId)
+            : -1;
+        const stageIndex = resolvedStageIndex >= 0 ? resolvedStageIndex : Number(match.stageIndex || 0);
+        const stage = stages[stageIndex] || match.stage;
+        const currentStage = this._clamp(Number(clue.currentStage || 0), 0, Math.max(0, stages.length - 1));
+        if (currentStage !== stageIndex) return null;
+
+        if (!Array.isArray(clue.evidence)) clue.evidence = [];
+        (options.evidenceIds || []).map(String).filter(Boolean).forEach(id => {
+            if (!clue.evidence.includes(id)) clue.evidence.push(id);
+        });
+        clue.evidence = clue.evidence.slice(-20);
+
+        const maxStage = Math.max(0, stages.length - 1);
+        let advanced = false;
+        if (currentStage < maxStage) {
+            clue.currentStage = currentStage + 1;
+            advanced = true;
+        }
+        if (['hidden', 'hinted', undefined, ''].includes(clue.status)) clue.status = 'suspected';
+        clue.lastReason = `自由行动：${stage.title || stage.text || match.clue.title}`;
+        clue.updatedAt = Date.now();
+
+        const nextStage = stages[Number(clue.currentStage || 0)] || null;
+        const nextText = advanced && nextStage
+            ? (nextStage.text || nextStage.title || '出现了新的追查方向。')
+            : (stage.text || match.clue.title || '线索有了新依据。');
+        this.recordEvent(scene, {
+            category: 'exploration',
+            title: advanced ? '线索推进' : '线索更新',
+            text: `${clue.title || '线索'}：${this._shortChoiceText(nextText, 120)}`,
+            messageId: options.messageId || '',
+            refId: clue.id || '',
+            turn: scene.turnCount || 0
+        });
+        this.addSystemMessage(scene, `【${advanced ? '线索推进' : '线索更新'}：${clue.title || '线索'}】${nextText}`, 'system', { record: false });
+        return {
+            clueId: clue.id || '',
+            title: clue.title || '',
+            advanced,
+            currentStage: Number(clue.currentStage || 0),
+            status: clue.status || ''
+        };
     },
 
     _applyFreeformSocialOutcome(scene, character, text = '', actionType = '', options = {}) {
