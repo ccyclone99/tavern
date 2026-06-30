@@ -623,7 +623,7 @@ const GroupChat = {
         const dc = totals.dc;
         const total = roll + mod;
         const outcomeInfo = this._classifyCheckOutcome(roll, total, dc);
-        const consequenceOptions = this._buildCheckConsequences(outcomeInfo.outcome, check);
+        const consequenceOptions = this._buildCheckConsequences(outcomeInfo.outcome, check, scene);
         const success = outcomeInfo.success;
         const crit = outcomeInfo.crit;
         if (['partial', 'fail', 'critical_fail'].includes(outcomeInfo.outcome)) {
@@ -882,8 +882,19 @@ const GroupChat = {
         };
     },
 
-    _buildCheckConsequences(outcome, check) {
+    _buildCheckConsequences(outcome, check, scene = null) {
         const risks = Array.isArray(check?.risks) ? check.risks.filter(Boolean).map(String) : [];
+        const failForward = typeof WorldEngine !== 'undefined' && WorldEngine.getFailForwardConsequences
+            ? WorldEngine.getFailForwardConsequences(scene || State.scene, check, outcome, { limit: 2 })
+            : [];
+        const merge = (...groups) => {
+            const out = [];
+            groups.flat().forEach(item => {
+                const text = String(item || '').trim();
+                if (text && !out.includes(text)) out.push(text);
+            });
+            return out.slice(0, 3);
+        };
         if (outcome === 'critical_success') {
             return ['额外收益或更深线索', '后续相关行动获得优势'];
         }
@@ -891,18 +902,21 @@ const GroupChat = {
             return ['目标按预期推进'];
         }
         if (outcome === 'partial') {
-            return risks.length > 0
+            const generic = risks.length > 0
                 ? risks.slice(0, 2).map(r => `达成部分目标，但${r}`)
                 : ['达成部分目标，但付出代价或引入新问题'];
+            return merge(failForward, generic);
         }
         if (outcome === 'critical_fail') {
-            return risks.length > 0
+            const generic = risks.length > 0
                 ? risks.slice(0, 2).map(r => `严重后果：${r}`)
                 : ['严重暴露、资源损失或敌方反制'];
+            return merge(failForward.map(item => `严重后果：${item}`), generic);
         }
-        return risks.length > 0
+        const generic = risks.length > 0
             ? risks.slice(0, 2)
             : ['暴露风险、时间推进、资源损失或得到不完整线索'];
+        return merge(failForward, generic);
     },
 
     _buildCheckEventText(resultText, data = {}) {

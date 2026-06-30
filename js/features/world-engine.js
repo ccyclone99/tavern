@@ -9192,6 +9192,48 @@ const WorldEngine = {
         return `追查剧情线索：${condition}`;
     },
 
+    getFailForwardConsequences(scene, check = {}, outcome = 'fail', options = {}) {
+        if (!scene || ['critical_success', 'success'].includes(outcome)) return [];
+        this.normalizeScene(scene);
+        const limit = this._clamp(Number(options.limit || 2), 1, 5);
+        const out = [];
+        const add = value => {
+            const text = String(value || '').trim();
+            if (!text || out.includes(text)) return;
+            out.push(text.slice(0, 220));
+        };
+
+        const challengeId = String(check?.challengeContext?.challengeId || '').trim();
+        const challengeTitle = String(check?.challengeContext?.challengeTitle || '').trim();
+        const challenge = challengeId
+            ? (scene.sceneChallenges || []).find(item => item.id === challengeId)
+            : (challengeTitle
+                ? (scene.sceneChallenges || []).find(item => item.title === challengeTitle || item.goal === challengeTitle)
+                : null);
+        const activeChallenge = challenge || (check?.challengeContext ? this.getActiveChallenge(scene) : null);
+        (activeChallenge?.failForward || []).forEach(add);
+
+        const intentText = `${check?.intent || ''} ${check?.source || ''}`.trim();
+        if (intentText) {
+            const normalizedIntent = this._normalizeFlowText(intentText);
+            (scene.clueGraph || []).forEach(clue => {
+                if (!clue || clue.status === 'hidden') return;
+                const stage = (clue.stages || [])[Number(clue.currentStage || 0)] || null;
+                if (!stage?.onFailure) return;
+                const matched = (stage.actions || []).some(action => {
+                    const normalizedAction = this._normalizeFlowText(action);
+                    return normalizedAction.length >= 6 &&
+                        (normalizedIntent.includes(normalizedAction) || normalizedAction.includes(normalizedIntent));
+                });
+                if (matched) add(stage.onFailure);
+            });
+        }
+
+        (scene.flowGuide?.failForward || []).forEach(add);
+
+        return out.slice(0, limit);
+    },
+
     markFlowMoveCompleted(scene, text, options = {}) {
         if (!scene?.flowGuide) return false;
         this.normalizeScene(scene);
