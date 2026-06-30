@@ -697,7 +697,7 @@ message.visibility = {
 }
 ```
 
-`PromptBuilder` 会通过 `WorldEngine.filterMessagesForCharacter()` 只把当前 NPC 可见的历史注入 prompt。旧消息没有 `visibility` 时按可见处理，保证旧存档兼容。
+`PromptBuilder` 会通过 `WorldEngine.filterMessagesForCharacter()` 只把当前 NPC 可见的历史注入 prompt。旧消息没有 `visibility` 时按可见处理，保证旧存档兼容。普通 NPC/群聊 prompt 的规则层使用玩家可见线索、可见失败风险和可见关键结论，不注入 `clueGraph.truth`、隐藏失败状态、未知 revelations 或完整剧情 beat；这些 DM 私密结构只进入 `buildDMNarration()`。
 
 ### CharacterDiscovery
 

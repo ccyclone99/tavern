@@ -44,8 +44,8 @@ SSE 流式响应。请求头需 `Authorization: Bearer <API_KEY>`。
 12. **NPC 日程** `【NPC 个人日程，仅供扮演】`（agenda/currentPlan/offscreenActions）
 13. **角色信条** `【角色信条与三观】`（creed/redLines/values，**人格锚点**）
 14. **回复要求** `【回复要求】`（来自 `post_history_instructions`）
-15. **规则层** `buildRulesContext(scene)`：属性/位置/地图/任务/物品/知识/势力/局势时钟/反制/检定规则/生存系统/动态事件/合理性协议
-16. **剧情弧** `【剧情弧 · 叙事骨架】`（storyArcs 节拍，**AI 必须按此推进**）
+15. **规则层** `buildRulesContext(scene, { audience: "npc" })`：属性/位置/地图/任务/物品/知识/势力/可见局势/检定规则/生存系统/动态事件/合理性协议；普通 NPC 不接收全局线索私密真相、隐藏失败条件或未知关键结论
+16. **剧情节奏** `【剧情节奏 · 可感知层】`（storyArcs 的非剧透层；完整 beat 只进入 DM 叙事 prompt）
 17. **计策协议** `【计策主持人协议】`
 18. **剧情推动 + 格式要求**
 
