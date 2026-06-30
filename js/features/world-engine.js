@@ -5603,18 +5603,22 @@ const WorldEngine = {
             intent: check?.intent || check?.stakes || '',
             includeUnequipped: true
         })
-            .filter(m => ['check_bonus', 'dc_delta', 'risk_delta'].includes(m.effect.type) && m.effect.consume === true);
+            .filter(m => (
+                ['check_bonus', 'dc_delta', 'risk_delta'].includes(m.effect.type) ||
+                this._isFailureBufferEffect(m.effect)
+            ) && m.effect.consume === true);
         const groups = new Map();
         matches.forEach((m, idx) => {
             const key = m.item.id || m.item.name || `idx_${idx}`;
             if (!groups.has(key)) {
-                groups.set(key, { item: m.item, checkBonus: 0, dcDelta: 0, riskDelta: 0 });
+                groups.set(key, { item: m.item, checkBonus: 0, dcDelta: 0, riskDelta: 0, bufferEffects: [] });
             }
             const group = groups.get(key);
             const value = Number(m.effect.value || 0);
             if (m.effect.type === 'check_bonus') group.checkBonus += value;
             if (m.effect.type === 'dc_delta') group.dcDelta += value;
             if (m.effect.type === 'risk_delta') group.riskDelta += value;
+            if (this._isFailureBufferEffect(m.effect)) group.bufferEffects.push(this._normalizeFailureBufferEffect(m.effect, m.item));
         });
         return [...groups.values()]
             .map((group, idx) => {
@@ -5622,10 +5626,14 @@ const WorldEngine = {
                 if (group.checkBonus) labelParts.push(`检定 ${group.checkBonus >= 0 ? '+' : ''}${group.checkBonus}`);
                 if (group.dcDelta) labelParts.push(`DC ${group.dcDelta >= 0 ? '+' : ''}${group.dcDelta}`);
                 if (group.riskDelta) labelParts.push(`风险 ${group.riskDelta >= 0 ? '+' : ''}${group.riskDelta}`);
+                const bufferEffects = group.bufferEffects.filter(Boolean);
+                const bufferSummary = this._failureBufferSummary(bufferEffects);
+                if (bufferSummary) labelParts.push(`失败缓冲：${bufferSummary}`);
                 if (!labelParts.length) return null;
                 const itemRef = group.item.id || group.item.name || `idx_${idx}`;
                 const stableId = `item:${itemRef}`;
                 const legacyId = `item:${itemRef}:${idx}`;
+                const failureBufferOnly = bufferEffects.length > 0 && !group.checkBonus && !group.dcDelta && !group.riskDelta;
                 return {
                     id: stableId,
                     legacyIds: legacyId === stableId ? [] : [legacyId],
@@ -5637,10 +5645,157 @@ const WorldEngine = {
                     checkBonus: group.checkBonus,
                     dcDelta: group.dcDelta,
                     riskDelta: group.riskDelta,
+                    failureBuffer: bufferEffects.length > 0,
+                    failureBufferOnly,
+                    bufferEffects,
                     consume: true
                 };
             })
             .filter(Boolean);
+    },
+
+    _isFailureBufferEffect(effect) {
+        if (!effect) return false;
+        const type = String(effect.type || '');
+        const value = Number(effect.value || 0);
+        if (type === 'clock_resist') return value !== 0;
+        if (type === 'clock_delta') return value < 0;
+        if (type === 'world_tension') return value < 0;
+        return false;
+    },
+
+    _normalizeFailureBufferEffect(effect = {}, item = {}) {
+        if (!this._isFailureBufferEffect(effect)) return null;
+        const type = String(effect.type || '');
+        const rawValue = Number(effect.value || 0);
+        const value = type === 'clock_resist'
+            ? -Math.abs(rawValue || 1)
+            : rawValue;
+        return {
+            type,
+            value: this._clamp(value, -12, -1),
+            clockId: String(effect.clockId || '').slice(0, 100),
+            clockTag: String(effect.clockTag || '').slice(0, 60),
+            clockName: String(effect.clockName || '').slice(0, 100),
+            itemTags: Array.isArray(item.tags) ? item.tags.map(String).slice(0, 12) : []
+        };
+    },
+
+    _failureBufferSummary(effects = []) {
+        const parts = [];
+        let clockDelta = 0;
+        let worldTension = 0;
+        effects.forEach(effect => {
+            const value = Number(effect?.value || 0);
+            if (!value) return;
+            if (effect.type === 'world_tension') worldTension += value;
+            else clockDelta += value;
+        });
+        if (clockDelta) parts.push(`时钟 ${clockDelta >= 0 ? '+' : ''}${clockDelta}`);
+        if (worldTension) parts.push(`世界紧张度 ${worldTension >= 0 ? '+' : ''}${worldTension}`);
+        return parts.join('，');
+    },
+
+    applyCheckFailureBuffers(scene, modifiers = [], check = {}, outcomeInfo = {}) {
+        if (!scene || !Array.isArray(modifiers) || !this.isScenePlaying(scene)) {
+            return { applied: [], appliedModifierIds: [] };
+        }
+        const outcome = String(outcomeInfo?.outcome || outcomeInfo || '');
+        if (!['partial', 'fail', 'critical_fail'].includes(outcome)) {
+            return { applied: [], appliedModifierIds: [] };
+        }
+        this.normalizeScene(scene);
+        const applied = [];
+        const appliedModifierIds = new Set();
+        const usedItemKeys = new Set();
+        modifiers.forEach(modifier => {
+            if (!this.isScenePlaying(scene)) return;
+            if (!modifier?.failureBuffer || !Array.isArray(modifier.bufferEffects)) return;
+            const itemKey = String(modifier.itemId || modifier.source || modifier.id || '').trim();
+            if (itemKey && usedItemKeys.has(itemKey)) return;
+            const notes = [];
+            modifier.bufferEffects.forEach(effect => {
+                if (!this.isScenePlaying(scene) || !effect) return;
+                if (effect.type === 'world_tension') {
+                    const result = this.addWorldTension(scene, effect.value, {
+                        source: `失败缓冲：${modifier.source || '资源'}`,
+                        silent: true
+                    });
+                    if (result.ok) notes.push(`世界紧张度 ${result.amount >= 0 ? '+' : ''}${result.amount}`);
+                    return;
+                }
+                const clock = this._findFailureBufferTargetClock(scene, modifier, effect, check);
+                if (!clock) return;
+                const before = Number(clock.value || 0);
+                if (effect.value < 0 && before <= 0) return;
+                const result = this.applyClockUpdate(scene, [{
+                    id: clock.id,
+                    delta: effect.value,
+                    reason: `失败缓冲：${modifier.source || '资源'}`
+                }]);
+                const current = (scene.clocks || []).find(item => item && item.id === clock.id) || clock;
+                const actual = Number(current.value || 0) - before;
+                if (result.changed && actual !== 0) {
+                    notes.push(`${current.name || '局势时钟'} ${actual >= 0 ? '+' : ''}${actual}`);
+                }
+            });
+            if (notes.length === 0) return;
+            if (itemKey) usedItemKeys.add(itemKey);
+            appliedModifierIds.add(String(modifier.id || ''));
+            if (Array.isArray(modifier.legacyIds)) {
+                modifier.legacyIds.forEach(id => appliedModifierIds.add(String(id || '')));
+            }
+            if (modifier.itemId) appliedModifierIds.add(`item:${modifier.itemId}`);
+            applied.push({
+                id: modifier.id || '',
+                itemId: modifier.itemId || '',
+                source: modifier.source || '资源',
+                label: notes.join('，')
+            });
+        });
+        if (applied.length > 0) {
+            const text = `【失败缓冲】${applied.map(item => `${item.source}：${item.label}`).join('；')}`;
+            this.addSystemMessage(scene, text, 'system', { record: false });
+            this.recordEvent(scene, {
+                category: 'inventory',
+                title: '失败缓冲',
+                text: applied.map(item => `${item.source}：${item.label}`).join('；')
+            });
+            if (typeof SidebarRight !== 'undefined') {
+                SidebarRight.renderSituation?.();
+                SidebarRight.markTabNew?.('situation');
+            }
+        }
+        return { applied, appliedModifierIds: [...appliedModifierIds].filter(Boolean) };
+    },
+
+    _findFailureBufferTargetClock(scene, modifier = {}, effect = {}, check = {}) {
+        const explicit = effect.clockId || effect.clockTag || effect.clockName;
+        if (explicit) {
+            const resolved = this.resolveClockReference(scene, {
+                id: effect.clockId,
+                clockId: effect.clockId,
+                tag: effect.clockTag,
+                clockTag: effect.clockTag,
+                name: effect.clockName,
+                clockName: effect.clockName
+            }, { withStatus: true });
+            return resolved.ambiguous ? null : resolved.clock;
+        }
+        const tags = new Set([
+            ...(Array.isArray(effect.itemTags) ? effect.itemTags : []),
+            ...(Array.isArray(modifier.itemTags) ? modifier.itemTags : []),
+            check.actionType,
+            check.key,
+            check.stat,
+            check.challengeContext?.challengeId,
+            check.challengeContext?.challengeTitle
+        ].map(value => String(value || '').toLowerCase()).filter(Boolean));
+        const matched = this._findUniqueVisibleClockByTokens(scene, tags);
+        if (matched) return matched;
+        const warning = this.getFailureWarnings(scene).find(item => item?.triggerType === 'clock' && item.clockName);
+        if (!warning) return null;
+        return (scene.clocks || []).find(clock => clock && clock.visibility !== 'hidden' && clock.name === warning.clockName) || null;
     },
 
     consumeCheckItems(scene, modifiers = [], options = {}) {
@@ -5649,9 +5804,21 @@ const WorldEngine = {
         let consumed = false;
         const inventoryCountBefore = scene.inventory.length;
         const consumedKeys = new Set();
+        const appliedFailureBufferIds = new Set((options.appliedFailureBufferIds || []).map(String));
+        const mode = String(options.failureBufferMode || '');
         const notes = [];
         modifiers.forEach(mod => {
             if (!mod.consume || !mod.source) return;
+            if (mode === 'exclude-only' && mod.failureBufferOnly) return;
+            if (mode === 'only-applied') {
+                if (!mod.failureBufferOnly) return;
+                const ids = [
+                    mod.id,
+                    ...(Array.isArray(mod.legacyIds) ? mod.legacyIds : []),
+                    mod.itemId ? `item:${mod.itemId}` : ''
+                ].map(value => String(value || '')).filter(Boolean);
+                if (!ids.some(id => appliedFailureBufferIds.has(id))) return;
+            }
             const key = mod.itemId || mod.source;
             if (consumedKeys.has(key)) return;
             const idx = mod.itemId

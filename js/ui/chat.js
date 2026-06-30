@@ -79,6 +79,10 @@ const ChatUI = {
         const resolvedConsequencesHtml = resolvedConsequences.length > 0
             ? `<div class="check-modifiers check-resolved-consequences">${resolvedConsequences.slice(0, 3).map(item => `<span>解除后果：${Renderer.escapeHtml(item.title || item.id || '后果')}</span>`).join('')}</div>`
             : '';
+        const failureBuffers = Array.isArray(d.failureBuffers) ? d.failureBuffers : [];
+        const failureBuffersHtml = failureBuffers.length > 0
+            ? `<div class="check-modifiers check-failure-buffers">${failureBuffers.slice(0, 3).map(item => `<span>失败缓冲：${Renderer.escapeHtml(item.source || '资源')} ${Renderer.escapeHtml(item.label || '')}</span>`).join('')}</div>`
+            : '';
         const note = d.consequenceHint
             ? `<div class="check-outcome-note">${Renderer.escapeHtml(d.consequenceHint)}</div>`
             : '';
@@ -96,6 +100,7 @@ const ChatUI = {
             ${resourceModsHtml}
             ${challengeProgressHtml}
             ${resolvedConsequencesHtml}
+            ${failureBuffersHtml}
             <div class="check-outcome">
                 <div class="check-result-badge">${Renderer.escapeHtml(resultText)}</div>
                 ${note}

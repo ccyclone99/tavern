@@ -711,10 +711,11 @@ const GroupChat = {
                 });
             }
             const inventoryCountBeforeCheckItems = Array.isArray(scene.inventory) ? scene.inventory.length : null;
-            WorldEngine.consumeCheckItems(scene, totals.itemModifiers || [], { retryPendingRewards: false });
-            const shouldRetryPendingRewards = inventoryCountBeforeCheckItems !== null
-                && Array.isArray(scene.inventory)
-                && scene.inventory.length < inventoryCountBeforeCheckItems;
+            WorldEngine.consumeCheckItems(scene, totals.itemModifiers || [], {
+                retryPendingRewards: false,
+                outcome: outcomeInfo.outcome,
+                failureBufferMode: 'exclude-only'
+            });
             if (scene.gameState === 'playing') {
                 WorldEngine.consumeCompanionResources?.(scene, totals.companionModifiers || []);
             }
@@ -745,6 +746,27 @@ const GroupChat = {
                     }));
                 }
             }
+            let failureBufferResult = { applied: [], appliedModifierIds: [] };
+            if (scene.gameState === 'playing' && WorldEngine.applyCheckFailureBuffers) {
+                failureBufferResult = WorldEngine.applyCheckFailureBuffers(scene, totals.itemModifiers || [], check, outcomeInfo);
+                if (failureBufferResult?.applied?.length > 0) {
+                    msg.checkData.failureBuffers = failureBufferResult.applied.map(item => ({
+                        id: item.id || '',
+                        itemId: item.itemId || '',
+                        source: item.source || '资源',
+                        label: item.label || ''
+                    }));
+                    WorldEngine.consumeCheckItems(scene, totals.itemModifiers || [], {
+                        retryPendingRewards: false,
+                        outcome: outcomeInfo.outcome,
+                        failureBufferMode: 'only-applied',
+                        appliedFailureBufferIds: failureBufferResult.appliedModifierIds || []
+                    });
+                }
+            }
+            const shouldRetryPendingRewards = inventoryCountBeforeCheckItems !== null
+                && Array.isArray(scene.inventory)
+                && scene.inventory.length < inventoryCountBeforeCheckItems;
             if (scene.gameState === 'playing' && WorldEngine.resolveCounterStrategies) {
                 const counterplayResults = WorldEngine.resolveCounterStrategies(scene, {
                     outcome: outcomeInfo.outcome,
@@ -938,6 +960,9 @@ const GroupChat = {
         if (Array.isArray(data.resolvedConsequences) && data.resolvedConsequences.length > 0) {
             parts.push(`解除后果：${data.resolvedConsequences.map(item => item.title || item.id || '后果').join('、')}`);
         }
+        if (Array.isArray(data.failureBuffers) && data.failureBuffers.length > 0) {
+            parts.push(`失败缓冲：${data.failureBuffers.map(item => `${item.source || '资源'} ${item.label || ''}`.trim()).join('、')}`);
+        }
         return parts.filter(Boolean).join('；').slice(0, 360);
     },
 
@@ -955,10 +980,13 @@ const GroupChat = {
                 return `${item.label}（${delta}）`;
             }).join('；')}。`
             : '';
+        const buffers = Array.isArray(data.failureBuffers) && data.failureBuffers.length > 0
+            ? ` 失败缓冲已生效：${data.failureBuffers.map(item => `${item.source || '资源'}（${item.label || ''}）`).join('；')}。`
+            : '';
         const challenge = data.challengeProgress
             ? ` 挑战变化：${data.challengeProgress.challengeTitle || '挑战'}，进展 ${data.challengeProgress.progress}/${data.challengeProgress.targetProgress}，压力 ${data.challengeProgress.strain}/${data.challengeProgress.maxStrain}。`
             : '';
-        return `检定结果：${data.resultLabel || '未知'}。${resources}${challenge}${counters}${secondary}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
+        return `检定结果：${data.resultLabel || '未知'}。${resources}${challenge}${counters}${secondary}${buffers}${data.consequenceHint || ''}${consequences ? ` 建议后果：${consequences}。` : ''}请把结果写成具体剧情变化；如果是部分成功、失败推进或大失败，不要只写阻断，必须让局势继续向前。`;
     },
 
     async cancelPendingCheck() {
