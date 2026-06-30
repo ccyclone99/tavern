@@ -231,6 +231,7 @@ character.agenda = {
 - NPC 之间形成冲突。
 
 离屏行动应通过系统消息、事件、知识条目或时钟体现，而不是只藏在 prompt 里。
+`scene.characters` 只表示本场景角色名单；实时“在玩家当前地点/邻近/远程/失联”必须通过 `scene.characterPresence[characterId]` 记录。`status` 取 `present|nearby|remote|away|unknown`，`contact` 取 `in_person|voice|message|remote|pledged|none|blocked|unknown`，并可用 `canContact:false` 表示当前确实无法联系。`npcAgendaUpdate` 可以同步写 `locationId/status/contact/canContact/presenceNote`，用于让同伴协助和 NPC 可见历史遵守地点边界。
 
 ### 4.5 局势时钟
 
@@ -674,7 +675,7 @@ Prompt 必须区分以下块：
 `discoveryUpdate` 每条状态补丁最多处理 10 条 NPC 隐藏档案解锁；目标角色优先用 `characterId`，也可用当前场景内唯一 `characterName/name/actorName/targetName` 匹配；档案槽优先用 `factId`，也可用该 NPC 下唯一 `factTitle/title/factType/type/hint/truth` 匹配。角色或档案槽重名、不唯一、离场或无法匹配时必须跳过，不能猜测解锁。
 `characterUpdates` 每条状态补丁最多处理 30 个角色；目标角色优先使用 `characterId`，也可用当前场景内唯一的 `characterName/name/actorName/targetName` 匹配，重名或不唯一时必须跳过。每个角色单次最多追加 8 条筹码、8 条共同记忆和 1 条 NPC 私密秘密。筹码、记忆、心情、秘密都会截断文本并去重，列表只保留最近的上限条目；`secret` 不会因为状态补丁自动公开给玩家。
 `clueUpdate` 和 `revelationUpdate` 优先用内部 id；模型不知道 id 时可用唯一线索标题、subjectName 或唯一关键结论文本定位。名称不唯一时必须跳过；找不到且提供明确 id/title/conclusion 时仍可由规则层创建新线索链或新结论。`revelationUpdate.conclusion` 可作为定位/创建文本，更新既有结论正文应使用精确 id 或 `newConclusion`，避免短匹配词覆盖原结论。
-`npcAgendaUpdate` 使用同一角色引用规则；模型不知道内部 id 时可以写唯一角色名，但重名或离场角色名不能猜测更新。
+`npcAgendaUpdate` 使用同一角色引用规则；模型不知道内部 id 时可以写唯一角色名，但重名或离场角色名不能猜测更新。除了 `currentPlan/priority/schedule/offscreenActions`，它也可以更新 `locationId/currentLocation/currentLocationId/status/contact/contactMode/canContact/presenceNote`；远程协助只有在 presence 明确写 `contact:"none"`、`contact:"blocked"` 或 `canContact:false` 时才会被阻断，普通离屏不应自动等于失联。
 
 每类补丁必须：
 

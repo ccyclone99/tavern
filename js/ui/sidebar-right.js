@@ -332,9 +332,16 @@ const SidebarRight = {
             : (scene.companionResources || []).filter(r => Number(r.uses || 0) > 0);
         const companionResourcesHtml = companionResources.slice(0, 5).map(resource => {
             const effect = resource.effect || {};
+            const availability = typeof WorldEngine !== 'undefined' && WorldEngine.getCompanionResourceAvailability
+                ? WorldEngine.getCompanionResourceAvailability(scene, resource)
+                : null;
             const scopeLabel = typeof WorldEngine !== 'undefined' && WorldEngine._companionScopeLabel
                 ? WorldEngine._companionScopeLabel(resource)
                 : (resource.scope === 'present' ? '在场' : (resource.scope === 'pledged' ? '承诺' : '远程'));
+            const presence = availability?.presence || null;
+            const presenceText = presence?.isPresent
+                ? '当前在场'
+                : (presence?.locationName ? `${presence.locationName}${presence.canRemote ? ' · 可联系' : ''}` : (presence?.canRemote ? '可远程联系' : ''));
             const bits = [];
             if (effect.checkBonus) bits.push(`检定${effect.checkBonus >= 0 ? '+' : ''}${effect.checkBonus}`);
             if (effect.dcDelta) bits.push(`DC${effect.dcDelta >= 0 ? '+' : ''}${effect.dcDelta}`);
@@ -347,6 +354,7 @@ const SidebarRight = {
                     <span>${Renderer.escapeHtml(resource.name)}</span>
                     <strong>${Renderer.escapeHtml(`${scopeLabel} · ${bits.join('、') || '协助'} · ${resource.uses}次`)}</strong>
                 </div>
+                ${presenceText ? `<p>${Renderer.escapeHtml(presenceText)}</p>` : ''}
                 ${resource.risk ? `<p>${Renderer.escapeHtml(resource.risk)}</p>` : ''}
             </div>`;
         }).join('');

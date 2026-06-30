@@ -773,7 +773,8 @@ const WorldGenerator = {
 - conflictSeeds: 3-4个初始矛盾种子，每个是字符串，描述可供玩家谋略的冲突
 - factions: 2-4个势力数组，每个含 { name, attitude(对玩家初始态度-50~50), power(实力0~100), description, leverage:[筹码数组] }
 - intel: 3-5个可发现情报数组，每个含 { text, source, reliability("rumor"/"confirmed"/"false") }
-- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/firstImpression(玩家初见可见印象，不含秘密、真实动机、恐惧或把柄)/first_mes/mes_example/tags/_emotionTags/_talkativeness，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组), agenda({ currentPlan, priority(0-100), schedule:[日程], offscreenActions:[离屏行动] })。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
+- characters: 2-4个角色数组，每个含 name/avatar(emoji)/description/personality/firstImpression(玩家初见可见印象，不含秘密、真实动机、恐惧或把柄)/first_mes/mes_example/tags/_emotionTags/_talkativeness/locationId/contact/canContact，以及谋略用字段 motives(动机数组), fears(恐惧数组), secrets(秘密数组), leverage(筹码数组), agenda({ currentPlan, priority(0-100), schedule:[日程], offscreenActions:[离屏行动] })。每个角色还必须有三观字段：creed(信条，1-2句核心价值观，角色为什么存在), redLines(底线数组，角色绝不会做的事), values(价值排序，如"职责>正义>个人情感")
+- characterPresence: 可选。按角色名或原始角色id索引的初始在场状态，字段含 locationId/status("present"/"nearby"/"remote"/"away")/contact("in_person"/"voice"/"message"/"remote"/"none")/canContact/note；缺省时角色默认在 currentLocation 且可当面互动
 - locations: 4-6个地点节点数组，每个含 { id, name, description, connections:[相邻地点id数组] }，第一个为起始地点
 - currentLocation: 起始地点id（设为地点的第一个）
 - quests: 1个主线和2个支线任务数组，每个含 { id, name, type("main"/"side"), description, objectives:[{text,completed:false}], status:"active", giver:发布人角色名, reward }
@@ -938,6 +939,40 @@ const WorldGenerator = {
             await Storage.saveCharacter(char);
             State.characters.push(char);
             scene.characters.push(char.id);
+            if (!scene.characterPresence || typeof scene.characterPresence !== 'object') scene.characterPresence = {};
+            const presenceSource = (() => {
+                const raw = data.characterPresence;
+                const sourceKeys = [charData.id, charData.characterId, charData.name].map(value => String(value || '').trim()).filter(Boolean);
+                if (Array.isArray(raw)) {
+                    return raw.find(item => {
+                        if (!item || typeof item !== 'object') return false;
+                        const itemKeys = [item.characterId, item.id, item.characterName, item.name].map(value => String(value || '').trim()).filter(Boolean);
+                        return itemKeys.some(key => sourceKeys.includes(key));
+                    }) || {};
+                }
+                if (raw && typeof raw === 'object') {
+                    const matchedKey = sourceKeys.find(key => raw[key]);
+                    return matchedKey ? raw[matchedKey] : {};
+                }
+                return {};
+            })();
+            const startLocation = presenceSource.locationId ||
+                presenceSource.currentLocation ||
+                presenceSource.currentLocationId ||
+                charData.locationId ||
+                charData.currentLocation ||
+                charData.currentLocationId ||
+                scene.currentLocation ||
+                '';
+            scene.characterPresence[char.id] = WorldEngine.normalizeCharacterPresenceEntry({
+                ...presenceSource,
+                characterId: char.id,
+                locationId: startLocation,
+                status: presenceSource.status || charData.status || 'present',
+                contact: presenceSource.contact || presenceSource.contactMode || charData.contact || charData.contactMode || 'in_person',
+                canContact: presenceSource.canContact ?? charData.canContact,
+                updatedAt: Date.now()
+            }, char.id);
             characterBindings.push({ source: charData, char });
             if (!firstCharId) firstCharId = char.id;
         }

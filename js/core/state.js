@@ -133,6 +133,7 @@ const State = {
         if (!Array.isArray(scene.quests)) scene.quests = [];
         if (!Array.isArray(scene.locations)) scene.locations = [];
         if (scene.currentLocation === undefined) scene.currentLocation = '';
+        if (!scene.characterPresence || typeof scene.characterPresence !== 'object') scene.characterPresence = {};
         if (!Array.isArray(scene.inventory)) scene.inventory = [];
         if (!scene.equipment) scene.equipment = { weapon: null, armor: null, accessory: null };
         if (!scene.equipmentRefs) scene.equipmentRefs = { weapon: null, armor: null, accessory: null };
@@ -300,6 +301,7 @@ const State = {
             quests: [],
             locations: [],
             currentLocation: '',
+            characterPresence: {},
             inventory: [],
             equipment: { weapon: null, armor: null, accessory: null },
             equipmentRefs: { weapon: null, armor: null, accessory: null },

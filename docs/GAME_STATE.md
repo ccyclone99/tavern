@@ -137,6 +137,7 @@
 | `quests` | Quest[] | 任务列表 |
 | `locations` | Location[] | 地图节点列表 |
 | `currentLocation` | string | 当前地点 id |
+| `characterPresence` | object | NPC 在场与联系方式索引，按真实 characterId 记录 locationId/status/contact/canContact |
 | `inventory` | Item[] | 背包物品 |
 | `equipment` | object | 当前装备槽的展示名称，兼容旧存档和 prompt 展示 |
 | `equipmentRefs` | object | 当前装备槽的物品 id 引用，用于同名物品精确装备、卸下、消耗和存档恢复 |
@@ -334,9 +335,25 @@ scene.evidenceLedger = [
 }
 ```
 
-同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`；若资源没有写任何 `unlock` 条件，运行时会按默认关系门槛处理，要求绑定 NPC 对玩家 `trust >= 10`，避免“刚认识就能动用背书”。剧本确实需要开局可用时，应显式写 `unlock:{ immediate:true }`、`unlock:{ always:true }` 或 `unlock:{ trustAtLeast:0 }`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 只会按当前场景唯一角色名做一次兼容修复；重名、模糊或资源名同时提到多个角色时不猜测绑定。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。如果某个同伴协助的代价或效果触发胜利/失败结局，当前检定内后续同伴协助不再扣除，该协助未写入的风险后果也不再追加。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。
+同伴协助是逐步公开资源，不满足 `unlock` 时不会进入 prompt、右侧局势或检定卡。当前支持的解锁条件包括 `trustAtLeast`/`trust`、`trustBelow`、`evidenceTags`、`knowledgeTags` 和 `revelationIds`；若资源没有写任何 `unlock` 条件，运行时会按默认关系门槛处理，要求绑定 NPC 对玩家 `trust >= 10`，避免“刚认识就能动用背书”。剧本确实需要开局可用时，应显式写 `unlock:{ immediate:true }`、`unlock:{ always:true }` 或 `unlock:{ trustAtLeast:0 }`。`revelationIds` 默认要求对应结论 `confirmed`，避免 NPC 底牌只因“怀疑”就提前公开；剧本若确实需要怀疑阶段解锁，可以写 `unlock.revelationStatus:"suspected"` 或 `unlock.allowSuspectedRevelation:true`。运行态资源应绑定真实 `characterId`；AI 生成或导入模板可提供 `characterName`、原始角色 id 或在资源名中包含角色名，`WorldGenerator.applyTemplate()` 会在创建角色后回填真实 id。旧存档缺失 `characterId` 时，`WorldEngine.normalizeScene()` 只会按当前场景唯一角色名做一次兼容修复；重名、模糊或资源名同时提到多个角色时不猜测绑定。玩家在检定卡显式点选后，掷骰时扣除 `uses`，并结算 `cost.trust`、`cost.time` 和 `risk`；同一次检定结算里同一个 `resourceId` 只允许扣一次，防止旧存档或异常 UI 重复 modifier 造成双倍扣除。如果某个同伴协助的代价或效果触发胜利/失败结局，当前检定内后续同伴协助不再扣除，该协助未写入的风险后果也不再追加。信任成本写入对应 NPC 的 `_relations[userName].history`，时间成本会选择一个活动/公开时钟推进 1-3 格（每 30 分钟或不足 30 分钟计 1 格）。`scope:"present"` 必须满足 `characterPresence` 判定的当前地点在场；`scope:"remote"` 只有在 presence 明确写 `contact:"none"`/`"blocked"` 或 `canContact:false` 时才被阻断；`scope:"pledged"` 表示预先承诺的离屏协助，通讯被阻断时不可用。右侧局势和 prompt 会显示可用协助对应 NPC 的位置或联系方式，避免玩家调用暂时无关的人脉。
 
 `effect` 可影响检定和局势：`checkBonus`、`dcDelta`、`riskDelta` 会进入检定结果；`clockDelta` 配合 `clockId`/`clockTag`/`clockName` 或资源标签延缓/推进公开时钟，其中显式引用必须唯一，资源标签隐式匹配也只有最高分唯一时才会生效；`evidenceReliability` 会把已取得且标签匹配的可见证据升级到指定可信度；`resolveConsequence`、`resolveConsequenceTags` 或 `consequenceTags` 可解除匹配的活跃后果。
+
+### CharacterPresence
+
+```js
+scene.characterPresence[characterId] = {
+  characterId: "char_susan",
+  locationId: "medbay",
+  status: "present", // present / nearby / remote / away / unknown
+  contact: "in_person", // in_person / voice / message / remote / pledged / none / blocked / unknown
+  canContact: true,
+  note: "正在医疗站值守",
+  updatedAt: 1710000000000
+}
+```
+
+`scene.characters` 表示本场景角色名单，不再等价于“当前在玩家面前”。实时在场、邻近、离屏、远程或失联状态由 `characterPresence` 决定；旧存档缺字段时会按角色名单、角色 location 字段和最近消息做兼容推断。
 
 ### Location
 

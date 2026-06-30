@@ -26,6 +26,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!Array.isArray(scene.socialActionLog)) scene.socialActionLog = [];
         if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
+        this.normalizeCharacterPresence(scene);
         if (!scene.flowGraph || typeof scene.flowGraph !== 'object') scene.flowGraph = { nodes: [], revelations: [] };
         if (!Array.isArray(scene.inventory)) scene.inventory = [];
         scene.inventory = scene.inventory
@@ -87,7 +88,7 @@ const WorldEngine = {
                 scene.inputContext.state = 'ended';
             }
         }
-        (State.activeCharacters || []).forEach(char => this.normalizeAgenda(char));
+        this._sceneCharacters(scene).forEach(char => this.normalizeAgenda(char));
         return scene;
     },
 
@@ -823,6 +824,42 @@ const WorldEngine = {
         agenda.offscreenActions = Array.isArray(agenda.offscreenActions) ? agenda.offscreenActions.map(String).slice(0, 12) : [];
         agenda.lastActionTurn = Number.isFinite(Number(agenda.lastActionTurn)) ? Number(agenda.lastActionTurn) : 0;
         return agenda;
+    },
+
+    normalizeCharacterPresence(scene) {
+        if (!scene) return {};
+        const raw = scene.characterPresence && typeof scene.characterPresence === 'object'
+            ? scene.characterPresence
+            : {};
+        const sourceEntries = Array.isArray(raw)
+            ? raw.map(entry => [entry?.characterId || entry?.id, entry])
+            : Object.entries(raw);
+        const next = {};
+        sourceEntries.slice(0, 80).forEach(([id, entry]) => {
+            const normalized = this.normalizeCharacterPresenceEntry(entry, id);
+            if (normalized?.characterId) next[normalized.characterId] = normalized;
+        });
+        scene.characterPresence = next;
+        return next;
+    },
+
+    normalizeCharacterPresenceEntry(data = {}, fallbackId = '') {
+        if (!data || typeof data !== 'object') data = {};
+        const statuses = ['present', 'nearby', 'remote', 'away', 'unknown'];
+        const contacts = ['in_person', 'voice', 'message', 'remote', 'pledged', 'none', 'blocked', 'unknown'];
+        const id = String(data.characterId || data.id || fallbackId || '').trim().slice(0, 100);
+        if (!id) return null;
+        const rawStatus = String(data.status || '').trim();
+        const rawContact = String(data.contact || data.contactMode || '').trim();
+        return {
+            characterId: id,
+            locationId: String(data.locationId || data.currentLocation || data.currentLocationId || '').trim().slice(0, 100),
+            status: statuses.includes(rawStatus) ? rawStatus : 'unknown',
+            contact: contacts.includes(rawContact) ? rawContact : 'unknown',
+            canContact: data.canContact === true ? true : (data.canContact === false ? false : null),
+            note: String(data.note || data.reason || '').trim().slice(0, 160),
+            updatedAt: Number.isFinite(Number(data.updatedAt)) ? Number(data.updatedAt) : 0
+        };
     },
 
     normalizeItem(item = {}) {
@@ -1755,6 +1792,15 @@ const WorldEngine = {
         if (scene.characters.length >= 12) return { ok: false, message: '当前场景角色过多，无法继续加入。' };
 
         scene.characters.push(id);
+        const locationId = String(options.locationId || scene.currentLocation || '').trim();
+        if (!scene.characterPresence || typeof scene.characterPresence !== 'object') scene.characterPresence = {};
+        scene.characterPresence[id] = this.normalizeCharacterPresenceEntry({
+            characterId: id,
+            locationId,
+            status: 'present',
+            contact: 'in_person',
+            updatedAt: Date.now()
+        }, id);
         this.recordEvent(scene, {
             category: 'progress',
             title: '角色登场',
@@ -1780,6 +1826,9 @@ const WorldEngine = {
             ? (State.characters || []).find(item => item && item.id === id)
             : null;
         scene.characters = scene.characters.filter(item => item !== id);
+        if (scene.characterPresence && typeof scene.characterPresence === 'object') {
+            delete scene.characterPresence[id];
+        }
         const reason = String(options.reason || '离开了').trim().slice(0, 120) || '离开了';
         this.recordEvent(scene, {
             category: 'progress',
@@ -4878,6 +4927,29 @@ const WorldEngine = {
             if (Array.isArray(update.schedule)) agenda.schedule = update.schedule.map(String).slice(0, 8);
             if (Array.isArray(update.offscreenActions)) agenda.offscreenActions = update.offscreenActions.map(String).slice(0, 12);
             if (update.lastActionTurn !== undefined) agenda.lastActionTurn = Number(update.lastActionTurn) || 0;
+            if (scene && (
+                update.locationId !== undefined ||
+                update.currentLocation !== undefined ||
+                update.currentLocationId !== undefined ||
+                update.status !== undefined ||
+                update.contact !== undefined ||
+                update.contactMode !== undefined ||
+                update.canContact !== undefined ||
+                update.presenceNote !== undefined
+            )) {
+                if (!scene.characterPresence || typeof scene.characterPresence !== 'object') scene.characterPresence = {};
+                const previous = scene.characterPresence[char.id] || {};
+                scene.characterPresence[char.id] = this.normalizeCharacterPresenceEntry({
+                    ...previous,
+                    characterId: char.id,
+                    locationId: update.locationId ?? update.currentLocation ?? update.currentLocationId ?? previous.locationId,
+                    status: update.status ?? previous.status,
+                    contact: update.contact ?? update.contactMode ?? previous.contact,
+                    canContact: update.canContact ?? previous.canContact,
+                    note: update.presenceNote ?? update.note ?? previous.note,
+                    updatedAt: Date.now()
+                }, char.id);
+            }
             Storage.saveCharacter(char).catch(e => console.warn('保存 NPC 日程失败:', e));
             changed = true;
         });
@@ -6525,23 +6597,85 @@ const WorldEngine = {
         return labels[this._companionScope(resource)] || '远程';
     },
 
-    _isCompanionPresent(scene, characterId) {
+    getCharacterPresence(scene, characterId) {
         const id = String(characterId || '').trim();
-        if (!scene || !id) return false;
+        if (!scene || !id) return {
+            characterId: id,
+            status: 'unknown',
+            contact: 'unknown',
+            canContact: null,
+            locationId: '',
+            locationName: '',
+            isPresent: false,
+            isNearby: false,
+            canRemote: false,
+            canPledged: false,
+            reason: '缺少场景或角色'
+        };
+        this.normalizeCharacterPresence(scene);
         const currentLocation = String(scene.currentLocation || '').trim();
         const byId = character => character && String(character.id || '') === id;
         const character = (typeof State !== 'undefined' && Array.isArray(State.characters))
             ? State.characters.find(byId)
             : null;
+        const explicit = scene.characterPresence?.[id] || null;
         const charLocation = String(character?.locationId || character?.currentLocation || character?.currentLocationId || '').trim();
-        if (currentLocation && charLocation) return charLocation === currentLocation;
-
+        const explicitLocation = String(explicit?.locationId || '').trim();
+        const locationId = explicitLocation || charLocation;
+        const currentLoc = (scene.locations || []).find(loc => loc && loc.id === currentLocation) || null;
+        const loc = locationId ? (scene.locations || []).find(item => item && item.id === locationId) : null;
+        const connections = Array.isArray(currentLoc?.connections) ? currentLoc.connections.map(String) : [];
         const activeCharacters = (typeof State !== 'undefined' && Array.isArray(State.activeCharacters))
             ? State.activeCharacters
             : [];
-        if (activeCharacters.some(byId)) return true;
-        if (Array.isArray(scene.characters) && scene.characters.map(String).includes(id)) return true;
+        const inActiveRoster = activeCharacters.some(byId);
+        const inSceneRoster = Array.isArray(scene.characters) && scene.characters.map(String).includes(id);
+        const recentlyHere = this._recentCharacterMessageAtLocation(scene, id, currentLocation);
 
+        let status = explicit?.status || 'unknown';
+        if (status === 'unknown') {
+            if (locationId && currentLocation) status = locationId === currentLocation ? 'present' : 'away';
+            else if (recentlyHere || inSceneRoster || inActiveRoster) status = 'present';
+        }
+
+        const sameLocation = !currentLocation || !locationId || locationId === currentLocation;
+        const isPresent = status === 'present' && sameLocation;
+        const isNearby = status === 'nearby' ||
+            (!!locationId && !!currentLocation && locationId !== currentLocation && connections.includes(locationId));
+        const contact = explicit?.contact || (isPresent ? 'in_person' : (status === 'remote' ? 'remote' : 'unknown'));
+        let canRemote = isPresent ||
+            status === 'remote' ||
+            ['voice', 'message', 'remote', 'pledged'].includes(contact) ||
+            explicit?.canContact === true;
+        if (explicit?.canContact === false || contact === 'none' || contact === 'blocked') canRemote = false;
+        const canPledged = contact !== 'blocked' && explicit?.canContact !== false;
+        const locationName = loc?.name || (locationId || '');
+        const reason = isPresent
+            ? '同伴在场'
+            : (locationName ? `同伴在${locationName}` : (canRemote ? '可远程联系' : '同伴不在场'));
+        return {
+            characterId: id,
+            characterName: character?.name || '',
+            status,
+            contact,
+            canContact: explicit?.canContact ?? null,
+            locationId,
+            locationName,
+            isPresent,
+            isNearby,
+            canRemote,
+            canPledged,
+            inSceneRoster,
+            inActiveRoster,
+            note: explicit?.note || '',
+            reason
+        };
+    },
+
+    _recentCharacterMessageAtLocation(scene, characterId, locationId = '') {
+        const id = String(characterId || '').trim();
+        const currentLocation = String(locationId || scene?.currentLocation || '').trim();
+        if (!scene || !id) return false;
         return (scene.messages || []).slice(-20).some(message => {
             if (!message || typeof message !== 'object') return false;
             const visibility = message.visibility || {};
@@ -6557,6 +6691,10 @@ const WorldEngine = {
         });
     },
 
+    _isCompanionPresent(scene, characterId) {
+        return this.getCharacterPresence(scene, characterId).isPresent;
+    },
+
     getCompanionResourceAvailability(scene, resource) {
         if (!scene || !resource) return { ok: false, reason: '缺少场景或协助资源' };
         const scope = this._companionScope(resource);
@@ -6564,11 +6702,22 @@ const WorldEngine = {
         const unlock = resource.unlock && typeof resource.unlock === 'object' ? resource.unlock : {};
         const relationInfo = this._getCompanionRelation(scene, resource.characterId, false);
         const trust = Number(relationInfo?.relation?.trust || 0);
-        if (scope === 'present' && !this._isCompanionPresent(scene, resource.characterId)) {
-            return { ok: false, reason: '需要同伴在场', trust, scope, scopeLabel };
+        const presence = this.getCharacterPresence(scene, resource.characterId);
+        if (scope === 'present' && !presence.isPresent) {
+            const detail = presence.locationName ? `（当前在 ${presence.locationName}）` : '';
+            return { ok: false, reason: `需要同伴在场${detail}`, trust, scope, scopeLabel, presence };
+        }
+        const remoteExplicitlyBlocked = presence.contact === 'none' ||
+            presence.contact === 'blocked' ||
+            presence.canContact === false;
+        if (scope === 'remote' && remoteExplicitlyBlocked) {
+            return { ok: false, reason: '暂时无法联系同伴', trust, scope, scopeLabel, presence };
+        }
+        if (scope === 'pledged' && !presence.canPledged) {
+            return { ok: false, reason: '承诺协助被阻断', trust, scope, scopeLabel, presence };
         }
         if (unlock.immediate === true || unlock.always === true) {
-            return { ok: true, reason: '', trust, immediate: true, scope, scopeLabel };
+            return { ok: true, reason: '', trust, immediate: true, scope, scopeLabel, presence };
         }
         const trustAtLeast = Number.isFinite(Number(unlock.trustAtLeast))
             ? Number(unlock.trustAtLeast)
@@ -6584,30 +6733,30 @@ const WorldEngine = {
             revelationIds.length > 0;
         if (!hasExplicitGate) {
             const implicitTrust = 10;
-            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: implicitTrust, scope, scopeLabel };
-            if (trust < implicitTrust) return { ok: false, reason: `需要建立关系（信任 ${implicitTrust}+）`, trust, requiredTrust: implicitTrust, scope, scopeLabel };
-            return { ok: true, reason: '', trust, requiredTrust: implicitTrust, scope, scopeLabel };
+            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: implicitTrust, scope, scopeLabel, presence };
+            if (trust < implicitTrust) return { ok: false, reason: `需要建立关系（信任 ${implicitTrust}+）`, trust, requiredTrust: implicitTrust, scope, scopeLabel, presence };
+            return { ok: true, reason: '', trust, requiredTrust: implicitTrust, scope, scopeLabel, presence };
         }
 
         if (trustAtLeast !== null) {
-            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: trustAtLeast, scope, scopeLabel };
-            if (trust < trustAtLeast) return { ok: false, reason: `需要信任 ${trustAtLeast}+`, trust, requiredTrust: trustAtLeast, scope, scopeLabel };
+            if (!relationInfo?.character) return { ok: false, reason: '缺少同伴关系', trust, requiredTrust: trustAtLeast, scope, scopeLabel, presence };
+            if (trust < trustAtLeast) return { ok: false, reason: `需要信任 ${trustAtLeast}+`, trust, requiredTrust: trustAtLeast, scope, scopeLabel, presence };
         }
 
         if (trustBelow !== null && trust >= trustBelow) {
-            return { ok: false, reason: `信任需低于 ${trustBelow}`, trust, requiredTrustBelow: trustBelow, scope, scopeLabel };
+            return { ok: false, reason: `信任需低于 ${trustBelow}`, trust, requiredTrustBelow: trustBelow, scope, scopeLabel, presence };
         }
 
         if (evidenceTags.length > 0) {
             const knownEvidenceTags = this._collectVisibleEvidenceTags(scene);
             const missing = evidenceTags.filter(tag => !knownEvidenceTags.has(this._normalizeUnlockToken(tag)));
-            if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}`, scope, scopeLabel };
+            if (missing.length > 0) return { ok: false, reason: `缺少证据：${missing.join('、')}`, scope, scopeLabel, presence };
         }
 
         if (knowledgeTags.length > 0) {
             const knownTags = this._collectKnowledgeTags(scene);
             const missing = knowledgeTags.filter(tag => !knownTags.has(this._normalizeUnlockToken(tag)));
-            if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}`, scope, scopeLabel };
+            if (missing.length > 0) return { ok: false, reason: `缺少发现：${missing.join('、')}`, scope, scopeLabel, presence };
         }
 
         if (revelationIds.length > 0) {
@@ -6628,11 +6777,11 @@ const WorldEngine = {
             const missing = revelationIds.filter(id => (revelationStatus.get(this._normalizeUnlockToken(id)) || 0) < requiredRank);
             if (missing.length > 0) {
                 const statusText = requiredStatus === 'suspected' ? '发现' : '确认';
-                return { ok: false, reason: `缺少${statusText}关键结论：${missing.join('、')}`, requiredRevelationStatus: requiredStatus, scope, scopeLabel };
+                return { ok: false, reason: `缺少${statusText}关键结论：${missing.join('、')}`, requiredRevelationStatus: requiredStatus, scope, scopeLabel, presence };
             }
         }
 
-        return { ok: true, reason: '', trust, scope, scopeLabel };
+        return { ok: true, reason: '', trust, scope, scopeLabel, presence };
     },
 
     getSelectedCheckResourceModifiers(scene, check) {

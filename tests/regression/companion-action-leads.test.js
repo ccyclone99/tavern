@@ -9,9 +9,14 @@ function loadWorldEngine() {
     const context = {
         console,
         State: {
+            scene: null,
             activeCharacters: [],
             characters: [{ id: 'susan', name: '苏珊', _relations: {} }],
-            currentCharacterId: ''
+            currentCharacterId: '',
+            emit() {}
+        },
+        Storage: {
+            async saveCharacter() {}
         },
         SidebarRight: {
             markTabNew() {},
@@ -206,6 +211,27 @@ function testPresentCompanionRequiresActivePresence(WorldEngine, State) {
     );
 }
 
+function testExplicitPresenceLocationOverridesSceneRoster(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        characters: ['susan'],
+        locations: [
+            { id: 'clinic', name: '临时诊所', description: '', connections: ['bridge'] },
+            { id: 'bridge', name: '舰桥', description: '', connections: ['clinic'] }
+        ],
+        characterPresence: {
+            susan: { characterId: 'susan', locationId: 'bridge', status: 'present', contact: 'none' }
+        },
+        companionResources: [susanBacking({ scope: 'present' })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+    assert.strictEqual(availability.ok, false);
+    assert.ok(availability.reason.includes('舰桥'));
+}
+
 function testPresentCompanionSurfacesWhenActive(WorldEngine, State) {
     setSusanTrust(State, 12);
     State.activeCharacters = State.characters;
@@ -218,6 +244,19 @@ function testPresentCompanionSurfacesWhenActive(WorldEngine, State) {
     assert.ok(resources.some(resource => resource.scope === 'present' && resource.scopeLabel === '在场'));
 }
 
+function testPresentCompanionFallsBackToActiveRoster(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        characters: [],
+        companionResources: [susanBacking({ scope: 'present' })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(availability.ok, true);
+    assert.strictEqual(availability.presence.inActiveRoster, true);
+}
+
 function testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State) {
     setSusanTrust(State, 12);
     State.activeCharacters = [];
@@ -228,6 +267,71 @@ function testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State) {
     const leads = WorldEngine.getCompanionActionLeads(scene);
 
     assert.ok(leads.some(lead => lead.resourceId === 'susan_medical_backing' && lead.scopeLabel === '远程'));
+}
+
+function testRemoteCompanionCanBeBlockedByPresenceContact(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        characterPresence: {
+            susan: { characterId: 'susan', locationId: 'bridge', status: 'away', contact: 'none', canContact: false }
+        },
+        companionResources: [susanBacking({ scope: 'remote' })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(availability.ok, false);
+    assert.strictEqual(availability.reason, '暂时无法联系同伴');
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+}
+
+function testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        locations: [
+            { id: 'clinic', name: '临时诊所', description: '', connections: ['bridge'] },
+            { id: 'bridge', name: '舰桥', description: '', connections: ['clinic'] }
+        ],
+        characterPresence: {
+            susan: { characterId: 'susan', locationId: 'bridge', status: 'away' }
+        },
+        companionResources: [susanBacking({ scope: 'remote' })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
+    assert.strictEqual(availability.ok, true);
+    assert.ok(WorldEngine.getCompanionActionLeads(scene).some(lead => lead.resourceId === 'susan_medical_backing'));
+}
+
+function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
+    const scene = makeScene({
+        locations: [
+            { id: 'clinic', name: '临时诊所', description: '', connections: ['bridge'] },
+            { id: 'bridge', name: '舰桥', description: '', connections: ['clinic'] }
+        ],
+        characterPresence: {}
+    });
+    State.scene = scene;
+
+    const changed = WorldEngine.applyNpcAgendaUpdate([{
+        characterId: 'susan',
+        currentPlan: '转移到舰桥监听公开频道',
+        locationId: 'bridge',
+        status: 'remote',
+        contact: 'message',
+        canContact: true,
+        presenceNote: '只接受文字联络'
+    }]);
+    const presence = WorldEngine.getCharacterPresence(scene, 'susan');
+
+    assert.strictEqual(changed, true);
+    assert.strictEqual(State.characters[0].agenda.currentPlan, '转移到舰桥监听公开频道');
+    assert.strictEqual(presence.locationName, '舰桥');
+    assert.strictEqual(presence.status, 'remote');
+    assert.strictEqual(presence.contact, 'message');
+    assert.strictEqual(presence.canRemote, true);
+    assert.strictEqual(presence.note, '只接受文字联络');
 }
 
 {
@@ -264,11 +368,31 @@ function testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State) {
 }
 {
     const { WorldEngine, State } = loadWorldEngine();
+    testExplicitPresenceLocationOverridesSceneRoster(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
     testPresentCompanionSurfacesWhenActive(WorldEngine, State);
 }
 {
     const { WorldEngine, State } = loadWorldEngine();
+    testPresentCompanionFallsBackToActiveRoster(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
     testRemoteCompanionCanSurfaceOffscreen(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testRemoteCompanionCanBeBlockedByPresenceContact(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testNpcAgendaUpdateWritesPresence(WorldEngine, State);
 }
 
 console.log('companion-action-leads regression tests passed');
