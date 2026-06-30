@@ -61,6 +61,19 @@ function testPendingActionAllowsLocalUseAndShopCommands() {
     assert.strictEqual(IntentRouter.route('去后巷', scene).kind, 'move_location');
 }
 
+function testPurchaseRoutesIncludeSpecializedTools() {
+    const IntentRouter = loadRouter();
+    const scene = makePendingActionScene();
+
+    const disguise = IntentRouter.route('购买伪装工具包', scene);
+    const tracker = IntentRouter.route('购买追踪工具包', scene);
+
+    assert.strictEqual(disguise.kind, 'buy_supply');
+    assert.strictEqual(disguise.meta.supplyType, 'disguise');
+    assert.strictEqual(tracker.kind, 'buy_supply');
+    assert.strictEqual(tracker.meta.supplyType, 'tracker');
+}
+
 function testPendingActionStillHandlesConfirmCancelAndExplain() {
     const IntentRouter = loadRouter();
     const scene = makePendingActionScene();
@@ -145,6 +158,7 @@ async function testMoveRefreshesPendingActionPreview() {
 (async () => {
     testPendingActionAllowsLocalEquipmentCommand();
     testPendingActionAllowsLocalUseAndShopCommands();
+    testPurchaseRoutesIncludeSpecializedTools();
     testPendingActionStillHandlesConfirmCancelAndExplain();
     testPendingCheckStillBlocksInventoryPrepButAllowsStatAllocation();
     await testMoveRefreshesPendingActionPreview();

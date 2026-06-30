@@ -125,6 +125,45 @@ function fieldNotes() {
     };
 }
 
+function disguiseKit() {
+    return {
+        id: 'disguise_1',
+        name: '伪装工具包',
+        type: 'misc',
+        quantity: 1,
+        equipped: true,
+        tags: ['工具', '伪装', '掩护'],
+        effects: [
+            { type: 'check_bonus', stat: 'charisma', actionType: 'lie', value: 1, consume: false },
+            { type: 'risk_delta', actionType: 'lie', value: -4, consume: false }
+        ]
+    };
+}
+
+function trackingKit() {
+    return {
+        id: 'tracking_1',
+        name: '追踪工具包',
+        type: 'misc',
+        quantity: 1,
+        equipped: true,
+        tags: ['工具', '追踪', '路线'],
+        effects: [
+            { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false },
+            { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 1, consume: false }
+        ]
+    };
+}
+
+function testSupplyCatalogIncludesDisguiseAndTrackingTools(WorldEngine) {
+    const catalog = WorldEngine.getBasicSupplyCatalog();
+
+    assert.ok(catalog.disguise, 'basic shop should sell disguise tools');
+    assert.ok(catalog.tracker, 'basic shop should sell tracking tools');
+    assert.ok(catalog.disguise.item.effects.some(effect => effect.actionType === 'lie'));
+    assert.ok(catalog.tracker.item.effects.some(effect => effect.actionType === 'observe'));
+}
+
 function testEquippedToolCreatesChallengeAction(WorldEngine) {
     const scene = makeScene({ inventory: [scanner()] });
     const leads = WorldEngine.getItemActionLeads(scene);
@@ -137,6 +176,50 @@ function testEquippedToolCreatesChallengeAction(WorldEngine) {
         situation.recommendedActions.indexOf('检测空气循环系统'),
         'item-enabled action should appear before the raw challenge approach'
     );
+}
+
+function testDisguiseToolCreatesLieChallengeAction(WorldEngine) {
+    const scene = makeScene({
+        inventory: [disguiseKit()],
+        sceneChallenges: [{
+            id: 'challenge_gate',
+            title: '通过岗哨',
+            status: 'active',
+            targetProgress: 2,
+            progress: 0,
+            maxStrain: 3,
+            strain: 0,
+            approaches: [{
+                id: 'pose_as_technician',
+                label: '伪装成维修员通过岗哨',
+                stat: 'charisma',
+                dc: 14,
+                actionType: 'lie',
+                tags: ['伪装', '身份'],
+                keywords: ['维修员', '岗哨']
+            }]
+        }]
+    });
+    const leads = WorldEngine.getItemActionLeads(scene);
+
+    assert.ok(leads.some(lead =>
+        lead.itemName === '伪装工具包' &&
+        lead.actionType === 'lie' &&
+        lead.action === '用伪装工具包伪装成维修员通过岗哨'
+    ));
+}
+
+function testTrackingToolCreatesTrackingFallbackAction(WorldEngine) {
+    const scene = makeScene({
+        sceneChallenges: [],
+        inventory: [trackingKit()]
+    });
+    const leads = WorldEngine.getItemActionLeads(scene);
+
+    assert.ok(leads.some(lead =>
+        lead.itemName === '追踪工具包' &&
+        lead.action === '用追踪工具包追踪旧实验室的行动痕迹'
+    ));
 }
 
 function testUnequippedToolDoesNotPretendToUnlockAction(WorldEngine) {
@@ -166,7 +249,10 @@ function testQuestToolStillCreatesFallbackAction(WorldEngine) {
 }
 
 const WorldEngine = loadWorldEngine();
+testSupplyCatalogIncludesDisguiseAndTrackingTools(WorldEngine);
 testEquippedToolCreatesChallengeAction(WorldEngine);
+testDisguiseToolCreatesLieChallengeAction(WorldEngine);
+testTrackingToolCreatesTrackingFallbackAction(WorldEngine);
 testUnequippedToolDoesNotPretendToUnlockAction(WorldEngine);
 testConsumableResourceCreatesActionLead(WorldEngine);
 testQuestToolStillCreatesFallbackAction(WorldEngine);

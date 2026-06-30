@@ -268,6 +268,12 @@ const IntentRouter = {
         if (normalized.includes('扫描') || normalized.includes('探测') || normalized.includes('侦测')) {
             return { supplyType: 'scanner', label: '便携扫描仪' };
         }
+        if (normalized.includes('伪装') || normalized.includes('假身份') || normalized.includes('冒充')) {
+            return { supplyType: 'disguise', label: '伪装工具包' };
+        }
+        if (normalized.includes('追踪') || normalized.includes('跟踪') || normalized.includes('罗盘')) {
+            return { supplyType: 'tracker', label: '追踪工具包' };
+        }
         if (normalized.includes('护甲') || normalized.includes('防具') || normalized.includes('皮甲') || normalized.includes('铠甲') || normalized.includes('甲胄') || normalized.includes('盾')) {
             return { supplyType: 'armor', label: '轻型护甲' };
         }
@@ -382,7 +388,7 @@ const IntentRouter = {
         }
         return actionText
             ? `你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。${actionText}`
-            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”“卖掉短剑”“加一点敏捷”。';
+            : '你可以直接输入想说的话、观察、询问、行动或“我想制定一个计划...”。有风险时我会先让你确认；需要骰子时系统会提示你掷骰。也可以输入“休息”“使用应急医疗包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”“购买伪装工具包”“购买追踪工具包”“卖掉短剑”“加一点敏捷”。';
     },
 
     _buildRuleHelpText(raw, scene) {

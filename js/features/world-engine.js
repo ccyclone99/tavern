@@ -1116,6 +1116,22 @@ const WorldEngine = {
             item.tags = ['线索', '任务'];
             item.description = desc || '关键线索或任务物品，可在调查、观察或交涉时作为依据。';
             item.effects = [{ type: 'check_bonus', actionType: 'investigate', value: 1, consume: false }];
+        } else if (has('伪装', '假身份', 'disguise')) {
+            item.type = requestedType || 'misc';
+            item.tags = ['工具', '伪装', '掩护'];
+            item.description = desc || '可辅助伪装、冒充和制造掩护。';
+            item.effects = [
+                { type: 'check_bonus', stat: 'charisma', actionType: 'lie', value: 1, consume: false },
+                { type: 'risk_delta', actionType: 'lie', value: -4, consume: false }
+            ];
+        } else if (has('追踪', '跟踪', '罗盘', 'track')) {
+            item.type = requestedType || 'misc';
+            item.tags = ['工具', '追踪', '路线'];
+            item.description = desc || '可辅助追踪痕迹、跟踪目标和辨认路线。';
+            item.effects = [
+                { type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false },
+                { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 1, consume: false }
+            ];
         } else if (has('工具', '探测器', '扫描仪', 'kit', 'tool', 'scanner')) {
             item.type = requestedType || 'misc';
             item.tags = ['工具'];
@@ -6404,6 +6420,14 @@ const WorldEngine = {
             scanner: {
                 price: 45,
                 item: { id: 'shop_portable_scanner', name: '便携扫描仪', description: '基础探测设备。装备后可辅助观察异常、读取环境读数和寻找线索。', type: 'misc', quantity: 1, tags: ['工具', '扫描', '观察'], effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false }, { type: 'check_bonus', stat: 'intelligence', actionType: 'investigate', value: 1, consume: false }] }
+            },
+            disguise: {
+                price: 35,
+                item: { id: 'shop_disguise_kit', name: '伪装工具包', description: '基础假证、布料和掩饰用品。装备后可辅助伪装、冒充和欺瞒。', type: 'misc', quantity: 1, tags: ['工具', '伪装', '掩护'], effects: [{ type: 'check_bonus', stat: 'charisma', actionType: 'lie', value: 1, consume: false }, { type: 'risk_delta', actionType: 'lie', value: -4, consume: false }] }
+            },
+            tracker: {
+                price: 40,
+                item: { id: 'shop_tracking_kit', name: '追踪工具包', description: '粉笔、标记线、简易罗盘和足迹记录片。装备后可辅助追踪、跟踪和路线辨识。', type: 'misc', quantity: 1, tags: ['工具', '追踪', '路线'], effects: [{ type: 'check_bonus', stat: 'wisdom', actionType: 'observe', value: 1, consume: false }, { type: 'check_bonus', stat: 'dexterity', actionType: 'sneak', value: 1, consume: false }] }
             }
         };
     },
@@ -7792,6 +7816,11 @@ const WorldEngine = {
         const activeChallenge = this.getActiveChallenge(scene);
         const approachTypes = new Set((activeChallenge?.approaches || []).map(a => a?.actionType || '').filter(Boolean));
         const approachStats = new Set((activeChallenge?.approaches || []).map(a => a?.stat || '').filter(Boolean));
+        const approachText = (activeChallenge?.approaches || []).map(a => [
+            a?.label,
+            ...(a?.tags || []),
+            ...(a?.keywords || [])
+        ].join(' ')).join(' ');
         const readyConsumables = inventory.filter(item =>
             item?.type === 'consumable' &&
             this._itemHasRemainingUse(item) &&
@@ -7801,6 +7830,8 @@ const WorldEngine = {
         if (readyConsumables.length < 2 && canBuy('supply')) return make('supply');
         if ((approachTypes.has('combat') || approachStats.has('strength')) && canBuy('weapon') && !has('短剑')) return make('weapon');
         if ((approachTypes.has('force') || approachTypes.has('combat') || approachStats.has('constitution')) && canBuy('armor') && !has('轻型护甲')) return make('armor');
+        if ((approachTypes.has('lie') || /伪装|冒充|欺瞒|假身份/.test(approachText)) && canBuy('disguise') && !has('伪装工具包')) return make('disguise');
+        if ((/追踪|跟踪|足迹|痕迹/.test(approachText)) && canBuy('tracker') && !has('追踪工具包')) return make('tracker');
         if ((approachTypes.has('investigate') || approachTypes.has('sneak') || approachStats.has('intelligence')) && canBuy('tool') && !has('通用工具包')) return make('tool');
         if ((approachTypes.has('observe') || approachStats.has('wisdom')) && canBuy('scanner') && !has('便携扫描仪')) return make('scanner');
         if (canBuy('medical') && !readyConsumables.some(item => this._itemHasEffect(item, 'heal'))) return make('medical');
@@ -8230,7 +8261,10 @@ const WorldEngine = {
         const itemText = `${item.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`;
         let action = '';
         let score = 42;
-        if (actionType === 'observe') {
+        if (/追踪|跟踪/.test(itemText)) {
+            action = `用${item.name}追踪${place}的行动痕迹`;
+            score += 2;
+        } else if (actionType === 'observe') {
             action = /扫描|探测|检测/.test(itemText)
                 ? `用${item.name}扫描${place}的异常读数`
                 : `用${item.name}观察${place}里被忽略的细节`;
@@ -9254,7 +9288,9 @@ const WorldEngine = {
             stat: a.stat,
             statName: a.statName || this._statName(a.stat),
             dc: a.dc,
-            tags: a.tags || []
+            actionType: a.actionType || '',
+            tags: a.tags || [],
+            keywords: a.keywords || []
         }));
     },
 

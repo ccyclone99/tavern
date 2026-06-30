@@ -623,11 +623,22 @@ const ChatUI = {
             : null;
         const approachTypes = new Set((activeChallenge?.approaches || []).map(a => a?.actionType || '').filter(Boolean));
         const approachStats = new Set((activeChallenge?.approaches || []).map(a => a?.stat || '').filter(Boolean));
+        const approachText = (activeChallenge?.approaches || []).map(a => [
+            a?.label,
+            ...(a?.tags || []),
+            ...(a?.keywords || [])
+        ].join(' ')).join(' ');
         if ((approachTypes.has('combat') || approachStats.has('strength')) && Number(scene.gold || 0) >= 45 && !has('短剑')) {
             return { label: '购买短剑', text: '购买短剑' };
         }
         if ((approachTypes.has('force') || approachTypes.has('combat') || approachStats.has('constitution')) && Number(scene.gold || 0) >= 50 && !has('轻型护甲')) {
             return { label: '购买护甲', text: '购买护甲' };
+        }
+        if ((approachTypes.has('lie') || /伪装|冒充|欺瞒|假身份/.test(approachText)) && !has('伪装工具包')) {
+            return { label: '购买伪装', text: '购买伪装工具包' };
+        }
+        if (/追踪|跟踪|足迹|痕迹/.test(approachText) && Number(scene.gold || 0) >= 40 && !has('追踪工具包')) {
+            return { label: '购买追踪', text: '购买追踪工具包' };
         }
         if ((approachTypes.has('investigate') || approachTypes.has('sneak') || approachStats.has('intelligence')) && !has('通用工具包')) {
             return { label: '购买工具', text: '购买工具包' };
@@ -1208,7 +1219,7 @@ const ChatUI = {
                 if (typeof WorldEngine !== 'undefined' && WorldEngine.formatBasicSupplyCatalog) {
                     this._appendLocalSystemMessage(WorldEngine.formatBasicSupplyCatalog(scene));
                 } else {
-                    this._appendLocalSystemMessage('【基础商店】可以输入“购买补给”“购买医疗包”“购买零件包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”。');
+                    this._appendLocalSystemMessage('【基础商店】可以输入“购买补给”“购买医疗包”“购买零件包”“购买短剑”“购买护甲”“购买工具包”“购买扫描仪”“购买伪装工具包”“购买追踪工具包”。');
                 }
                 this._syncInputMode();
                 return true;
