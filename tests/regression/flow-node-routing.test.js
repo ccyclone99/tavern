@@ -138,10 +138,17 @@ function testEvidenceAddRefreshesRouteRecommendations(WorldEngine) {
         tags: ['engine']
     }]);
     const route = scene.flowGraph.nodes.find(node => node.id === 'node_engine');
+    const cargo = scene.locations.find(loc => loc.id === 'cargo');
+    const engine = scene.locations.find(loc => loc.id === 'engine');
 
     assert.strictEqual(changed, true);
     assert.strictEqual(route.status, 'available');
+    assert.ok(cargo.connections.includes('engine'), 'available flow route should unlock map movement from current node');
+    assert.ok(engine.connections.includes('cargo'), 'route unlock should keep the map traversable in both directions');
     assert.ok(scene.currentSituation.recommendedActions.some(action => action.includes('前往引擎室')));
+    const move = WorldEngine.moveToLocation(scene, 'engine');
+    assert.strictEqual(move.ok, true);
+    assert.strictEqual(scene.currentLocation, 'engine');
 }
 
 const WorldEngine = loadWorldEngine();

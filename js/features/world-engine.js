@@ -8394,7 +8394,75 @@ const WorldEngine = {
             node.updatedAt = Date.now();
             changed = true;
         });
+        const routeChanges = this._syncAvailableFlowNodeRoutes(scene, nodes);
+        if (routeChanges.length > 0) {
+            changed = true;
+            routeChanges.forEach(change => {
+                this.recordEvent(scene, {
+                    category: 'movement',
+                    title: '路线解锁',
+                    text: `${change.fromName} ↔ ${change.toName}`,
+                    refId: change.toId
+                });
+            });
+            if (scene.currentSituation && Array.isArray(scene.currentSituation.recentRisks)) {
+                routeChanges.slice(0, 3).forEach(change => {
+                    const text = `路线解锁：${change.fromName} ↔ ${change.toName}`;
+                    if (!scene.currentSituation.recentRisks.includes(text)) scene.currentSituation.recentRisks.push(text);
+                });
+                scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+            }
+        }
         return changed;
+    },
+
+    _syncAvailableFlowNodeRoutes(scene, nodes = []) {
+        if (!scene || !Array.isArray(scene.locations) || !Array.isArray(nodes)) return [];
+        const changes = [];
+        const normalize = value => this._normalizeQuestText(value || '');
+        const nodeByRef = new Map();
+        nodes.forEach(node => {
+            if (!node) return;
+            [node.id, node.title].map(normalize).filter(Boolean).forEach(key => nodeByRef.set(key, node));
+        });
+        const isRouteOpen = node => node && ['available', 'resolved'].includes(node.status);
+        const resolveExitLocation = exitRef => {
+            const key = normalize(exitRef);
+            const node = nodeByRef.get(key);
+            if (node) return this._locationForFlowNode(scene, node);
+            return this.resolveLocationReference(scene, { id: exitRef, name: exitRef }, { withStatus: true })?.location || null;
+        };
+        const addConnection = (from, to) => {
+            if (!from || !to || from.id === to.id) return false;
+            if (!Array.isArray(from.connections)) from.connections = [];
+            const targetId = String(to.id || '').trim();
+            if (!targetId || from.connections.map(String).includes(targetId)) return false;
+            from.connections.push(targetId);
+            from.connections = [...new Set(from.connections.map(String).filter(Boolean))].slice(0, 20);
+            return true;
+        };
+
+        nodes.forEach(source => {
+            if (!isRouteOpen(source) || !Array.isArray(source.exits) || source.exits.length === 0) return;
+            const fromLoc = this._locationForFlowNode(scene, source);
+            if (!fromLoc) return;
+            source.exits.forEach(exitRef => {
+                const targetNode = nodeByRef.get(normalize(exitRef));
+                if (targetNode && !isRouteOpen(targetNode)) return;
+                const toLoc = resolveExitLocation(exitRef);
+                if (!toLoc || toLoc.id === fromLoc.id) return;
+                const forward = addConnection(fromLoc, toLoc);
+                const backward = addConnection(toLoc, fromLoc);
+                if (!forward && !backward) return;
+                changes.push({
+                    fromId: fromLoc.id,
+                    fromName: fromLoc.name || fromLoc.id,
+                    toId: toLoc.id,
+                    toName: toLoc.name || toLoc.id
+                });
+            });
+        });
+        return changes;
     },
 
     _flowDiscoveryTokens(scene) {

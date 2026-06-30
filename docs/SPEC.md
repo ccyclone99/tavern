@@ -485,6 +485,7 @@ UI 要求：
 - `evidenceAdd` 会写入 `evidenceLedger`，同步 `knowledge.discoveries`。
 - 同一证据再次同步到 `knowledge.discoveries` 时必须更新既有条目并合并标签/证据 ID，不能生成重复线索卡。
 - 证据支持某个 `revelation` 或 `clueGraph` 时，会把证据挂到对应线索链，并推进线索阶段或状态。
+- 证据、发现或结论解锁 `flowGraph.nodes` 路线节点时，规则层必须同步更新相应地点的 `locations.connections`。右侧推荐出现“前往某地”后，`WorldEngine.moveToLocation()` 和输入移动必须能真实抵达，不能只生成不可执行的推荐动作。
 - 首次取得可见证据会获得少量经验：confirmed 证据更多，partial 证据较少。
 - 路线、医疗、设备、封印、协议等主题证据会额外生成一次性补给或工具，进入背包并可在后续检定卡点选消耗。
 - `explorationRewardLog` 记录已发放奖励的证据，防止重复刷取。
