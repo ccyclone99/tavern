@@ -1746,8 +1746,18 @@ const WorldEngine = {
         }
 
         let added = 0;
-        let updated = 0;
         let skipped = Math.max(0, updates.length - maxPerUpdate);
+        const addedIds = new Set();
+        const updatedIds = new Set();
+        const changesById = new Map();
+        const connectionPatches = [];
+        const addChange = (id, text) => {
+            const key = String(id || '').trim();
+            if (!key || !text) return;
+            if (!changesById.has(key)) changesById.set(key, []);
+            const list = changesById.get(key);
+            if (!list.includes(text)) list.push(text);
+        };
         updates.slice(0, maxPerUpdate).forEach(raw => {
             if (!raw || typeof raw !== 'object' || !raw.id) {
                 skipped += 1;
@@ -1780,32 +1790,55 @@ const WorldEngine = {
                     existing.alertLevel = next;
                 }
                 if (Array.isArray(raw.connections)) {
-                    const next = this._limitedUniqueStringList(raw.connections, 20, 100);
-                    if (!this._sameStringList(existing.connections, next)) changes.push(`出口更新（${next.length}处）`);
-                    existing.connections = next;
+                    connectionPatches.push({ locationId, connections: raw.connections });
                 }
-                if (changes.length > 0) updated += 1;
+                if (changes.length > 0) {
+                    updatedIds.add(locationId);
+                    changes.forEach(change => addChange(locationId, change));
+                }
             } else {
                 if (scene.locations.length >= maxTotal) {
                     console.warn(`[WorldEngine] locations 已达总上限 ${maxTotal}，跳过新增地点：${locationId}`);
                     skipped += 1;
                     return;
                 }
-                const connections = Array.isArray(raw.connections) ? this._limitedUniqueStringList(raw.connections, 20, 100) : [];
                 scene.locations.push({
                     id: locationId,
                     name: String(raw.name || locationId).trim().slice(0, 80) || locationId,
                     description: String(raw.description || '').slice(0, 240),
-                    connections,
+                    connections: [],
                     alertLevel: raw.alertLevel !== undefined ? this._clampOr(raw.alertLevel, 0, 100, 0) : 0
                 });
+                if (Array.isArray(raw.connections)) {
+                    connectionPatches.push({ locationId, connections: raw.connections });
+                }
                 changes.push('新增地点');
-                if (connections.length > 0) changes.push(`出口 ${connections.length} 处`);
                 added += 1;
+                addedIds.add(locationId);
+                changes.forEach(change => addChange(locationId, change));
             }
+        });
 
+        connectionPatches.forEach(patch => {
+            const locationId = String(patch.locationId || '').trim();
+            const loc = scene.locations.find(item => item && item.id === locationId);
+            if (!loc) return;
+            const next = this._validLocationConnectionList(scene, locationId, patch.connections);
+            if (this._sameStringList(loc.connections, next)) return;
+            loc.connections = next;
+            if (!addedIds.has(locationId)) updatedIds.add(locationId);
+            addChange(locationId, `出口更新（${next.length}处）`);
+        });
+
+        const normalizedConnectionIds = this._syncBidirectionalLocationConnections(scene);
+        normalizedConnectionIds.forEach(id => {
+            if (!addedIds.has(id)) updatedIds.add(id);
+            addChange(id, '出口双向校正');
+        });
+
+        changesById.forEach((changes, locationId) => {
             if (changes.length > 0) {
-                const target = existing || scene.locations.find(item => item && item.id === locationId);
+                const target = scene.locations.find(item => item && item.id === locationId);
                 this.recordEvent(scene, {
                     category: 'movement',
                     title: '地图变化',
@@ -1814,7 +1847,49 @@ const WorldEngine = {
             }
         });
 
-        return { changed: added > 0 || updated > 0, added, updated, skipped };
+        return { changed: added > 0 || updatedIds.size > 0, added, updated: updatedIds.size, skipped };
+    },
+
+    _validLocationConnectionList(scene, locationId, connections = []) {
+        const validIds = new Set((scene?.locations || []).map(location => String(location?.id || '')).filter(Boolean));
+        const selfId = String(locationId || '').trim();
+        return this._limitedUniqueStringList(connections, 20, 100)
+            .filter(id => id && id !== selfId && validIds.has(id));
+    },
+
+    _syncBidirectionalLocationConnections(scene) {
+        if (!scene || !Array.isArray(scene.locations)) return [];
+        const byId = new Map(scene.locations
+            .filter(location => location && location.id)
+            .map(location => [String(location.id), location]));
+        const changedIds = new Set();
+
+        scene.locations.forEach(location => {
+            if (!location || !location.id) return;
+            const before = Array.isArray(location.connections) ? location.connections.map(String) : [];
+            const next = this._validLocationConnectionList(scene, location.id, before);
+            if (!this._sameStringList(before, next)) {
+                location.connections = next;
+                changedIds.add(String(location.id));
+            } else {
+                location.connections = next;
+            }
+        });
+
+        scene.locations.forEach(location => {
+            if (!location || !location.id || !Array.isArray(location.connections)) return;
+            location.connections.forEach(targetId => {
+                const target = byId.get(String(targetId || ''));
+                if (!target || target.id === location.id) return;
+                if (!Array.isArray(target.connections)) target.connections = [];
+                if (target.connections.map(String).includes(String(location.id))) return;
+                target.connections.push(String(location.id));
+                target.connections = this._validLocationConnectionList(scene, target.id, target.connections);
+                changedIds.add(String(target.id));
+            });
+        });
+
+        return [...changedIds];
     },
 
     addExistingCharacterToScene(scene, charId, options = {}) {

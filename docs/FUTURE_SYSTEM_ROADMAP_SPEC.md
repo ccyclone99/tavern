@@ -174,6 +174,7 @@
 - 已完成预设副本网状结构门禁：回归测试会验证每个预设副本的地点连接存在、双向、从起点全图可达，且 `flowGraph` 节点唯一、每个地点能解析到节点、每个出口能解析到真实节点或地点，避免推荐移动指向死路。
 - 已完成同伴资源真实角色绑定门禁：`companionResources` 即使写了 `immediate`、证据或关键结论解锁，也必须绑定到真实角色；缺少绑定或指向不存在角色时不会进入行动建议、检定资源或消耗流程，显式 `characterName` 仍可修复旧数据。
 - 已完成状态补丁清洗防线补强：`PromptGuard.sanitizeStateUpdate()` 会清除 `api.key`、`api/key`、`localStorage/sessionStorage/indexedDB/cookie` 等敏感键变体和原型污染键；`StrategyManager.applyStateUpdate()` 入口也会二次清洗，防止未来调用绕过群聊提取入口。
+- 已完成地点补丁地图连通性门禁：`locationUpdate.connections` 会先按真实地点集合过滤，丢弃不存在地点和自连接，再统一补齐双向出口；同一批新增地点可以被连接，推荐移动不会指向不可执行死路。
 
 ## 5. 发布门禁
 
