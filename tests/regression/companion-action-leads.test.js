@@ -401,7 +401,7 @@ function testRemoteCompanionCanBeBlockedByPresenceContact(WorldEngine, State) {
     assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
 }
 
-function testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, State) {
+function testRemoteCompanionAwayWithoutContactDoesNotSurface(WorldEngine, State) {
     setSusanTrust(State, 12);
     State.activeCharacters = State.characters;
     const scene = makeScene({
@@ -416,7 +416,28 @@ function testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, Sta
     });
     const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
 
+    assert.strictEqual(availability.ok, false);
+    assert.strictEqual(availability.reason, '暂时无法联系同伴');
+    assert.strictEqual(WorldEngine.getCompanionActionLeads(scene).length, 0);
+}
+
+function testRemoteCompanionAwayWithContactCanSurface(WorldEngine, State) {
+    setSusanTrust(State, 12);
+    State.activeCharacters = State.characters;
+    const scene = makeScene({
+        locations: [
+            { id: 'clinic', name: '临时诊所', description: '', connections: ['bridge'] },
+            { id: 'bridge', name: '舰桥', description: '', connections: ['clinic'] }
+        ],
+        characterPresence: {
+            susan: { characterId: 'susan', locationId: 'bridge', status: 'away', contact: 'message', canContact: true }
+        },
+        companionResources: [susanBacking({ scope: 'remote' })]
+    });
+    const availability = WorldEngine.getCompanionResourceAvailability(scene, scene.companionResources[0]);
+
     assert.strictEqual(availability.ok, true);
+    assert.ok(availability.presence.canRemote);
     assert.ok(WorldEngine.getCompanionActionLeads(scene).some(lead => lead.resourceId === 'susan_medical_backing'));
 }
 
@@ -577,7 +598,11 @@ function testNpcAgendaUpdateWritesPresence(WorldEngine, State) {
 }
 {
     const { WorldEngine, State } = loadWorldEngine();
-    testRemoteCompanionAwayWithoutBlockedContactCanSurface(WorldEngine, State);
+    testRemoteCompanionAwayWithoutContactDoesNotSurface(WorldEngine, State);
+}
+{
+    const { WorldEngine, State } = loadWorldEngine();
+    testRemoteCompanionAwayWithContactCanSurface(WorldEngine, State);
 }
 {
     const { WorldEngine, State } = loadWorldEngine();

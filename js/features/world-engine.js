@@ -7043,6 +7043,9 @@ const WorldEngine = {
         if (scope === 'remote' && remoteExplicitlyBlocked) {
             return { ok: false, reason: '暂时无法联系同伴', trust, scope, scopeLabel, presence };
         }
+        if (scope === 'remote' && presence.status !== 'unknown' && !presence.canRemote) {
+            return { ok: false, reason: '暂时无法联系同伴', trust, scope, scopeLabel, presence };
+        }
         if (scope === 'pledged' && !presence.canPledged) {
             return { ok: false, reason: '承诺协助被阻断', trust, scope, scopeLabel, presence };
         }
