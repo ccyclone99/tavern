@@ -222,9 +222,10 @@ const ActionBar = {
         const risksHtml = (check.risks || []).slice(0, 3).map(r =>
             `<li>${Renderer.escapeHtml(r)}</li>`
         ).join('');
+        const sourceLabel = check.source || (check.adjudicationSource === 'ai' ? 'AI 要求检定' : '系统要求检定');
         const sourceText = check.intent
-            ? `来自行动：${Renderer.escapeHtml(check.intent)}`
-            : Renderer.escapeHtml(check.source || '系统要求检定');
+            ? `${Renderer.escapeHtml(sourceLabel)} · 行动：${Renderer.escapeHtml(check.intent)}`
+            : Renderer.escapeHtml(sourceLabel);
         const challengeText = check.challengeContext?.challengeTitle
             ? `挑战：${Renderer.escapeHtml(check.challengeContext.challengeTitle)}${check.challengeContext.approachLabel ? ` · ${Renderer.escapeHtml(check.challengeContext.approachLabel)}` : ''}`
             : '';
