@@ -8774,7 +8774,7 @@ const WorldEngine = {
                     tags: ['location', loc.id, actionType].filter(Boolean)
                 });
             }
-            const focus = this._focusCharacterForFreeform(scene);
+            const focus = this._focusCharacterForFreeform(scene, sourceText);
             if (focus && ['ask', 'probe'].includes(actionType)) {
                 const hint = this._publicCharacterHint(focus) || focus.description || `${focus.name}的公开态度和反应。`;
                 addDiscovery({
@@ -8822,7 +8822,7 @@ const WorldEngine = {
             });
         }
 
-        const socialOutcome = this._applyFreeformSocialOutcome(scene, this._focusCharacterForFreeform(scene), sourceText, actionType, {
+        const socialOutcome = this._applyFreeformSocialOutcome(scene, this._focusCharacterForFreeform(scene, sourceText), sourceText, actionType, {
             messageId: options.messageId || ''
         });
         const resolvedConsequences = this._resolveFreeformConsequences(scene, sourceText, actionType, {
@@ -9437,8 +9437,21 @@ const WorldEngine = {
         return actions;
     },
 
-    _focusCharacterForFreeform(scene) {
+    _focusCharacterForFreeform(scene, text = '') {
         const chars = this._sceneCharacters(scene);
+        const normalizedText = this._normalizeQuestText(text || '');
+        if (normalizedText) {
+            const mentioned = chars.filter(char => {
+                const name = this._normalizeQuestText(char?.name || '');
+                return name.length >= 2 && normalizedText.includes(name);
+            });
+            if (mentioned.length === 1) return mentioned[0];
+            if (mentioned.length > 1) return null;
+
+            const resolved = this.resolveCharacterReference(scene, { characterName: text }, { withStatus: true, activeOnly: true });
+            if (resolved?.ambiguous) return null;
+            if (resolved?.character) return resolved.character;
+        }
         const currentId = typeof State !== 'undefined' ? State.currentCharacterId : '';
         return chars.find(char => char.id === currentId) || chars[0] || null;
     },

@@ -316,6 +316,61 @@ function testFreeformHiddenFactOnlyUnlocksHint(WorldEngine) {
     assert.ok(!scene.knowledge.discoveries.some(item => String(item.text || '').includes('SECRET_EYE_RECORDING')));
 }
 
+function testFreeformNamedNpcOverridesCurrentFocus(WorldEngine) {
+    WorldEngine._testState.currentCharacterId = 'silas';
+    WorldEngine._testState.characters = [
+        {
+            id: 'silas',
+            name: '审判官塞拉斯',
+            firstImpression: '他正等着玩家解释。',
+            profile: {
+                hiddenFacts: [{
+                    id: 'eye_record',
+                    type: 'secret',
+                    title: '机械义眼记录',
+                    hint: '塞拉斯的义眼在特定名字前会延迟。',
+                    truth: 'SECRET_SILAS_TRUTH'
+                }]
+            }
+        },
+        {
+            id: 'ela',
+            name: '灵能者艾拉',
+            firstImpression: '她一直回避梦境话题。',
+            profile: {
+                hiddenFacts: [{
+                    id: 'dream_shadow',
+                    type: 'secret',
+                    title: '梦里的第三道影子',
+                    hint: '艾拉提到梦境时会下意识看向货舱方向。',
+                    truth: 'SECRET_ELA_TRUTH'
+                }]
+            }
+        }
+    ];
+    const scene = makeScene({
+        characters: ['silas', 'ela'],
+        currentSituation: { recentRisks: [], recommendedActions: [] },
+        clueGraph: []
+    });
+
+    const result = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我询问灵能者艾拉，她梦里的第三道影子到底和货舱有什么关系。',
+        { actionType: 'ask' }
+    );
+
+    assert.strictEqual(result.changed, true);
+    assert.strictEqual(scene.discoveries.characters.ela.dream_shadow.state, 'hinted');
+    assert.ok(!scene.discoveries.characters.silas?.eye_record, 'named NPC action should not attach hidden fact to current selected NPC');
+    assert.ok(scene.knowledge.discoveries.some(item =>
+        item.subjectId === 'ela' &&
+        item.id === 'disc_free_hidden_ela_dream_shadow' &&
+        item.text.includes('货舱方向')
+    ));
+    assert.ok(!scene.knowledge.discoveries.some(item => String(item.text || '').includes('SECRET_ELA_TRUTH')));
+}
+
 function testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine) {
     const early = makeScene({ turnCount: 3 });
     assert.strictEqual(WorldEngine._maybeEmitStalledSoftMove(early), null);
@@ -437,6 +492,7 @@ testFreeformClueActionCreatesKnowledge(WorldEngine);
 testFreeformClueActionAdvancesStageOnce(WorldEngine);
 testFreeformLocationObservationDedupesKnowledge(WorldEngine);
 testFreeformHiddenFactOnlyUnlocksHint(WorldEngine);
+testFreeformNamedNpcOverridesCurrentFocus(WorldEngine);
 testAutomaticPromptWaitsLongerBeforeIntervening(WorldEngine);
 testFlowGuideFallbackUsesNeutralWording(WorldEngine);
 testFlowMoveCompletionCoversStalledPrompts(WorldEngine);

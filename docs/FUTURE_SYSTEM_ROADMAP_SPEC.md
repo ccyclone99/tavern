@@ -176,6 +176,7 @@
 - 已完成状态补丁清洗防线补强：`PromptGuard.sanitizeStateUpdate()` 会清除 `api.key`、`api/key`、`localStorage/sessionStorage/indexedDB/cookie` 等敏感键变体和原型污染键；`StrategyManager.applyStateUpdate()` 入口也会二次清洗，防止未来调用绕过群聊提取入口。
 - 已完成地点补丁地图连通性门禁：`locationUpdate.connections` 会先按真实地点集合过滤，丢弃不存在地点和自连接，再统一补齐双向出口；同一批新增地点可以被连接，推荐移动不会指向不可执行死路。
 - 已完成自由行动压力缓解闭环：玩家明确稳定、压低、安抚、整理补给、修复或隔离时，可小幅降低一个公开/暗示时钟或世界紧张度；隐藏压力不会泄露，同一压力源同类意图会写入 `freeformReliefLog` 防止重复刷收益。
+- 已完成自由行动 NPC 焦点归属修正：玩家在自然输入中明确点名某个在场 NPC 时，公开反应、关系收益和隐藏档案 hint 会归属到被点名角色；一句话点名多个 NPC 时不强行套用当前选中角色，避免误解锁或误改关系。
 
 ## 5. 发布门禁
 
