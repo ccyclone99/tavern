@@ -137,6 +137,72 @@ function testCounterFailureWarningUsesCounterplay(WorldEngine) {
     assert.strictEqual(warning.action, '切断小七的在线日志同步');
 }
 
+function testFreeformCounterplayWeakensVisibleCounter(WorldEngine) {
+    const scene = makeScene({
+        counterStrategies: [{
+            id: 'counter_security',
+            title: '安全协议回收小七',
+            status: 'active',
+            visibility: 'hinted',
+            progress: 70,
+            exposure: 20,
+            hint: '日志被外部进程反复读取。',
+            counterplay: ['切断小七的在线日志同步', '请器灵长老做离线诊断']
+        }]
+    });
+
+    const first = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我切断小七的在线日志同步，并检查本地缓存。',
+        { actionType: 'investigate' },
+        { messageId: 'msg_counterplay_1' }
+    );
+    const progressAfterFirst = scene.counterStrategies[0].progress;
+    const second = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我再次切断小七的在线日志同步。',
+        { actionType: 'investigate' },
+        { messageId: 'msg_counterplay_2' }
+    );
+
+    assert.strictEqual(first.changed, true);
+    assert.ok(first.counterplayResults.some(item => item.id === 'counter_security'));
+    assert.strictEqual(scene.counterStrategies[0].visibility, 'known');
+    assert.strictEqual(scene.counterStrategies[0].status, 'revealed');
+    assert.ok(progressAfterFirst < 70, 'freeform counterplay should weaken visible counter progress');
+    assert.ok(scene.counterStrategies[0].exposure > 20);
+    assert.strictEqual(scene.counterStrategies[0].progress, progressAfterFirst, 'same counterplay option should not be farmed repeatedly');
+    assert.strictEqual(second.counterplayResults.length, 0);
+    assert.ok(scene.messages.some(msg => String(msg.content || '').includes('【反制削弱】安全协议回收小七进度')));
+}
+
+function testFreeformCounterplayDoesNotRevealHiddenCounter(WorldEngine) {
+    const scene = makeScene({
+        counterStrategies: [{
+            id: 'counter_hidden',
+            title: '隐藏回收协议',
+            status: 'active',
+            visibility: 'hidden',
+            progress: 70,
+            exposure: 0,
+            hint: 'SECRET_HIDDEN_COUNTER_HINT',
+            counterplay: ['切断隐藏协议同步']
+        }]
+    });
+
+    const result = WorldEngine.applyFreeformActionOutcome(
+        scene,
+        '我切断隐藏协议同步。',
+        { actionType: 'probe' }
+    );
+
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(scene.counterStrategies[0].visibility, 'hidden');
+    assert.strictEqual(scene.counterStrategies[0].progress, 70);
+    assert.ok(!scene.messages.some(msg => String(msg.content || '').includes('隐藏回收协议')));
+    assert.ok(!scene.messages.some(msg => String(msg.content || '').includes('SECRET_HIDDEN_COUNTER_HINT')));
+}
+
 function testWorldTensionFailureWarningGivesCoolingAction(WorldEngine) {
     const scene = makeScene({
         worldTension: 70,
@@ -158,6 +224,8 @@ const WorldEngine = loadWorldEngine();
 testClockFailureWarningUsesCounterplay(WorldEngine);
 testHiddenClockFailureDoesNotLeak(WorldEngine);
 testCounterFailureWarningUsesCounterplay(WorldEngine);
+testFreeformCounterplayWeakensVisibleCounter(WorldEngine);
+testFreeformCounterplayDoesNotRevealHiddenCounter(WorldEngine);
 testWorldTensionFailureWarningGivesCoolingAction(WorldEngine);
 
 console.log('failure-warning-actions regression tests passed');

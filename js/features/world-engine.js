@@ -830,6 +830,7 @@ const WorldEngine = {
             progress: this._clamp(Number(data.progress || 0), 0, 100),
             exposure: this._clamp(Number(data.exposure || 0), 0, 100),
             counterplay: Array.isArray(data.counterplay) ? data.counterplay.map(String).slice(0, 6) : [],
+            freeformCounterplayLog: Array.isArray(data.freeformCounterplayLog) ? data.freeformCounterplayLog.map(String).filter(Boolean).slice(-20) : [],
             hint: String(data.hint || '').slice(0, 240),
             lastAction: String(data.lastAction || '').slice(0, 240),
             resolvedAt: Number.isFinite(Number(data.resolvedAt)) ? Number(data.resolvedAt) : 0,
@@ -8828,10 +8829,13 @@ const WorldEngine = {
         const resolvedConsequences = this._resolveFreeformConsequences(scene, sourceText, actionType, {
             messageId: options.messageId || ''
         });
+        const counterplayResults = this._applyFreeformCounterplay(scene, sourceText, actionType, {
+            messageId: options.messageId || ''
+        });
         const pressureRelief = this._applyFreeformPressureRelief(scene, sourceText, actionType, {
             messageId: options.messageId || ''
         });
-        if (discoveries.length === 0 && !socialOutcome && resolvedConsequences.length === 0 && !pressureRelief) return { changed: false, reason: 'no_contextual_outcome' };
+        if (discoveries.length === 0 && !socialOutcome && resolvedConsequences.length === 0 && counterplayResults.length === 0 && !pressureRelief) return { changed: false, reason: 'no_contextual_outcome' };
         const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
             actionType,
             sourceText,
@@ -8843,22 +8847,22 @@ const WorldEngine = {
             evidenceIds,
             messageId: options.messageId || ''
         }) : null;
-        const title = discoveries[0]?.title || resolvedConsequences[0]?.title || pressureRelief?.title || '自由行动收获';
+        const title = discoveries[0]?.title || resolvedConsequences[0]?.title || counterplayResults[0]?.title || pressureRelief?.title || '自由行动收获';
         this.recordEvent(scene, {
-            category: discoveries.length === 0 && (resolvedConsequences.length > 0 || pressureRelief)
+            category: discoveries.length === 0 && (resolvedConsequences.length > 0 || counterplayResults.length > 0 || pressureRelief)
                 ? 'progress'
                 : (actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration'),
             title: '自由行动收获',
             text: `${sourceText || '自由行动'} -> ${title}`,
             messageId: options.messageId || '',
-            refId: discoveries[0]?.id || resolvedConsequences[0]?.id || pressureRelief?.id || '',
+            refId: discoveries[0]?.id || resolvedConsequences[0]?.id || counterplayResults[0]?.id || pressureRelief?.id || '',
             turn: scene.turnCount || 0
         });
         if (scene.currentSituation) {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress, resolvedConsequences, pressureRelief };
+        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress, resolvedConsequences, counterplayResults, pressureRelief };
     },
 
     _advanceFreeformClueStage(scene, match, options = {}) {
@@ -8992,6 +8996,117 @@ const WorldEngine = {
         const overlap = this._textOverlapScore(intent, targetText);
         score += Math.min(4, overlap);
         return score;
+    },
+
+    _applyFreeformCounterplay(scene, text = '', actionType = '', options = {}) {
+        if (!scene || !this.isScenePlaying(scene) || !Array.isArray(scene.counterStrategies)) return [];
+        const sourceText = String(text || '').trim();
+        if (!sourceText) return [];
+        const eligibleTypes = new Set(['observe', 'ask', 'probe', 'investigate', 'use_item']);
+        const type = String(actionType || '').trim();
+        if (!eligibleTypes.has(type)) return [];
+
+        const candidates = scene.counterStrategies
+            .map((counter, index) => ({ counter, index }))
+            .filter(entry => entry.counter && entry.counter.status !== 'resolved' && entry.counter.visibility !== 'hidden')
+            .map(entry => {
+                const matchedOption = (entry.counter.counterplay || [])
+                    .map(option => ({
+                        option,
+                        score: this._textOverlapScore(sourceText, option)
+                    }))
+                    .sort((a, b) => b.score - a.score)[0] || null;
+                const fieldText = [
+                    entry.counter.title,
+                    entry.counter.target,
+                    entry.counter.hint,
+                    entry.counter.lastAction
+                ].filter(Boolean).join(' ');
+                const fieldScore = this._textOverlapScore(sourceText, fieldText);
+                const score = this._counterMatchScore(entry.counter, { intent: sourceText, actionType: type });
+                return {
+                    ...entry,
+                    matchedOption,
+                    fieldScore,
+                    score
+                };
+            })
+            .filter(entry =>
+                entry.score >= 5 &&
+                ((entry.matchedOption && entry.matchedOption.score >= 3) || entry.fieldScore >= 5)
+            )
+            .sort((a, b) => b.score - a.score || Number(b.counter.progress || 0) - Number(a.counter.progress || 0));
+
+        const target = candidates[0];
+        if (!target) return [];
+        const counter = scene.counterStrategies[target.index];
+        if (!counter) return [];
+        if (!Array.isArray(counter.freeformCounterplayLog)) counter.freeformCounterplayLog = [];
+        const optionKey = target.matchedOption?.score >= 3
+            ? this._normalizeQuestText(target.matchedOption.option)
+            : this._normalizeQuestText(sourceText).slice(0, 80);
+        const logKey = `freeform:${optionKey}`;
+        if (!optionKey || counter.freeformCounterplayLog.includes(logKey)) return [];
+
+        const before = {
+            status: counter.status,
+            visibility: counter.visibility,
+            progress: Number(counter.progress || 0),
+            exposure: Number(counter.exposure || 0)
+        };
+        const progressDelta = type === 'use_item' ? -12 : (['investigate', 'probe'].includes(type) ? -10 : -7);
+        const exposureDelta = type === 'ask' ? 8 : 12;
+        const now = Date.now();
+        if (counter.visibility === 'hinted' && (target.matchedOption?.score >= 4 || ['investigate', 'probe'].includes(type))) {
+            counter.visibility = 'known';
+        }
+        if (counter.status === 'active' && counter.visibility === 'known') counter.status = 'revealed';
+        counter.progress = this._clamp(before.progress + progressDelta, 0, 100);
+        counter.exposure = this._clamp(before.exposure + exposureDelta, 0, 100);
+        counter.lastAction = `自由反制：${this._shortChoiceText(sourceText, 100)}`;
+        counter.updatedAt = now;
+        counter.freeformCounterplayLog.push(logKey);
+        counter.freeformCounterplayLog = counter.freeformCounterplayLog.slice(-20);
+
+        const resolved = counter.progress <= 0 || counter.exposure >= 100;
+        if (resolved) {
+            counter.status = 'resolved';
+            counter.visibility = 'known';
+            counter.resolvedAt = now;
+            counter.resolution = counter.lastAction;
+        }
+
+        const result = {
+            id: counter.id,
+            title: resolved ? `${counter.title || '反制'}解决` : `${counter.title || '反制'}削弱`,
+            counterTitle: counter.title || '反制',
+            progressDelta: counter.progress - before.progress,
+            exposureDelta: counter.exposure - before.exposure,
+            resolved,
+            revealed: before.visibility !== counter.visibility || before.status !== counter.status,
+            score: target.score
+        };
+
+        const detail = `${result.counterTitle}${resolved ? '已解决' : `进度 ${result.progressDelta}`}`;
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: resolved ? '反制解决' : '反制削弱',
+            text: `${sourceText} -> ${detail}`,
+            refId: counter.id,
+            messageId: options.messageId || '',
+            timestamp: now,
+            turn: scene.turnCount || 0
+        });
+        this.addSystemMessage(scene, `【${resolved ? '反制解决' : '反制削弱'}】${detail}。`, 'system', { record: false });
+        if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push(`${resolved ? '反制解决' : '反制削弱'}：${detail}`);
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
+        return [result];
     },
 
     _applyFreeformPressureRelief(scene, text = '', actionType = '', options = {}) {
