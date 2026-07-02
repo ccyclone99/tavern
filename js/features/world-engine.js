@@ -10090,14 +10090,50 @@ const WorldEngine = {
         this.normalizeScene(scene);
         const guide = scene.flowGuide;
         const move = this._resolveCompletedFlowMove(scene, text);
-        if (!move || this.isFlowMoveCompleted(scene, move, guide)) return false;
-        guide.completedMoves.push(move);
+        if (!move) return false;
+        const moves = this._expandCompletedFlowMoves(scene, text, move);
+        let changed = false;
+        moves.forEach(item => {
+            if (!item || this.isFlowMoveCompleted(scene, item, guide)) return;
+            guide.completedMoves.push(item);
+            changed = true;
+        });
+        if (!changed) return false;
         guide.completedMoves = guide.completedMoves.slice(-20);
         guide.lastProgressTurn = Math.max(Number(guide.lastProgressTurn || 0), Number(scene.turnCount || 0));
         if (options.refresh !== false) {
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
         return true;
+    },
+
+    _expandCompletedFlowMoves(scene, sourceText, resolvedMove) {
+        const out = [];
+        const add = value => {
+            const text = String(value || '').trim();
+            if (!text || out.includes(text)) return;
+            out.push(text);
+        };
+        add(resolvedMove);
+
+        const source = this._normalizeFlowText(`${sourceText || ''} ${resolvedMove || ''}`);
+        if (!source || !scene?.flowGraph) return out.slice(0, 10);
+        const flowNodes = this.getVisibleFlowNodes(scene);
+        const nodeActions = this._buildFlowNodeActions(scene, flowNodes);
+        flowNodes.forEach(node => {
+            const loc = this._locationForFlowNode(scene, node);
+            const target = String(loc?.name || node.title || node.id || '').trim();
+            const targetKey = this._normalizeFlowText(target);
+            if (!targetKey || !source.includes(targetKey)) return;
+            nodeActions
+                .filter(action => this._normalizeFlowText(action).includes(targetKey))
+                .forEach(add);
+            add(`前往${target}调查`);
+            add(`移动到${target}`);
+            add(`查看${target}`);
+            add(`调查${target}`);
+        });
+        return out.slice(0, 10);
     },
 
     isFlowMoveCompleted(scene, text, normalizedGuide = null) {
@@ -10134,7 +10170,23 @@ const WorldEngine = {
             this.getChallengeVisibleApproaches(activeChallenge).forEach(approach => add(approach.label));
         }
         this.getKnownUnknowns(scene).forEach(item => (item.actions || []).forEach(add));
-        this.getVisibleFlowNodes(scene).forEach(node => (node.exits || []).forEach(add));
+        const flowNodes = this.getVisibleFlowNodes(scene);
+        this._buildFlowNodeActions(scene, flowNodes).forEach(add);
+        flowNodes.forEach(node => {
+            const loc = this._locationForFlowNode(scene, node);
+            const target = String(loc?.name || node.title || node.id || '').trim();
+            if (target) {
+                add(`前往${target}调查`);
+                add(`移动到${target}`);
+                add(`去${target}看看`);
+                add(`去${target}看一下`);
+                add(`查看${target}`);
+                add(`调查${target}`);
+                add(`深入节点${target}`);
+            }
+            if (node.visibleText) add(`${target} ${node.visibleText}`);
+            (node.exits || []).forEach(add);
+        });
         return out.slice(0, 80);
     },
 

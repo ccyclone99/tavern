@@ -149,10 +149,35 @@ function testEvidenceAddRefreshesRouteRecommendations(WorldEngine) {
     const move = WorldEngine.moveToLocation(scene, 'engine');
     assert.strictEqual(move.ok, true);
     assert.strictEqual(scene.currentLocation, 'engine');
+    assert.ok(scene.flowGuide.completedMoves.some(move => move.includes('引擎室')), 'map movement should mark the flow route as attempted');
+}
+
+function testFlowNodeActionCanBeCompletedByNaturalInput(WorldEngine) {
+    const scene = makeScene({
+        knowledge: {
+            discoveries: [{
+                id: 'disc_engine_route',
+                subjectType: 'location',
+                subjectId: 'clue_engine',
+                title: '引擎室入口',
+                text: '货舱墙后的线路指向引擎室。',
+                tags: ['clue_engine']
+            }]
+        }
+    });
+    const before = WorldEngine.getCurrentSituation(scene).recommendedActions;
+    assert.ok(before.some(action => action.includes('前往引擎室')));
+
+    assert.strictEqual(WorldEngine.markFlowMoveCompleted(scene, '我去引擎室看一下异常读数。'), true);
+
+    const after = WorldEngine.getCurrentSituation(scene).recommendedActions;
+    assert.ok(scene.flowGuide.completedMoves.some(move => move.includes('引擎室')));
+    assert.ok(!after.some(action => action.includes('前往引擎室')));
 }
 
 const WorldEngine = loadWorldEngine();
 testHintedClueDoesNotExposeHiddenRoute(WorldEngine);
 testKnowledgeDiscoveryUnlocksRoute(WorldEngine);
 testEvidenceAddRefreshesRouteRecommendations(WorldEngine);
+testFlowNodeActionCanBeCompletedByNaturalInput(WorldEngine);
 console.log('flow-node-routing regression tests passed');

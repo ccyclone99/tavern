@@ -188,7 +188,7 @@
 
 如果旧存档或简化自定义世界已有任务、冲突种子、剧情弧或线索，但缺少 `storyPhases`、`sceneChallenges` 或 `flowGuide`，`WorldEngine.normalizeScene()` 会补一个轻量可玩骨架：至少一个 active phase、一个 active challenge 和基础卡住提示。完全空白的新场景不会被强行补成副本；`completed/failed/bypassed` 等终态阶段不会被重新激活，也不会再补活新的挑战。
 
-`flowGuide.completedMoves` 记录玩家已经实际尝试过的流程建议。普通输入、确认行动和进展类事件会用模糊匹配命中 `openingMoves`、`stalledPrompts`、阶段推荐、挑战方法、线索动作或流程节点出口，并从后续推荐动作中去重，避免同一提示反复占据首屏。`flowGuide.lastProgressTurn` 记录最近一次任务、探索、挑战、检定、移动或剧情进展所在回合；`lastSoftMoveTurn` 记录最近一次系统防卡住提示所在回合。两者是运行态防重复字段，用于在连续无进展时提示下一步，不代表任务进度。
+`flowGuide.completedMoves` 记录玩家已经实际尝试过的流程建议。普通输入、确认行动和进展类事件会用模糊匹配命中 `openingMoves`、`stalledPrompts`、阶段推荐、挑战方法、线索动作、流程节点出口和可见节点行动（如“前往某地调查”“移动到某地”），并从后续推荐动作中去重，避免同一提示反复占据首屏。`flowGuide.lastProgressTurn` 记录最近一次任务、探索、挑战、检定、移动或剧情进展所在回合；`lastSoftMoveTurn` 记录最近一次系统防卡住提示所在回合。两者是运行态防重复字段，用于在连续无进展时提示下一步，不代表任务进度。
 
 `SceneManager` 的存档快照必须覆盖同一批运行态规则字段。尤其是 `equipmentRefs`、`explorationRewardLog`、`pendingExplorationRewards`、`inputContext`、`dmPersona`、`background` 和 `userName`，读档后应恢复原值并刷新聊天、左右侧栏、行动条、pending action/check 预览和输入区状态；否则可能导致装备引用回退成名称匹配、探索奖励重复发放、待领取探索物品丢失、输入状态错乱、DM 叙事人格丢失，或 UI 仍显示读档前的线索/地图/世界书。若快照恢复后 `gameState` 已是 `victorious/defeated`，归一化必须清空残留 `pendingAction/pendingCheck`，输入区只保留回顾、帮助和 OOC 引导。
 
