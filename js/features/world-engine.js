@@ -25,6 +25,7 @@ const WorldEngine = {
         if (!Array.isArray(scene.companionResources)) scene.companionResources = [];
         if (!Array.isArray(scene.explorationRewardLog)) scene.explorationRewardLog = [];
         if (!Array.isArray(scene.socialActionLog)) scene.socialActionLog = [];
+        if (!Array.isArray(scene.freeformReliefLog)) scene.freeformReliefLog = [];
         if (!Array.isArray(scene.pendingExplorationRewards)) scene.pendingExplorationRewards = [];
         scene.aiDiagnostics = this.normalizeAiDiagnostics(scene.aiDiagnostics);
         this.normalizeCharacterPresence(scene);
@@ -76,6 +77,7 @@ const WorldEngine = {
             .slice(0, 24);
         scene.explorationRewardLog = scene.explorationRewardLog.map(String).filter(Boolean).slice(-200);
         scene.socialActionLog = scene.socialActionLog.map(String).filter(Boolean).slice(-200);
+        scene.freeformReliefLog = scene.freeformReliefLog.map(String).filter(Boolean).slice(-200);
         scene.pendingExplorationRewards = scene.pendingExplorationRewards
             .map((reward, idx) => this.normalizePendingExplorationReward(reward, idx))
             .filter(Boolean)
@@ -8826,7 +8828,10 @@ const WorldEngine = {
         const resolvedConsequences = this._resolveFreeformConsequences(scene, sourceText, actionType, {
             messageId: options.messageId || ''
         });
-        if (discoveries.length === 0 && !socialOutcome && resolvedConsequences.length === 0) return { changed: false, reason: 'no_contextual_outcome' };
+        const pressureRelief = this._applyFreeformPressureRelief(scene, sourceText, actionType, {
+            messageId: options.messageId || ''
+        });
+        if (discoveries.length === 0 && !socialOutcome && resolvedConsequences.length === 0 && !pressureRelief) return { changed: false, reason: 'no_contextual_outcome' };
         const evidenceIds = this._createFreeformEvidence(scene, discoveries, {
             actionType,
             sourceText,
@@ -8838,22 +8843,22 @@ const WorldEngine = {
             evidenceIds,
             messageId: options.messageId || ''
         }) : null;
-        const title = discoveries[0]?.title || resolvedConsequences[0]?.title || '自由行动收获';
+        const title = discoveries[0]?.title || resolvedConsequences[0]?.title || pressureRelief?.title || '自由行动收获';
         this.recordEvent(scene, {
-            category: discoveries.length === 0 && resolvedConsequences.length > 0
+            category: discoveries.length === 0 && (resolvedConsequences.length > 0 || pressureRelief)
                 ? 'progress'
                 : (actionType === 'ask' || actionType === 'probe' ? 'social' : 'exploration'),
             title: '自由行动收获',
             text: `${sourceText || '自由行动'} -> ${title}`,
             messageId: options.messageId || '',
-            refId: discoveries[0]?.id || resolvedConsequences[0]?.id || '',
+            refId: discoveries[0]?.id || resolvedConsequences[0]?.id || pressureRelief?.id || '',
             turn: scene.turnCount || 0
         });
         if (scene.currentSituation) {
             this.refreshFlowNodeAvailability(scene);
             scene.currentSituation.recommendedActions = this._buildRecommendedActions(scene, this._currentSituationData(scene));
         }
-        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress, resolvedConsequences };
+        return { changed: true, discoveries, evidenceIds, socialOutcome, clueProgress, resolvedConsequences, pressureRelief };
     },
 
     _advanceFreeformClueStage(scene, match, options = {}) {
@@ -8987,6 +8992,154 @@ const WorldEngine = {
         const overlap = this._textOverlapScore(intent, targetText);
         score += Math.min(4, overlap);
         return score;
+    },
+
+    _applyFreeformPressureRelief(scene, text = '', actionType = '', options = {}) {
+        if (!scene || !this.isScenePlaying(scene)) return null;
+        const sourceText = String(text || '').trim();
+        const normalized = this._normalizeQuestText(sourceText);
+        if (!normalized) return null;
+
+        const eligibleTypes = new Set(['observe', 'ask', 'probe', 'investigate', 'use_item']);
+        if (!eligibleTypes.has(String(actionType || '').trim())) return null;
+        if (!this._hasFreeformPressureReliefIntent(sourceText)) return null;
+
+        const target = this._selectFreeformPressureReliefTarget(scene, sourceText);
+        if (!target) return null;
+        if (!Array.isArray(scene.freeformReliefLog)) scene.freeformReliefLog = [];
+        const category = this._freeformPressureReliefCategory(sourceText);
+        const logKey = `relief:${target.kind}:${target.id}:${category}`;
+        if (scene.freeformReliefLog.includes(logKey)) return null;
+
+        const reason = `自由行动缓解：${this._shortChoiceText(sourceText, 80)}`;
+        let actual = 0;
+        let title = '';
+        let detail = '';
+        if (target.kind === 'clock') {
+            const clock = target.clock;
+            const before = Number(clock?.value || 0);
+            if (!clock || before <= 0 || clock.visibility === 'hidden') return null;
+            const result = this.applyClockUpdate(scene, [{ id: clock.id, delta: -1, reason }]);
+            const afterClock = (scene.clocks || []).find(item => item && item.id === clock.id) || clock;
+            actual = Number(afterClock.value || 0) - before;
+            if (!result.changed || actual >= 0) return null;
+            title = `${afterClock.name || '局势时钟'}下降`;
+            detail = `${afterClock.name || '局势时钟'} ${actual}`;
+        } else if (target.kind === 'worldTension') {
+            const before = Number(scene.worldTension || 0);
+            if (before <= 0) return null;
+            const result = this.addWorldTension(scene, -5, {
+                source: reason,
+                silent: true,
+                record: false,
+                checkFailure: false
+            });
+            actual = Number(scene.worldTension || 0) - before;
+            if (!result.ok || actual >= 0) return null;
+            title = '世界紧张度下降';
+            detail = `世界紧张度 ${actual}`;
+        } else {
+            return null;
+        }
+
+        scene.freeformReliefLog.push(logKey);
+        scene.freeformReliefLog = scene.freeformReliefLog.slice(-200);
+
+        const relief = {
+            id: target.id,
+            kind: target.kind,
+            title,
+            delta: actual,
+            category
+        };
+        this.recordEvent(scene, {
+            category: 'progress',
+            title: '压力缓解',
+            text: `${sourceText || '自由行动'} -> ${detail}`,
+            refId: target.id,
+            messageId: options.messageId || '',
+            turn: scene.turnCount || 0
+        });
+        this.addSystemMessage(scene, `【压力缓解】${detail}。`, 'system', { record: false });
+        if (!scene.currentSituation) scene.currentSituation = { recentRisks: [], recommendedActions: [] };
+        if (!Array.isArray(scene.currentSituation.recentRisks)) scene.currentSituation.recentRisks = [];
+        scene.currentSituation.recentRisks.push(`压力缓解：${detail}`);
+        scene.currentSituation.recentRisks = scene.currentSituation.recentRisks.slice(-12);
+        if (typeof SidebarRight !== 'undefined') {
+            SidebarRight.renderSituation?.();
+            SidebarRight.markTabNew?.('situation');
+        }
+        return relief;
+    },
+
+    _hasFreeformPressureReliefIntent(text = '') {
+        const normalized = this._normalizeQuestText(text);
+        const terms = [
+            '降低', '压低', '缓解', '缓和', '稳定', '稳住', '安抚', '冷却',
+            '加固', '隔离', '封锁', '清理', '整理', '修复', '维护',
+            '寻找补给', '交换补给', '争取时间', '减少风险', '控制局势'
+        ].map(term => this._normalizeQuestText(term));
+        return terms.some(term => term && normalized.includes(term));
+    },
+
+    _freeformPressureReliefCategory(text = '') {
+        const normalized = this._normalizeQuestText(text);
+        const categories = [
+            ['supply', ['补给', '配给', '物资', '食物', '水', '药']],
+            ['social', ['安抚', '恐慌', '怀疑', '人群', '委员会', '公开', '解释']],
+            ['route', ['路线', '风暴', '通道', '出口', '巡逻', '封锁']],
+            ['containment', ['隔离', '封印', '污染', '腐化', '异常', '失控']],
+            ['repair', ['修复', '维护', '整理', '清理', '加固']]
+        ];
+        const found = categories.find(([, terms]) =>
+            terms.map(term => this._normalizeQuestText(term)).some(term => term && normalized.includes(term))
+        );
+        return found ? found[0] : 'general';
+    },
+
+    _selectFreeformPressureReliefTarget(scene, text = '') {
+        const normalized = this._normalizeQuestText(text);
+        const scoreText = value => {
+            const candidate = this._normalizeQuestText(value || '');
+            if (!candidate) return 0;
+            if (normalized.includes(candidate)) return Math.min(8, Math.max(3, Math.ceil(candidate.length / 3)));
+            if (normalized.length >= 2 && candidate.includes(normalized)) return 2;
+            const stopFragments = new Set(['压力', '局势', '风险', '状态', '情况', '问题']);
+            for (let i = 0; i < candidate.length - 1; i += 1) {
+                const fragment = candidate.slice(i, i + 2);
+                if (!stopFragments.has(fragment) && normalized.includes(fragment)) return 2;
+            }
+            return 0;
+        };
+        const clockCandidates = (scene.clocks || [])
+            .filter(clock => clock && clock.visibility !== 'hidden' && Number(clock.value || 0) > 0)
+            .map(clock => {
+                const urgency = Number(clock.value || 0) / Math.max(1, Number(clock.max || 1));
+                const textScore = scoreText(clock.name) + scoreText(clock.tag) + scoreText(clock.description);
+                if (textScore <= 0) return null;
+                return {
+                    kind: 'clock',
+                    id: String(clock.id || clock.name || 'clock'),
+                    clock,
+                    score: textScore + urgency * 4
+                };
+            })
+            .filter(Boolean);
+
+        const worldTension = Number(scene.worldTension || 0);
+        const worldTerms = ['世界', '局势', '压力', '危机', '紧张', '失控', '公开', '人群', '恐慌', '怀疑']
+            .map(term => this._normalizeQuestText(term));
+        const worldScore = worldTension > 0 && worldTerms.some(term => term && normalized.includes(term))
+            ? 3 + Math.min(4, worldTension / 25)
+            : 0;
+        const candidates = [...clockCandidates];
+        if (worldScore > 0) {
+            candidates.push({ kind: 'worldTension', id: 'world_tension', score: worldScore });
+        }
+        const ranked = candidates
+            .filter(item => item.score > 0)
+            .sort((a, b) => b.score - a.score);
+        return ranked[0] || null;
     },
 
     _applyFreeformSocialOutcome(scene, character, text = '', actionType = '', options = {}) {

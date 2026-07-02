@@ -175,6 +175,7 @@
 - 已完成同伴资源真实角色绑定门禁：`companionResources` 即使写了 `immediate`、证据或关键结论解锁，也必须绑定到真实角色；缺少绑定或指向不存在角色时不会进入行动建议、检定资源或消耗流程，显式 `characterName` 仍可修复旧数据。
 - 已完成状态补丁清洗防线补强：`PromptGuard.sanitizeStateUpdate()` 会清除 `api.key`、`api/key`、`localStorage/sessionStorage/indexedDB/cookie` 等敏感键变体和原型污染键；`StrategyManager.applyStateUpdate()` 入口也会二次清洗，防止未来调用绕过群聊提取入口。
 - 已完成地点补丁地图连通性门禁：`locationUpdate.connections` 会先按真实地点集合过滤，丢弃不存在地点和自连接，再统一补齐双向出口；同一批新增地点可以被连接，推荐移动不会指向不可执行死路。
+- 已完成自由行动压力缓解闭环：玩家明确稳定、压低、安抚、整理补给、修复或隔离时，可小幅降低一个公开/暗示时钟或世界紧张度；隐藏压力不会泄露，同一压力源同类意图会写入 `freeformReliefLog` 防止重复刷收益。
 
 ## 5. 发布门禁
 

@@ -158,6 +158,7 @@
 | `evidenceLedger` | Evidence[] | 玩家已取得的证据，用于任务/结论推进闸门 |
 | `companionResources` | CompanionResource[] | NPC 有限协助资源，可影响 DC、证据质量或时钟；含 `scope` 范围语义 |
 | `explorationRewardLog` | string[] | 已发放探索奖励的证据 id 记录，防止重复刷经验/物资 |
+| `freeformReliefLog` | string[] | 自由行动压力缓解防重复记录，避免同一压力源同类意图反复刷时钟/世界紧张度 |
 | `pendingExplorationRewards` | PendingExplorationReward[] | 背包满时暂存的探索奖励物品，腾出背包格后自动补发 |
 | `questProgressGuards` | object | 连续自动任务推进保护，防止无挑战/无证据跳目标 |
 | `runRecord` | RunRecord/null | 当前冒险的结局回顾，胜利或失败时自动生成 |
