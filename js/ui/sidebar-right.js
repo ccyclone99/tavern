@@ -1364,6 +1364,37 @@ const SidebarRight = {
             </div>`).join('')
             : '<p class="placeholder">尚未掌握关于此人的可靠线索</p>';
         const firstImpression = publicProfile.firstImpression || char.firstImpression || '尚未形成可靠公开印象';
+        const presence = typeof WorldEngine !== 'undefined' && WorldEngine.getCharacterPresence
+            ? WorldEngine.getCharacterPresence(State.scene, char.id)
+            : null;
+        const presenceLabels = {
+            present: '当前在场',
+            nearby: '附近',
+            remote: '远程',
+            away: '离场',
+            unknown: '位置未知'
+        };
+        const contactLabels = {
+            in_person: '当面',
+            voice: '语音',
+            message: '文字',
+            remote: '远程',
+            pledged: '已承诺',
+            none: '无法联系',
+            blocked: '联络受阻',
+            unknown: '联系未知'
+        };
+        const presenceParts = [];
+        if (presence) {
+            presenceParts.push(presenceLabels[presence.status] || presenceLabels.unknown);
+            if (presence.locationName) presenceParts.push(`地点：${presence.locationName}`);
+            presenceParts.push(contactLabels[presence.contact] || contactLabels.unknown);
+            if (presence.canRemote) presenceParts.push('可远程联系');
+            else if (presence.canContact === false || ['none', 'blocked'].includes(presence.contact)) presenceParts.push('暂不可联系');
+        }
+        const presenceHtml = presenceParts.length > 0
+            ? `<div class="detail-section"><h4>位置与联系</h4><p>${Renderer.escapeHtml(presenceParts.join(' · '))}</p></div>`
+            : '';
         const discoveryStateLabels = { locked: '未解锁', hinted: '已察觉', suspected: '可疑', confirmed: '已确认' };
         const hiddenFactsHtml = hiddenFacts.length > 0
             ? hiddenFacts.map(fact => {
@@ -1444,6 +1475,7 @@ const SidebarRight = {
                 <p><strong>${Renderer.escapeHtml(title)}</strong></p>
                 <p>${Renderer.escapeHtml(firstImpression)}</p>
             </div>
+            ${presenceHtml}
             <div class="detail-section">
                 <h4>已知线索</h4>
                 ${knowledgeHtml}

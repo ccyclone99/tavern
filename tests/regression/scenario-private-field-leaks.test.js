@@ -68,7 +68,8 @@ function playerVisibleTemplateFields(WorldEngine, WorldGenerator, template) {
         characterPublicProfiles: (template.characters || []).map(character => ({
             name: character.name,
             tags: character.tags,
-            firstImpression: WorldGenerator._buildCharacterProfile(character).public.firstImpression
+            firstImpression: WorldGenerator._buildCharacterProfile(character).public.firstImpression,
+            firstMessage: character.first_mes
         }))
     };
 }

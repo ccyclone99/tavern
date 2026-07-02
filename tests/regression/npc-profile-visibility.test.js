@@ -31,6 +31,10 @@ function makeContext({ debug = false } = {}) {
         values: 'SECRET_VALUES',
         redLines: ['SECRET_REDLINE'],
         scenario: 'SECRET_SCENARIO',
+        agenda: {
+            currentPlan: 'SECRET_AGENDA_PLAN',
+            offscreenActions: ['SECRET_OFFSCREEN_ACTION']
+        },
         profile: {
             hiddenFacts: [
                 {
@@ -59,6 +63,16 @@ function makeContext({ debug = false } = {}) {
                 silas: {
                     eye_record: { state: 'hinted', evidence: ['观察义眼'] }
                 }
+            }
+        },
+        characterPresence: {
+            silas: {
+                characterId: 'silas',
+                locationId: 'bridge',
+                status: 'remote',
+                contact: 'message',
+                canContact: true,
+                note: 'SECRET_PRESENCE_NOTE'
             }
         },
         knowledge: {
@@ -94,6 +108,18 @@ function makeContext({ debug = false } = {}) {
         CharacterEditor: {
             open() {}
         },
+        WorldEngine: {
+            getCharacterPresence(targetScene, characterId) {
+                const raw = targetScene.characterPresence?.[characterId] || {};
+                return {
+                    status: raw.status || 'unknown',
+                    contact: raw.contact || 'unknown',
+                    canContact: raw.canContact ?? null,
+                    canRemote: raw.canContact === true || ['voice', 'message', 'remote'].includes(raw.contact),
+                    locationName: raw.locationId === 'bridge' ? '舰桥' : ''
+                };
+            }
+        },
         document: {
             getElementById(id) {
                 return id === 'editCharBtn' ? editButton : null;
@@ -121,6 +147,8 @@ function testDefaultNpcProfileDoesNotLeakPrivateFields() {
     assert.ok(html.includes('PUBLIC_IMPRESSION'), 'public first impression should be visible');
     assert.ok(html.includes('HINT_EYE_DELAY'), 'hinted hidden fact hint should be visible');
     assert.ok(html.includes('HINT_FROM_KNOWLEDGE'), 'character knowledge should be visible');
+    assert.ok(html.includes('位置与联系'), 'presence section should be visible');
+    assert.ok(html.includes('远程 · 地点：舰桥 · 文字 · 可远程联系'), 'structured presence should be visible');
     assert.ok(html.includes('已察觉'), 'hinted state should use player-facing wording');
     assert.ok(html.includes('???'), 'locked hidden fact should remain masked');
 
@@ -135,6 +163,9 @@ function testDefaultNpcProfileDoesNotLeakPrivateFields() {
         'SECRET_VALUES',
         'SECRET_REDLINE',
         'SECRET_SCENARIO',
+        'SECRET_AGENDA_PLAN',
+        'SECRET_OFFSCREEN_ACTION',
+        'SECRET_PRESENCE_NOTE',
         'SECRET_EYE_TRUTH',
         'SECRET_GRAVE_TRUTH',
         '完整角色卡'
