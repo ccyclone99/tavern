@@ -241,6 +241,10 @@ const StrategyManager = {
         const scene = State.scene;
         if (!scene) return;
         if (!update || typeof update !== 'object') return;
+        if (typeof PromptGuard !== 'undefined' && PromptGuard.sanitizeStateUpdate) {
+            update = PromptGuard.sanitizeStateUpdate(update);
+            if (!update) return;
+        }
         if (!this._canMutateGameplay(scene, '应用状态补丁')) return;
 
         // 单条补丁上限，防止 AI 回复胀大存储

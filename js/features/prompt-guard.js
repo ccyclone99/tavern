@@ -166,14 +166,16 @@ const PromptGuard = {
     _isForbiddenStateUpdateKey(key, path = []) {
         const raw = String(key || '').trim().toLowerCase();
         const normalized = this._normalizeStateUpdateKey(key);
+        const compact = raw.replace(/[^a-z0-9]/g, '');
         const protoKeys = ['__proto__', 'prototype', 'constructor', '__definegetter__', '__definesetter__', '__lookupgetter__', '__lookupsetter__'];
         if (protoKeys.includes(raw)) return true;
 
         const sensitiveKeys = [
             'settings', 'apikey', 'openaiapikey', 'systemprompt', 'developerprompt',
-            'token', 'accesstoken', 'bearertoken', 'password', 'authorization', 'authheader'
+            'token', 'accesstoken', 'bearertoken', 'password', 'authorization', 'authheader',
+            'localstorage', 'sessionstorage', 'indexeddb', 'cookie'
         ];
-        if (sensitiveKeys.includes(normalized)) return true;
+        if (sensitiveKeys.includes(normalized) || sensitiveKeys.includes(compact)) return true;
 
         const topLevelAllowed = [
             'strategies', 'knowledgeadd', 'inteladd', 'discoveryupdate', 'clockupdate',
